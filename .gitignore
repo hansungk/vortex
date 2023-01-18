@@ -1,0 +1,10 @@
+*.dump
+*.o
+*.bin
+*.elf
+.depend
+*.a
+*.so
+*.log
+*.vcd
+blackbox.*.cache
