@@ -17,7 +17,7 @@ CXXFLAGS += -std=c++11 -Wall -Wextra -pedantic -Wfatal-errors
 
 CXXFLAGS += -I$(POCL_RT_PATH)/include
 
-LDFLAGS += -L$(POCL_RT_PATH)/lib -L$(VORTEX_DRV_PATH)/simx -lOpenCL -lvortex
+LDFLAGS += -L$(POCL_RT_PATH)/lib -L$(VORTEX_DRV_PATH)/simx -Wl,-rpath $(VORTEX_DRV_PATH)/simx -lOpenCL -lvortex
 
 # Debugigng
 ifdef DEBUG

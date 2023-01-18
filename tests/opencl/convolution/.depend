@@ -1,0 +1,6 @@
+main.o: main.cpp \
+ /scratch/hansung/build/vortex-toolchain-prebuilt/pocl/runtime/include/CL/cl.h \
+ /scratch/hansung/build/vortex-toolchain-prebuilt/pocl/runtime/include/CL/cl_version.h \
+ /scratch/hansung/build/vortex-toolchain-prebuilt/pocl/runtime/include/CL/cl_platform.h \
+ utils.h
+utils.o: utils.cpp utils.h
