@@ -691,7 +691,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         uint64_t mem_data = 0;
         core_->dcache_read(&mem_data, mem_addr, mem_bytes);
         trace->mem_addrs.at(t).push_back({mem_addr, mem_bytes});        
-        DP(4, "LOAD MEM: ADDRESS=0x" << std::hex << mem_addr << ", DATA=0x" << mem_data);
+        DP(4, "LOAD MEM: THREAD=" << t << ", ADDRESS=0x" << std::hex << mem_addr << ", DATA=0x" << mem_data << std::dec << ", BYTES=" << mem_bytes);
         switch (func3) {
         case 0:
           // RV32I: LB
@@ -731,7 +731,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
           core_->dcache_read(&mem_data, mem_addr, 4);
           Word *result_ptr = (Word *)(vd.data() + i);
           *result_ptr = mem_data;
-          DP(4, "LOAD MEM: ADDRESS=0x" << std::hex << mem_addr << ", DATA=0x" << mem_data);        
+          DP(4, "LOAD MEM: VLEN=" << vl_ << ", VID=" << i << ", ADDRESS=0x" << std::hex << mem_addr << ", DATA=0x" << mem_data << std::dec << ", BYTES=" << 4);        
         }
         break;
       } 
@@ -762,7 +762,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
           mem_data &= mask;
         }
         trace->mem_addrs.at(t).push_back({mem_addr, mem_bytes});        
-        DP(4, "STORE MEM: ADDRESS=0x" << std::hex << mem_addr << ", DATA=0x" << mem_data);
+        DP(4, "STORE MEM: THREAD=" << t << ", ADDRESS=0x" << std::hex << mem_addr << ", DATA=0x" << mem_data << std::dec << ", BYTES=" << mem_bytes);
         switch (func3) {
         case 0:
         case 1:
@@ -782,7 +782,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
           // store word and unit strided (not checking for unit stride)          
           uint32_t mem_data = *(uint32_t *)(vreg_file_.at(instr.getVs3()).data() + i);
           core_->dcache_write(&mem_data, mem_addr, 4);
-          DP(4, "STORE MEM: ADDRESS=0x" << std::hex << mem_addr << ", DATA=0x" << mem_data);
+          DP(4, "STORE MEM: VLEN=" << vl_ << ", VID=" << i << ", ADDRESS=0x" << std::hex << mem_addr << ", DATA=0x" << mem_data << std::dec << ", BYTES=" << 4);
           break;
         } 
         default:
