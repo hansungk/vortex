@@ -6,3 +6,4 @@ export POCL_RT_PATH=$BUILDDIR/vortex-toolchain-prebuilt/pocl/runtime
 export VERILATOR_ROOT=$BUILDDIR/vortex-toolchain-prebuilt/verilator
 export RISCV_TOOLCHAIN_PATH=$BUILDDIR/vortex-toolchain-prebuilt
 export PATH="$BUILDDIR/vortex-toolchain-prebuilt/verilator/bin:$PATH"
+export PS1="($VORTEX_ENV) $PS1"
