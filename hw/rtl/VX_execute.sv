@@ -9,6 +9,7 @@ module VX_execute #(
     input wire reset,    
 
     // Dcache interface
+    // NOTE(hansung): this comes out of VX_lsu_unit
     VX_dcache_req_if.master dcache_req_if,
     VX_dcache_rsp_if.slave dcache_rsp_if,
 

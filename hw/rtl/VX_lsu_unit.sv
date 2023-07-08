@@ -34,7 +34,7 @@ module VX_lsu_unit #(
     wire [`INST_LSU_BITS-1:0]     req_type;
     wire [`NUM_THREADS-1:0][31:0] req_data;   
     wire [`NR_BITS-1:0]           req_rd;
-    wire                          req_wb;
+    wire                          req_wb; // NOTE(hansung): 0:load, 1:store
     wire [`NW_BITS-1:0]           req_wid;
     wire [31:0]                   req_pc;
     wire                          req_is_dup;

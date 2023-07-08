@@ -53,6 +53,7 @@ module VX_core_req_bank_sel #(
         
     wire [NUM_REQS-1:0][`LINE_ADDR_WIDTH-1:0]       core_req_line_addr;
     wire [NUM_REQS-1:0][`UP(`WORD_SELECT_BITS)-1:0] core_req_wsel;
+    // NOTE(hansung): "bank id"
     wire [NUM_REQS-1:0][`UP(`BANK_SELECT_BITS)-1:0] core_req_bid;
 
     for (genvar i = 0; i < NUM_REQS; i++) begin    
@@ -123,6 +124,9 @@ module VX_core_req_bank_sel #(
                     per_bank_core_req_tid_r   = 'x;
                     req_select_table_r        = 'x;
 
+                    // NOTE(hansung): if we're simply overwriting assignment in
+                    // a loop with decrementing index, wouldn't this be unfair
+                    // for reqs with higher index?
                     for (integer i = NUM_REQS-1; i >= 0; --i) begin
                         if (core_req_valid[i]) begin                    
                             per_bank_core_req_valid_r[core_req_bid[i]]                 = 1;
@@ -184,6 +188,8 @@ module VX_core_req_bank_sel #(
             end
 
         end else begin
+            // NOTE(hansung): this is what the default config elaborates, i.e.
+            // NUM_REQS > 1, NUM_PORTS == 1
 
             always @(*) begin
                 per_bank_core_req_valid_r = 0;
@@ -204,6 +210,8 @@ module VX_core_req_bank_sel #(
                         per_bank_core_req_byteen_r[core_req_bid[i]]= core_req_byteen[i];
                         per_bank_core_req_data_r[core_req_bid[i]]  = core_req_data[i];
                         per_bank_core_req_tag_r[core_req_bid[i]]   = core_req_tag[i];
+                        // NOTE(hansung): this marks which req 'won' mapping
+                        // to this bank eventually
                         per_bank_core_req_tid_r[core_req_bid[i]]   = `REQS_BITS'(i);
                     end
                 end
@@ -216,6 +224,7 @@ module VX_core_req_bank_sel #(
                     core_req_ready_r = 0;
                     for (integer i = 0; i < NUM_BANKS; ++i) begin
                         if (per_bank_core_req_valid_r[i]) begin
+                            // NOTE(hansung): this flows back to upstream
                             core_req_ready_r[per_bank_core_req_tid_r[i]] = per_bank_core_req_ready[i];
                         end
                     end
