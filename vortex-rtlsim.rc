@@ -1,0 +1,219 @@
+Magic 271485
+Revision Verdi_S-2021.09-SP1-1
+
+; Window Layout <x> <y> <width> <height> <signalwidth> <valuewidth>
+viewPort 0 33 3840 1560 374 148
+
+; File list:
+; openDirFile [-d delimiter] [-s time_offset] [-rf auto_bus_rule_file] path_name file_name
+openDirFile -d / "" "/scratch/hansung/src/vortex/trace.vcd.fsdb"
+
+; file time scale:
+; fileTimeScale ### s|ms|us|ns|ps
+
+; signal spacing:
+signalSpacing 5
+
+; windowTimeUnit is used for zoom, cursor & marker
+; waveform viewport range
+zoom 75133.753950 75225.192159
+cursor 75155.000000
+marker 0.000000
+
+; user define markers
+; userMarker time_pos marker_name color linestyle
+; visible top row signal index
+top 42
+; marker line index
+markerPos 78
+
+; event list
+; addEvent event_name event_expression
+; curEvent event_name
+
+
+
+COMPLEX_EVENT_BEGIN
+
+
+COMPLEX_EVENT_END
+
+
+
+; toolbar current search type
+; curSTATUS search_type
+curSTATUS ByValue
+
+
+addGroup "G1"
+activeDirFile "" "/scratch/hansung/src/vortex/trace.vcd.fsdb"
+addSignal -h 30 /TOP/clk
+addSignal -h 30 -holdScope reset
+addSignal -h 30 /TOP/Vortex/\genblk2[0] /cluster/\genblk2[0] /core/pipeline/dcache_req_valid[3:0]
+addSignal -h 30 -holdScope dcache_rsp_ready
+addSubGroup "Issue"
+addSubGroup "Ibuffer"
+addSignal -h 30 /TOP/Vortex/\genblk2[0] /cluster/\genblk2[0] /core/pipeline/issue/ibuffer/ibuffer_if/PC[31:0]
+addSignal -h 30 -holdScope rs1[5:0]
+addSignal -h 30 -holdScope wid[1:0]
+endSubGroup "Ibuffer"
+addSubGroup "gpr_rsp_if"
+addSignal -h 30 -UNSIGNED -HEX /TOP/Vortex/\genblk2[0] /cluster/\genblk2[0] /core/pipeline/issue/dispatch/gpr_rsp_if/\rs1_data[0] [31:0]
+addSignal -h 30 -holdScope \rs1_data[1] [31:0]
+addSignal -h 30 -holdScope \rs1_data[2] [31:0]
+addSignal -h 30 -holdScope \rs1_data[3] [31:0]
+endSubGroup "gpr_rsp_if"
+addSubGroup "Dispatch"
+endSubGroup "Dispatch"
+endSubGroup "Issue"
+addSubGroup "Execute"
+addSubGroup "LSU"
+addSubGroup "lsu_req_if" -e FALSE
+addSignal -h 30 /TOP/Vortex/\genblk2[0] /cluster/\genblk2[0] /core/pipeline/execute/lsu_req_if/ready
+addSignal -h 30 -holdScope valid
+addSignal -h 30 -UNSIGNED -HEX -holdScope PC[31:0]
+addSignal -h 30 /TOP/Vortex/\genblk2[0] /cluster/\genblk2[0] /core/pipeline/execute/lsu_unit/lsu_req_if/\base_addr[0] [31:0]
+addSignal -h 30 -holdScope \base_addr[1] [31:0]
+addSignal -h 30 -holdScope \base_addr[2] [31:0]
+addSignal -h 30 -holdScope \base_addr[3] [31:0]
+addSignal -h 30 -holdScope offset[31:0]
+addSignal -h 30 /TOP/Vortex/\genblk2[0] /cluster/\genblk2[0] /core/pipeline/execute/lsu_req_if/tmask[3:0]
+addSignal -h 30 -holdScope op_type[3:0]
+endSubGroup "lsu_req_if"
+addSignal -h 30 /TOP/Vortex/\genblk2[0] /cluster/\genblk2[0] /core/pipeline/execute/lsu_unit/req_valid
+addSignal -h 30 -holdScope req_pc[31:0]
+addSignal -h 30 -holdScope dcache_req_ready
+addSignal -h 30 -holdScope req_sent_mask[3:0]
+endSubGroup "LSU"
+addSubGroup "dcache_req_if"
+addSignal -h 30 -UNSIGNED -HEX /TOP/Vortex/\genblk2[0] /cluster/\genblk2[0] /core/pipeline/execute/dcache_req_if/ready[3:0]
+addSignal -h 30 -holdScope valid[3:0]
+addSignal -h 30 /TOP/Vortex/\genblk2[0] /cluster/\genblk2[0] /core/pipeline/execute/lsu_unit/dcache_req_if/\addr[0] [29:0]
+addSignal -h 30 -holdScope \addr[1] [29:0]
+addSignal -h 30 -holdScope \addr[2] [29:0]
+addSignal -h 30 -holdScope \addr[3] [29:0]
+addSignal -h 30 /TOP/Vortex/\genblk2[0] /cluster/\genblk2[0] /core/mem_unit/dcache/\per_bank_core_req_addr[0] [25:0]
+addSignal -h 30 -holdScope \per_bank_core_req_addr[1] [25:0]
+addSignal -h 30 -holdScope \per_bank_core_req_addr[2] [25:0]
+addSignal -h 30 -holdScope \per_bank_core_req_addr[3] [25:0]
+endSubGroup "dcache_req_if"
+addSubGroup "dcache_rsp_if"
+addSignal -h 30 /TOP/Vortex/\genblk2[0] /cluster/\genblk2[0] /core/dcache_rsp_if/ready
+addSignal -h 30 -holdScope valid
+addSignal -h 30 /TOP/Vortex/\genblk2[0] /cluster/\genblk2[0] /core/pipeline/execute/lsu_unit/dcache_rsp_if/tag[48:0]
+addSignal -h 30 /TOP/Vortex/\genblk2[0] /cluster/\genblk2[0] /core/dcache_rsp_if/tmask[3:0]
+endSubGroup "dcache_rsp_if"
+addSubGroup "alu_req_if" -e FALSE
+addSignal -h 30 /TOP/Vortex/\genblk2[0] /cluster/\genblk2[0] /core/pipeline/execute/alu_req_if/PC[31:0]
+addSignal -h 30 -holdScope tmask[3:0]
+addSignal -h 30 -holdScope ready
+addSignal -h 30 -holdScope valid
+endSubGroup "alu_req_if"
+endSubGroup "Execute"
+addSubGroup "Decode" -e FALSE
+addSignal -h 30 -UNSIGNED -HEX /TOP/Vortex/\genblk2[0] /cluster/\genblk2[0] /core/pipeline/decode/decode_if/tmask[3:0]
+endSubGroup "Decode"
+addGroup "L1 Dcache"
+addSignal -h 30 /TOP/Vortex/\genblk2[0] /cluster/\genblk2[0] /core/mem_unit/dcache/core_req_ready[3:0]
+addSignal -h 30 -UNSIGNED -HEX -holdScope core_req_valid[3:0]
+addSignal -h 30 -holdScope core_req_rw[3:0]
+addSignal -h 30 -holdScope \core_req_addr[0] [29:0]
+addSignal -h 30 -holdScope \core_req_addr[1] [29:0]
+addSignal -h 30 -holdScope \core_req_addr[2] [29:0]
+addSignal -h 30 -holdScope \core_req_addr[3] [29:0]
+addSubGroup "BankSel"
+addSignal -h 30 -UNSIGNED -HEX /TOP/Vortex/\genblk2[0] /cluster/\genblk2[0] /core/mem_unit/dcache/core_req_bank_sel/\core_req_bid[0] [1:0]
+addSignal -h 30 -holdScope \core_req_bid[1] [1:0]
+addSignal -h 30 -holdScope \core_req_bid[2] [1:0]
+addSignal -h 30 -holdScope \core_req_bid[3] [1:0]
+addSignal -h 30 -holdScope \core_req_line_addr[0] [25:0]
+addSignal -h 30 -holdScope \core_req_line_addr[1] [25:0]
+addSignal -h 30 -holdScope \core_req_line_addr[2] [25:0]
+addSignal -h 30 -holdScope \core_req_line_addr[3] [25:0]
+addSignal -h 30 -holdScope \per_bank_core_req_tid_r[0][0] [1:0]
+addSignal -h 30 -holdScope \per_bank_core_req_tid_r[1][0] [1:0]
+addSignal -h 30 -holdScope \per_bank_core_req_tid_r[2][0] [1:0]
+addSignal -h 30 -holdScope \per_bank_core_req_tid_r[3][0] [1:0]
+addSignal -h 30 -UNSIGNED -BIN -holdScope per_bank_core_req_valid[3:0]
+addSignal -h 30 -holdScope core_req_ready[3:0]
+endSubGroup "BankSel"
+addSignal -h 30 /TOP/Vortex/\genblk2[0] /cluster/\genblk2[0] /core/mem_unit/dcache/core_rsp_valid[0:0]
+addSignal -h 30 -holdScope mem_req_valid
+addSignal -h 30 -holdScope mem_req_rw
+addSignal -h 30 -holdScope mem_rsp_valid
+addGroup "L2"
+addSignal -h 30 -UNSIGNED -HEX /TOP/Vortex/\genblk2[0] /cluster/genblk3/l2cache/core_req_ready[1:0]
+addSignal -h 30 -holdScope core_req_valid[1:0]
+addSignal -h 30 -holdScope mem_req_valid
+addGroup "DRAM"
+addSignal -h 30 /TOP/Vortex/\genblk2[0] /cluster/genblk3/l2cache/mem_req_valid
+addSignal -h 30 -holdScope mem_rsp_valid
+addGroup "G3"
+
+; getSignalForm Scope Hierarchy Status
+; active file of getSignalForm
+activeDirFile "" "/scratch/hansung/src/vortex/trace.vcd.fsdb"
+
+GETSIGNALFORM_SCOPE_HIERARCHY_BEGIN
+getSignalForm close
+
+"/TOP"
+"/TOP/Vortex"
+"/TOP/Vortex/\genblk2[0] "
+"/TOP/Vortex/\genblk2[0] /cluster"
+"/TOP/Vortex/\genblk2[0] /cluster/\genblk2[0] "
+"/TOP/Vortex/\genblk2[0] /cluster/\genblk2[0] /core"
+"/TOP/Vortex/\genblk2[0] /cluster/\genblk2[0] /core/dcache_rsp_if"
+"/TOP/Vortex/\genblk2[0] /cluster/\genblk2[0] /core/mem_unit"
+"/TOP/Vortex/\genblk2[0] /cluster/\genblk2[0] /core/mem_unit/dcache"
+"/TOP/Vortex/\genblk2[0] /cluster/\genblk2[0] /core/mem_unit/dcache/\genblk7[0] "
+"/TOP/Vortex/\genblk2[0] /cluster/\genblk2[0] /core/mem_unit/dcache/core_req_bank_sel"
+"/TOP/Vortex/\genblk2[0] /cluster/\genblk2[0] /core/mem_unit/dcache/mem_req_arb"
+"/TOP/Vortex/genblk3"
+
+SCOPE_LIST_BEGIN
+"/TOP"
+"/TOP/Vortex"
+"/TOP/Vortex/genblk3"
+"/TOP/Vortex/\genblk2[0]"
+"/TOP/Vortex/\genblk2[0] "
+"/TOP/Vortex/\genblk2[0] /cluster/\genblk2[0] /core/dcache_rsp_if"
+"/TOP/Vortex/\genblk2[0] /cluster/\genblk2[0] /core/dcache_req_if"
+"/TOP/Vortex/\genblk2[0] /cluster"
+"/TOP/Vortex/\genblk2[0] /cluster/\genblk2[0] "
+"/TOP/Vortex/\genblk2[0] /cluster/\genblk2[0] /core"
+"/TOP/Vortex/\genblk2[0] /cluster/\genblk2[0] /core/pipeline/execute/lsu_unit"
+"/TOP/Vortex/\genblk2[0] /cluster/\genblk2[0] /core/pipeline"
+"/TOP/Vortex/\genblk2[0] /cluster/\genblk2[0] /core/pipeline/execute"
+"/TOP/Vortex/\genblk2[0] /cluster/\genblk2[0] /core/pipeline/execute/lsu_unit/dcache_rsp_if"
+"/TOP/Vortex/\genblk2[0] /cluster/\genblk2[0] /core/pipeline/execute/lsu_unit/dcache_req_if"
+"/TOP/Vortex/\genblk2[0] /cluster/\genblk2[0] /core/mem_unit"
+"/TOP/Vortex/\genblk2[0] /cluster/\genblk2[0] /core/mem_unit/dcache"
+"/TOP/Vortex/\genblk2[0] /cluster/\genblk2[0] /core/mem_unit/dcache_mem_req_if"
+"/TOP/Vortex/\genblk2[0] /cluster/\genblk2[0] /core/mem_unit/dcache/mem_req_arb"
+"/TOP/Vortex/\genblk2[0] /cluster/\genblk2[0] /core/mem_unit/dcache/\genblk7[0] "
+"/TOP/Vortex/\genblk2[0] /cluster/\genblk2[0] /core/mem_unit/dcache/mem_req_arb/genblk1"
+"/TOP/Vortex/\genblk2[0] /cluster/\genblk2[0] /core/pipeline/lsu_req_if"
+"/TOP/Vortex/\genblk2[0] /cluster/\genblk2[0] /core/pipeline/issue"
+"/TOP/Vortex/\genblk2[0] /cluster/\genblk2[0] /core/pipeline/execute/lsu_req_if"
+"/TOP/Vortex/\genblk2[0] /cluster/\genblk2[0] /core/pipeline/execute/lsu_unit/lsu_req_if"
+"/TOP/Vortex/\genblk2[0] /cluster/\genblk2[0] /core/pipeline/issue/dispatch"
+"/TOP/Vortex/\genblk2[0] /cluster/\genblk2[0] /core/pipeline/issue/dispatch/ibuffer_if"
+"/TOP/Vortex/\genblk2[0] /cluster/\genblk2[0] /core/pipeline/issue/dispatch/gpr_rsp_if"
+"/TOP/Vortex/\genblk2[0] /cluster/\genblk2[0] /core/pipeline/issue/ibuffer"
+"/TOP/Vortex/\genblk2[0] /cluster/\genblk2[0] /core/pipeline/issue/ibuffer_if"
+"/TOP/Vortex/\genblk2[0] /cluster/\genblk2[0] /core/pipeline/issue/ibuffer/ibuffer_if"
+"/TOP/Vortex/\genblk2[0] /cluster/\genblk2[0] /core/pipeline/issue/ibuffer/decode_if"
+"/TOP/Vortex/\genblk2[0] /cluster/\genblk2[0] /core/pipeline/issue/gpr_rsp_if"
+"/TOP/Vortex/\genblk2[0] /cluster/\genblk2[0] /core/pipeline/issue/gpr_req_if"
+"/TOP/Vortex/\genblk2[0] /cluster/\genblk2[0] /core/mem_unit/dcache/core_req_bank_sel"
+"/TOP/Vortex/\genblk2[0] /cluster/\genblk2[0] /core/mem_unit/dcache/core_req_bank_sel/genblk5"
+"/TOP/Vortex/\genblk2[0] /cluster/\genblk2[0] /core/mem_unit/dcache/core_rsp_merge"
+"/TOP/Vortex/\genblk2[0] /cluster/\genblk2[0] /core/mem_unit/dcache/core_req_bank_sel/genblk5/genblk1"
+"/TOP/Vortex/\genblk2[0] /cluster/\genblk2[0] /core/mem_unit/dcache/core_req_bank_sel/genblk5/genblk1/genblk1"
+"/TOP/Vortex/\genblk2[0] /cluster/\genblk2[0] /core/mem_unit/dcache/core_req_bank_sel/genblk5/genblk1/genblk1/unnamedblk7"
+SCOPE_LIST_END
+
+GETSIGNALFORM_SCOPE_HIERARCHY_END
+
+
