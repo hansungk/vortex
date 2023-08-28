@@ -174,9 +174,14 @@ int main (int argc, char **argv) {
   }
 
   // Creating command queue
-  commandQueue = CL_CHECK2(clCreateCommandQueue(context, device_id, 0, &_err));  
+  // NOTE(hansung): The 3rd properties arg is a bit-field, where fields like
+  // CL_QUEUE_OUT_OF_ORDER_EXEC_MODE_ENABLE can be set.  With value of 0,
+  // nothing is set and the commands in the queue will be completed in-order.
+  // See OpenCL 1.2 spec, section 5.1
+  commandQueue = CL_CHECK2(clCreateCommandQueue(
+      context, device_id, 0 /* command-queue properties */, &_err));
 
-	printf("Upload source buffers\n");
+  printf("Upload source buffers\n");
   CL_CHECK(clEnqueueWriteBuffer(commandQueue, a_memobj, CL_TRUE, 0, nbytes, h_a, 0, NULL, NULL));
   CL_CHECK(clEnqueueWriteBuffer(commandQueue, b_memobj, CL_TRUE, 0, nbytes, h_b, 0, NULL, NULL));
 
