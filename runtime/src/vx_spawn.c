@@ -97,6 +97,8 @@ static void spawn_tasks_rem_cb(int thread_mask) {
   vx_tmc(1);
 }
 
+// NOTE(hansung): where is this used? The main section in the POCL binary calls
+// `vx_spawn_kernel` but not this one
 void vx_spawn_tasks(int num_tasks, vx_spawn_tasks_cb callback , void * arg) {
 	// device specs
   int NC = vx_num_cores();
@@ -281,9 +283,12 @@ void vx_spawn_kernel(context_t * ctx, vx_spawn_kernel_cb callback, void * arg) {
   char log2X    = fast_log2(X);
 
   //--
-  wspawn_kernel_args_t wspawn_args = { 
-    ctx, callback, arg, core_id * wgs_per_core, fW, rW, 0, isXYpow2, isXpow2, log2XY, log2X 
-  };
+  wspawn_kernel_args_t wspawn_args = {
+      ctx,      callback, arg,      core_id * wgs_per_core /*offset*/,
+      fW /*N*/, rW /*R*/, 0 /*NW*/, isXYpow2,
+      isXpow2,  log2XY,   log2X};
+
+  // NOTE(hansung): core_id is capped at NUM_CORES_MAX = 32
   g_wspawn_args[core_id] = &wspawn_args;
 
   //--
