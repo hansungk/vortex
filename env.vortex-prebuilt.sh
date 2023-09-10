@@ -5,7 +5,7 @@ then
 fi
 
 # PREBUILT_DIR=/scratch/hansung/build/vortex-toolchain-prebuilt-d2ba5df-230831
-PREBUILT_DIR=/scratch/hansung/build/vortex-toolchain-prebuilt-new
+PREBUILT_DIR=/scratch/hansung/build/vortex-toolchain-prebuilt-230831
 
 export VORTEX_ENV="vortex-prebuilt"
 export LLVM_PREFIX=$PREBUILT_DIR/llvm-riscv/
