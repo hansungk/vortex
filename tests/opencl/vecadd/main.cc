@@ -156,6 +156,8 @@ int main (int argc, char **argv) {
   kernel = CL_CHECK2(clCreateKernel(program, KERNEL_NAME, &_err));
 
   // Set kernel arguments
+  // NOTE(hansung): clSetKernelArg doesn't seem to incur any device-specific
+  // operation
   CL_CHECK(clSetKernelArg(kernel, 0, sizeof(cl_mem), (void *)&a_memobj));	
   CL_CHECK(clSetKernelArg(kernel, 1, sizeof(cl_mem), (void *)&b_memobj));	
   CL_CHECK(clSetKernelArg(kernel, 2, sizeof(cl_mem), (void *)&c_memobj));
@@ -190,6 +192,8 @@ int main (int argc, char **argv) {
   size_t local_work_size[1] = {1};
   auto time_start = std::chrono::high_resolution_clock::now();
   CL_CHECK(clEnqueueNDRangeKernel(commandQueue, kernel, 1, NULL, global_work_size, local_work_size, 0, NULL, NULL));
+  // NOTE(hansung): clFinish blocks until all kernels in the command queue are
+  // finished.  This seems to be what actually kicks off kernel execution.
   CL_CHECK(clFinish(commandQueue));
   auto time_end = std::chrono::high_resolution_clock::now();
   double elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(time_end - time_start).count();

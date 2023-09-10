@@ -55,6 +55,7 @@
 
 ///////////////////////////////////////////////////////////////////////////////
 
+// NOTE(hansung): what does CORE_TAG_ID_BITS == 0 mean?
 `define CORE_RSP_TAGS           ((CORE_TAG_ID_BITS != 0) ? 1 : NUM_REQS)
 
 `define LINE_TO_MEM_ADDR(x, i)  {x, `BANK_SELECT_BITS'(i)}

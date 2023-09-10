@@ -250,6 +250,8 @@ module VX_cache #(
     wire [MEM_TAG_IN_WIDTH-1:0]     mem_rsp_tag_c;
     wire                            mem_rsp_ready_c;
 
+    // NOTE(hansung): non-cacheable addresses. Although is this applied for
+    // all address range?
     if (NC_ENABLE) begin
         VX_nc_bypass #( 
             .NUM_PORTS         (NUM_PORTS),

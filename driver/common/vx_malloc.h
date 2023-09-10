@@ -29,6 +29,10 @@ public:
         }
     }
 
+    // NOTE(hansung): This is code running on the CPU, but CPU is still the one
+    // that keeps track of allocation of the GPU memory.  GPU kernel simply runs
+    // assuming that CPU has done the right thing and returned a safe and valid
+    // chunk of memory.
     int allocate(uint64_t size, uint64_t* addr) {
         if (size == 0 || addr == nullptr)
             return -1;

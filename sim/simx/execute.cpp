@@ -1326,6 +1326,9 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       } else {
         tmask_.reset();
         for (uint32_t t = 0; t < num_threads; ++t) {
+          // NOTE(hansung): `ts` is the left-most lane currently enabled.
+          // Doing this only respects the operand of that lane, even though
+          // every lane might have different operand for the tmask.
           tmask_.set(t, rsdata.at(ts)[0].i & (1 << t));
         }
       }
