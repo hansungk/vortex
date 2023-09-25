@@ -52,6 +52,25 @@ static int read_kernel_file(const char* filename, uint8_t** data, size_t* size) 
   return 0;
 }
 
+static int write_operand_file(const char* filename, void* data, size_t size) {
+  if (nullptr == filename || nullptr == data || 0 == size)
+    return -1;
+
+  FILE* fp = fopen(filename, "wb");
+  if (NULL == fp) {
+    fprintf(stderr, "Failed to write operand data.\n");
+    return -1;
+  }
+
+  size_t wsize = fwrite(data, size, 1, fp);
+  if (wsize != 1) {
+    fprintf(stderr, "Failed to write operand data.\n");
+    return -1;
+  }
+
+  return 0;
+}
+
 static void matmul(float *C, const float* A, const float *B, int M, int N, int K) {
   for (int m = 0; m < M; ++m) {
     for (int n = 0; n < N; ++n) {
@@ -193,6 +212,12 @@ int main (int argc, char **argv) {
     h_c[i] = 0xdeadbeef;
     //printf("*** [%d]: h_a=%f, h_b=%f\n", i, h_a[i], h_b[i]);
   }
+
+  // NOTE(hansung): Dump operand buffer to a file
+  if (write_operand_file("sgemm.input.a.bin", h_a, nbytes) != 0)
+    return EXIT_FAILURE;
+  if (write_operand_file("sgemm.input.b.bin", h_b, nbytes) != 0)
+    return EXIT_FAILURE;
 
   // Creating command queue
   commandQueue = CL_CHECK2(clCreateCommandQueue(context, device_id, 0, &_err));  

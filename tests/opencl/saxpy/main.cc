@@ -78,6 +78,25 @@ static int read_kernel_file(const char* filename, uint8_t** data, size_t* size) 
   return 0;
 }
 
+static int write_operand_file(const char* filename, void* data, size_t size) {
+  if (nullptr == filename || nullptr == data || 0 == size)
+    return -1;
+
+  FILE* fp = fopen(filename, "wb");
+  if (NULL == fp) {
+    fprintf(stderr, "Failed to write operand data.\n");
+    return -1;
+  }
+
+  size_t wsize = fwrite(data, size, 1, fp);
+  if (wsize != 1) {
+    fprintf(stderr, "Failed to write operand data.\n");
+    return -1;
+  }
+
+  return 0;
+}
+
 uint8_t *kernel_bin = NULL;
 
 ///
@@ -209,6 +228,11 @@ int main(int argc, char **argv) {
   for (int i = 0; i < size; i++) {
     h_src[i] = ((float)rand() / (float)(RAND_MAX)) * 100.0;
   }
+
+  // NOTE(hansung): Dump operand buffer to a file
+  if (write_operand_file("saxpy.input.src.bin", h_src, nbytes) != 0)
+    return EXIT_FAILURE;
+
   CL_CHECK(clEnqueueWriteBuffer(queue, input_buffer, CL_TRUE, 0, nbytes, h_src, 0, NULL, NULL));
   free(h_src);
 
