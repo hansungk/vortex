@@ -693,6 +693,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         trace->mem_addrs.at(t).push_back({mem_addr, mem_bytes});
         DP(2, "LOAD MEM: CYCLE=" << std::dec << SimPlatform::instance().cycles()
               << ", CORE=" << core_->id()
+              << ", WARP=" << id_
               << ", THREAD=" << t
               << ", ADDRESS=0x" << std::hex << mem_addr
               << ", DATA=0x" << mem_data << std::dec
@@ -738,6 +739,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
           *result_ptr = mem_data;
           DP(2, "LOAD MEM: CYCLE=" << std::dec << SimPlatform::instance().cycles()
                 << ", CORE=" << core_->id()
+                << ", WARP=" << id_
                 << ", VLEN=" << vl_
                 << ", VID=" << i
                 << ", ADDRESS=0x" << std::hex << mem_addr
@@ -775,6 +777,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         trace->mem_addrs.at(t).push_back({mem_addr, mem_bytes});        
         DP(2, "STORE MEM: CYCLE=" << std::dec << SimPlatform::instance().cycles()
               << ", CORE=" << core_->id()
+              << ", WARP=" << id_
               << ", THREAD=" << t
               << ", ADDRESS=0x" << std::hex << mem_addr
               << ", DATA=0x" << mem_data << std::dec
@@ -800,6 +803,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
           core_->dcache_write(&mem_data, mem_addr, 4);
           DP(2, "STORE MEM: CYCLE=" << std::dec << SimPlatform::instance().cycles()
                 << ", CORE=" << core_->id()
+                << ", WARP=" << id_
                 << ", VLEN=" << vl_
                 << ", VID=" << i
                 << ", ADDRESS=0x" << std::hex << mem_addr
