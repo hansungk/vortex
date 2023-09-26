@@ -691,7 +691,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
         uint64_t mem_data = 0;
         core_->dcache_read(&mem_data, mem_addr, mem_bytes);
         trace->mem_addrs.at(t).push_back({mem_addr, mem_bytes});
-        DP(1, "LOAD MEM: CYCLE=" << SimPlatform::instance().cycles()
+        DP(2, "LOAD MEM: CYCLE=" << std::dec << SimPlatform::instance().cycles()
               << ", CORE=" << core_->id()
               << ", THREAD=" << t
               << ", ADDRESS=0x" << std::hex << mem_addr
@@ -736,7 +736,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
           core_->dcache_read(&mem_data, mem_addr, 4);
           Word *result_ptr = (Word *)(vd.data() + i);
           *result_ptr = mem_data;
-          DP(1, "LOAD MEM: CYCLE=" << SimPlatform::instance().cycles()
+          DP(2, "LOAD MEM: CYCLE=" << std::dec << SimPlatform::instance().cycles()
                 << ", CORE=" << core_->id()
                 << ", VLEN=" << vl_
                 << ", VID=" << i
@@ -773,7 +773,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
           mem_data &= mask;
         }
         trace->mem_addrs.at(t).push_back({mem_addr, mem_bytes});        
-        DP(1, "STORE MEM: CYCLE=" << SimPlatform::instance().cycles()
+        DP(2, "STORE MEM: CYCLE=" << std::dec << SimPlatform::instance().cycles()
               << ", CORE=" << core_->id()
               << ", THREAD=" << t
               << ", ADDRESS=0x" << std::hex << mem_addr
@@ -798,7 +798,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
           // store word and unit strided (not checking for unit stride)          
           uint32_t mem_data = *(uint32_t *)(vreg_file_.at(instr.getVs3()).data() + i);
           core_->dcache_write(&mem_data, mem_addr, 4);
-          DP(1, "STORE MEM: CYCLE=" << SimPlatform::instance().cycles()
+          DP(2, "STORE MEM: CYCLE=" << std::dec << SimPlatform::instance().cycles()
                 << ", CORE=" << core_->id()
                 << ", VLEN=" << vl_
                 << ", VID=" << i
@@ -900,6 +900,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
   case FENCE: {
     trace->exe_type = ExeType::LSU;    
     trace->lsu.type = LsuType::FENCE;
+    DP(2, "FENCE MEM");
     break;
   }   
   case FCI: {       
@@ -1422,6 +1423,7 @@ void Warp::execute(const Instr &instr, pipeline_trace_t *trace) {
       trace->exe_type = ExeType::LSU; 
       trace->lsu.type = LsuType::PREFETCH; 
       trace->used_iregs.set(rsrc0);
+      DP(2, "PREFETCH MEM");
       for (uint32_t t = 0; t < num_threads; ++t) {
         if (!tmask_.test(t))
           continue;
