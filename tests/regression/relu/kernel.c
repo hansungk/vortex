@@ -12,9 +12,11 @@ void kernel_body(int __DIVERGENT__ task_id, kernel_arg_t* arg) {
 
 	int32_t ref_value = src_ptr[task_id];
 	int ref_negative = ref_value < 0;
+	vx_split(ref_negative);
 	if (ref_negative) {
 		ref_value = 0;
 	}
+	vx_join();
 	
 	dst_ptr[task_id] = ref_value;
 }
