@@ -93,7 +93,7 @@ public:
 
     int upload(const void* src, uint64_t dest_addr, uint64_t size, uint64_t src_offset) {
         uint64_t asize = aligned_size(size, CACHE_BLOCK_SIZE);
-        if (dest_addr + asize > LOCAL_MEM_SIZE)
+        if (dest_addr + asize > DEVICE_MAX_ADDR)
             return -1;
 
         ram_.write((const uint8_t*)src + src_offset, dest_addr, asize);
@@ -108,7 +108,7 @@ public:
 
     int download(void* dest, uint64_t src_addr, uint64_t size, uint64_t dest_offset) {
         uint64_t asize = aligned_size(size, CACHE_BLOCK_SIZE);
-        if (src_addr + asize > LOCAL_MEM_SIZE)
+        if (src_addr + asize > DEVICE_MAX_ADDR)
             return -1;
 
         ram_.read((uint8_t*)dest + dest_offset, src_addr, asize);
