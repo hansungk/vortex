@@ -53,6 +53,7 @@ run-vlsim: $(PROJECT) kernel.pocl
 
 run-simx: $(PROJECT) kernel.pocl   
 	LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(VORTEX_DRV_PATH)/simx:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
+	cp -f args.bin $(PROJECT).args.bin
 
 run-rtlsim: $(PROJECT) kernel.pocl   
 	LD_LIBRARY_PATH=$(POCL_RT_PATH)/lib:$(VORTEX_DRV_PATH)/rtlsim:$(LD_LIBRARY_PATH) ./$(PROJECT) $(OPTS)
