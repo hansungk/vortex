@@ -77,11 +77,14 @@ init_regs:
   # allocate stack region for a threads on the processor 
   # set stack pointer
   li sp, SMEM_BASE_ADDR # load stack base address
-  #if SM_ENABLE
-  csrr a0, CSR_LTID    # get local thread id
-  #else
+  # NOTE(hansung): Force per-global-thread stack allocation, since
+  # we're experimenting with different memory hierarchy (i.e. no private cache)
+  # and it's easy to miss setting SM_ENABLE accordingly.
+  # #if SM_ENABLE
+  # csrr a0, CSR_LTID    # get local thread id
+  # #else
   csrr a0, CSR_GTID    # get global thread id
-  #endif
+  # #endif
   sll  a1, a0, STACK_LOG2_SIZE
   sub  sp, sp, a1
 
@@ -107,4 +110,4 @@ RETURN:
 	.weak __dso_handle
 __dso_handle:
 	.long	0
-  
+
