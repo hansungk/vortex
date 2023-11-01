@@ -118,18 +118,27 @@ void vx_spawn_tasks(int num_tasks, vx_spawn_tasks_cb callback , void * arg) {
     return; // terminate extra cores
 
   // number of tasks per core
+  // NOTE(hansung): how many threads does each core need to run in total
+  // "waves"?
   int tasks_per_core = num_tasks / nc;
   int tasks_per_core0 = tasks_per_core;  
-  if (core_id == (NC-1)) {    
-    int QC_r = num_tasks - (nc * tasks_per_core0); 
+  if (core_id == (NC-1)) {
+    // NOTE(hansung): #threads to be run at the last wave, could be zero if
+    // evenly divisible
+    int QC_r = num_tasks - (nc * tasks_per_core0);
     tasks_per_core0 += QC_r; // last core executes remaining tasks
   }
 
   // number of tasks per warp
-  int nW = tasks_per_core0 / NT;        		// total warps per core
+  int nW = tasks_per_core0 / NT;        		// total warps to be run per core
+  // NOTE(hansung): According to this logic, if grid size is small so that it
+  // cannot saturate all cores, then *every* core will not activate the full
+  // warp slots!
   int rT = tasks_per_core0 - (nW * NT); 		// remaining threads
   int fW  = (nW >= NW) ? (nW / NW) : 0;			// full warps iterations
+												// NOTE(hansung): this is "waves"
   int rW  = (fW != 0) ? (nW - fW * NW) : 0; // remaining warps
+											// NOTE(hansung): # of warps to be run at the last "wave"
   if (0 == fW)
     fW = 1;
 
@@ -159,29 +168,47 @@ static void __attribute__ ((noinline)) spawn_kernel_all_stub() {
   int core_id = vx_core_id();
   int wid     = vx_warp_id();
   int tid     = vx_thread_id(); 
+  int NW      = vx_num_warps();
   int NT      = vx_num_threads();
   
   wspawn_kernel_args_t* p_wspawn_args = (wspawn_kernel_args_t*)g_wspawn_args[core_id];
 
-  int wK = (p_wspawn_args->N * wid) + MIN(p_wspawn_args->R, wid);
-  int tK = p_wspawn_args->N + (wid < p_wspawn_args->R);
-  int offset = p_wspawn_args->offset + (wK * NT) + (tid * tK);
+  // NOTE(hansung): This is the main mapping logic between thread_id <-> SIMT
+  // lanes
+  // int wK = (p_wspawn_args->N * wid) + MIN(p_wspawn_args->R, wid);
+  // int tK = p_wspawn_args->N + (wid < p_wspawn_args->R);
+  // int offset = p_wspawn_args->offset + (wK * NT) + (tid * tK);
+
+  // FIXME(hansung): This does not handle residuals correctly! Only works when
+  // R == 0
+  int tK = p_wspawn_args->N;
+  int offset = p_wspawn_args->offset + (wid * NT) + tid;
 
   int X = p_wspawn_args->ctx->num_groups[0];
   int Y = p_wspawn_args->ctx->num_groups[1];
   int XY = X * Y;
 
-  for (int wg_id = offset, N = wg_id + tK; wg_id < N; ++wg_id) {    
-    int k = p_wspawn_args->isXYpow2 ? (wg_id >> p_wspawn_args->log2XY) : (wg_id / XY);
-    int wg_2d = wg_id - k * XY;
-    int j = p_wspawn_args->isXpow2 ? (wg_2d >> p_wspawn_args->log2X) : (wg_2d / X);
-    int i = wg_2d - j * X;
+  // NOTE(hansung): This runs tK (~= N) times, implementing sequential execution
+  // of waves
+  // for (int wg_id = offset, N = wg_id + tK; wg_id < N; ++wg_id) {    
+  //   int k = p_wspawn_args->isXYpow2 ? (wg_id >> p_wspawn_args->log2XY) : (wg_id / XY);
+  //   int wg_2d = wg_id - k * XY;
+  //   int j = p_wspawn_args->isXpow2 ? (wg_2d >> p_wspawn_args->log2X) : (wg_2d / X);
+  // 	// NOTE(hansung): i will be just wg_id if 1-dimensional
+  //   int i = wg_2d - j * X;
+  // 
+  // 	// NOTE(hansung): TODO: what is global_offset?
+  //   int gid0 = p_wspawn_args->ctx->global_offset[0] + i;
+  //   int gid1 = p_wspawn_args->ctx->global_offset[1] + j;
+  //   int gid2 = p_wspawn_args->ctx->global_offset[2] + k;
+  // 
+  //   (p_wspawn_args->callback)(p_wspawn_args->arg, p_wspawn_args->ctx, gid0, gid1, gid2);
+  // }
 
-    int gid0 = p_wspawn_args->ctx->global_offset[0] + i;
-    int gid1 = p_wspawn_args->ctx->global_offset[1] + j;
-    int gid2 = p_wspawn_args->ctx->global_offset[2] + k;
+  for (int wave = 0; wave < tK; ++wave) {    
+    int gid0 = p_wspawn_args->ctx->global_offset[0] + offset + (wave * NT * NW);
 
-    (p_wspawn_args->callback)(p_wspawn_args->arg, p_wspawn_args->ctx, gid0, gid1, gid2);
+    (p_wspawn_args->callback)(p_wspawn_args->arg, p_wspawn_args->ctx, gid0, 0, 0);
   }
 
   // wait for all warps to complete
@@ -241,7 +268,7 @@ void vx_spawn_kernel(context_t * ctx, vx_spawn_kernel_cb callback, void * arg) {
   int Y  = ctx->num_groups[1];
   int Z  = ctx->num_groups[2];
   int XY = X * Y;
-  int Q  = XY * Z;
+  int Q  = XY * Z; // NOTE(hansung): total grid size
   
   // device specs
   int NC = vx_num_cores();
@@ -255,12 +282,16 @@ void vx_spawn_kernel(context_t * ctx, vx_spawn_kernel_cb callback, void * arg) {
 
   // calculate necessary active cores
   int WT = NW * NT;
-  int nC = (Q > WT) ? (Q / WT) : 1;
-  int nc = MIN(nC, NC);
+  int nC = (Q > WT) ? (Q / WT) : 1; // NOTE(hansung): how many cores needed to run all grid size?
+  int nc = MIN(nC, NC); // NOTE(hansung): take max cores if too many
   if (core_id >= nc)
     return; // terminate extra cores
 
   // number of workgroups per core
+  // NOTE(hansung): how many threads (shown here as wgs) does each core need to
+  // run, across all waves?
+  // NOTE: If Q = 16 and nc = 4, this will simply activate *only* 1 warp per
+  // core and leave the other warp slots empty.
   int wgs_per_core = Q / nc;
   int wgs_per_core0 = wgs_per_core;  
   if (core_id == (NC-1)) {    
@@ -272,6 +303,8 @@ void vx_spawn_kernel(context_t * ctx, vx_spawn_kernel_cb callback, void * arg) {
   int nW = wgs_per_core0 / NT;              // total warps per core
   int rT = wgs_per_core0 - (nW * NT);       // remaining threads
   int fW = (nW >= NW) ? (nW / NW) : 0;      // full warps iterations
+  // NOTE(hansung): 'fW' is waves, or waves-1, depending on if there are
+  // remaining warps
   int rW = (fW != 0) ? (nW - fW * NW) : 0;  // reamining full warps
   if (0 == fW)
     fW = 1;
