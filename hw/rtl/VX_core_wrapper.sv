@@ -1,4 +1,5 @@
 `include "VX_define.vh"
+`include "VX_gpu_pkg.sv"
 // TODO: move VX_define constants to parameters, and then parameterize in blackbox
 
 module Vortex import VX_gpu_pkg::*; #(

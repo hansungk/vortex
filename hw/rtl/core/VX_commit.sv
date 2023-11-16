@@ -12,6 +12,7 @@
 // limitations under the License.
 
 `include "VX_define.vh"
+`include "VX_gpu_pkg.sv"
 
 module VX_commit import VX_gpu_pkg::*; #(
     parameter CORE_ID = 0

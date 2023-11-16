@@ -12,7 +12,6 @@
 // limitations under the License.
 
 `include "VX_cache_define.vh"
-`include "VX_gpu_pkg.sv"
 
 module VX_cache_cluster import VX_gpu_pkg::*; #(
     parameter `STRING INSTANCE_ID    = "",
