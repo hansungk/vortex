@@ -115,6 +115,8 @@
 // NOTE(hansung): define these macros to be the same as VERILATOR under VCS;
 // they will mostly be ignored
 `ifdef VCS
+// VCS doesn't define SIMULATION by default
+`define SIMULATION
 `define TRACING_ON      /* verilator tracing_on */
 `define TRACING_OFF     /* verilator tracing_off */
 `ifndef NDEBUG
