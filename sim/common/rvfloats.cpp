@@ -17,7 +17,10 @@
 extern "C" {
 #include <softfloat.h>
 #include <internals.h>
-#include <../RISCV/specialize.h>
+// #include <../RISCV/specialize.h>
+// NOTE(hansung): addResource() in Chisel flattens everything to
+// gen-collateral/ dir, so cannot use relative path for includes
+#include <specialize.h>
 }
 
 #define F32_SIGN 0x80000000
