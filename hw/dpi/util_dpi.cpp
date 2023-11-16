@@ -12,14 +12,16 @@
 // limitations under the License.
 
 #include <stdio.h>
+#include <stdarg.h>
 #include <math.h>
 #include <unordered_map>
 #include <vector>
 #include <mutex>
+#include <memory>
 #include <iostream>
 
 #include "svdpi.h"
-#include "verilated_vpi.h"
+// #include "verilated_vpi.h"
 
 #include "uuid_gen.h"
 
@@ -191,8 +193,8 @@ void dpi_idiv(bool enable, bool is_signed, iword_t a, iword_t b, iword_t* quotie
 void dpi_trace(int level, const char* format, ...) { 
   if (level > DEBUG_LEVEL)
     return;
-  if (!sim_trace_enabled())
-    return;
+  // if (!sim_trace_enabled())
+  //   return;
   va_list va;
 	va_start(va, format);  
 	vprintf(format, va);
@@ -200,11 +202,11 @@ void dpi_trace(int level, const char* format, ...) {
 }
 
 void dpi_trace_start() { 
-  sim_trace_enable(true);
+  // sim_trace_enable(true);
 }
 
 void dpi_trace_stop() { 
-  sim_trace_enable(false);
+  // sim_trace_enable(false);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
