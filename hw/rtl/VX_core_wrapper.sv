@@ -4,6 +4,7 @@
 
 module Vortex import VX_gpu_pkg::*; #(
     parameter CORE_ID = 0,
+    parameter BOOTROM_HANG100 = 32'h10100,
     parameter NUM_THREADS = 0
 ) (
 
@@ -365,17 +366,89 @@ module Vortex import VX_gpu_pkg::*; #(
     logic sim_ebreak;
     logic [`NUM_REGS-1:0][`XLEN-1:0] sim_wb_value;
 
-    // TODO: need to set DCR at the right time
-    // DCR seems to be a configuration register that holds the startup address
-    // for the kernel, nominally set to 0x80000000
-    VX_dcr_bus_if dcr_bus_if();
-    assign dcr_bus_if.write_valid = 1'b0;
-    assign dcr_bus_if.write_addr  = `VX_DCR_ADDR_WIDTH'b0;
-    assign dcr_bus_if.write_data  = `VX_DCR_DATA_WIDTH'b0;
+    logic [3:0] reset_start_counter;
+    logic core_reset;
+    logic dcr_reset;
+
+    always @(posedge clock) begin
+      if (reset) begin
+        reset_start_counter <= 4'ha;
+      end else begin
+        if (reset_start_counter > 4'h0) begin
+          reset_start_counter <= reset_start_counter - 4'h1;
+        end
+      end
+    end
+    // Delay reset signal by a few cycles to make time for resetting the DCR
+    // (device configuration registers).
+    assign core_reset = reset || (reset_start_counter != 4'h0) || intr_reset;
+    assign dcr_reset = !reset && (reset_start_counter != 4'h0);
+
+    // A small FSM that tries to set DCR "properly" in the same order as
+    // defined in VX_types.vh.
+    //
+    // DCR is a device configuration register that holds (among other things)
+    // the startup address for the kernel, nominally set to 0x80000000.
     // TODO: Original Vortex code buffers dcr_bus by one cycle when
-    // SOCKET_SIZE > 1 as below.  Might want to check if we need to do the
-    // same for more number of cores
+    // SOCKET_SIZE > 1, as below.  Might want to check if we need to do the
+    // same
     //   `BUFFER_DCR_BUS_IF (core_dcr_bus_if, dcr_bus_if, (`SOCKET_SIZE > 1));
+    logic [`VX_DCR_ADDR_BITS-1:0]  dcr_state;
+    logic [`VX_DCR_ADDR_BITS-1:0]  dcr_state_n;
+    logic                          dcr_write_valid;
+    logic [`VX_DCR_ADDR_WIDTH-1:0] dcr_write_addr;
+    logic [`VX_DCR_DATA_WIDTH-1:0] dcr_write_data;
+    always @(posedge clock) begin
+      if (reset) begin
+        dcr_state <= `VX_DCR_ADDR_BITS'h000;
+      end else begin
+        dcr_state <= dcr_state_n;
+      end
+    end
+    always @(*) begin
+      dcr_state_n = dcr_state;
+      dcr_write_valid = 1'b0;
+      dcr_write_addr = `VX_DCR_ADDR_WIDTH'b0;
+      dcr_write_data = `VX_DCR_DATA_WIDTH'b0;
+
+      case (dcr_state)
+        `VX_DCR_ADDR_BITS'h000: begin
+          dcr_state_n = `VX_DCR_BASE_STATE_BEGIN;
+        end
+        `VX_DCR_BASE_STATE_BEGIN: begin
+          dcr_state_n = `VX_DCR_BASE_STARTUP_ADDR1;
+
+          dcr_write_valid = 1'b1;
+          dcr_write_addr = `VX_DCR_BASE_STARTUP_ADDR0;
+          dcr_write_data = BOOTROM_HANG100;
+        end
+        `VX_DCR_BASE_STARTUP_ADDR1: begin
+          dcr_state_n = `VX_DCR_BASE_MPM_CLASS;
+
+          dcr_write_valid = 1'b1;
+          dcr_write_addr = `VX_DCR_BASE_STARTUP_ADDR1;
+          // FIXME: not sure what this does
+          dcr_write_data = `VX_DCR_DATA_WIDTH'h0;
+        end
+        `VX_DCR_BASE_MPM_CLASS: begin
+          dcr_state_n = `VX_DCR_BASE_STATE_END;
+
+          dcr_write_valid = 1'b1;
+          dcr_write_addr = `VX_DCR_BASE_MPM_CLASS;
+          dcr_write_data = `VX_DCR_DATA_WIDTH'h0;
+        end
+        `VX_DCR_BASE_STATE_END: begin
+          dcr_state_n = dcr_state;
+
+          dcr_write_valid = 1'b0;
+        end
+      endcase
+    end
+
+    VX_dcr_bus_if dcr_bus_if();
+    assign dcr_bus_if.write_valid = dcr_write_valid;
+    assign dcr_bus_if.write_addr  = dcr_write_addr;
+    assign dcr_bus_if.write_data  = dcr_write_data;
 
     VX_core #(
         .CORE_ID (CORE_ID)
@@ -383,7 +456,7 @@ module Vortex import VX_gpu_pkg::*; #(
         `SCOPE_IO_BIND  (0) // TODO: should be socket id
 
         .clk            (clock),
-        .reset          (reset || intr_reset),
+        .reset          (core_reset),
 
     `ifdef PERF_ENABLE
         // NOTE unused
