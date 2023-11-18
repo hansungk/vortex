@@ -46,7 +46,7 @@ module Vortex import VX_gpu_pkg::*; #(
     input  [2:0]  dmem_0_d_bits_opcode,
     // input  [1:0]  dmem_0_d_bits_param,
     input  [3:0]  dmem_0_d_bits_size,
-    input  [DCACHE_TAG_WIDTH-1:0]  dmem_0_d_bits_source,
+    input  [DCACHE_NOSM_TAG_WIDTH-1:0]  dmem_0_d_bits_source,
     // input  [2:0]  dmem_0_d_bits_sink,
     // input         dmem_0_d_bits_denied,
     input  [31:0] dmem_0_d_bits_data,
@@ -55,7 +55,7 @@ module Vortex import VX_gpu_pkg::*; #(
     output [2:0]  dmem_0_a_bits_opcode,
     // output [2:0]  dmem_0_a_bits_param,
     output [3:0]  dmem_0_a_bits_size,
-    output [DCACHE_TAG_WIDTH-1:0]  dmem_0_a_bits_source,
+    output [DCACHE_NOSM_TAG_WIDTH-1:0]  dmem_0_a_bits_source,
     output [31:0] dmem_0_a_bits_address,
     output [3:0]  dmem_0_a_bits_mask,
     output [31:0] dmem_0_a_bits_data,
@@ -67,7 +67,7 @@ module Vortex import VX_gpu_pkg::*; #(
     input  [2:0]  dmem_1_d_bits_opcode,
     // input  [1:0]  dmem_1_d_bits_param,
     input  [3:0]  dmem_1_d_bits_size,
-    input  [DCACHE_TAG_WIDTH-1:0]  dmem_1_d_bits_source,
+    input  [DCACHE_NOSM_TAG_WIDTH-1:0]  dmem_1_d_bits_source,
     // input  [2:0]  dmem_1_d_bits_sink,
     // input         dmem_1_d_bits_denied,
     input  [31:0] dmem_1_d_bits_data,
@@ -76,7 +76,7 @@ module Vortex import VX_gpu_pkg::*; #(
     output [2:0]  dmem_1_a_bits_opcode,
     // output [2:0]  dmem_1_a_bits_param,
     output [3:0]  dmem_1_a_bits_size,
-    output [DCACHE_TAG_WIDTH-1:0]  dmem_1_a_bits_source,
+    output [DCACHE_NOSM_TAG_WIDTH-1:0]  dmem_1_a_bits_source,
     output [31:0] dmem_1_a_bits_address,
     output [3:0]  dmem_1_a_bits_mask,
     output [31:0] dmem_1_a_bits_data,
@@ -88,7 +88,7 @@ module Vortex import VX_gpu_pkg::*; #(
     input  [2:0]  dmem_2_d_bits_opcode,
     // input  [1:0]  dmem_2_d_bits_param,
     input  [3:0]  dmem_2_d_bits_size,
-    input  [DCACHE_TAG_WIDTH-1:0]  dmem_2_d_bits_source,
+    input  [DCACHE_NOSM_TAG_WIDTH-1:0]  dmem_2_d_bits_source,
     // input  [2:0]  dmem_2_d_bits_sink,
     // input         dmem_2_d_bits_denied,
     input  [31:0] dmem_2_d_bits_data,
@@ -97,7 +97,7 @@ module Vortex import VX_gpu_pkg::*; #(
     output [2:0]  dmem_2_a_bits_opcode,
     // output [2:0]  dmem_2_a_bits_param,
     output [3:0]  dmem_2_a_bits_size,
-    output [DCACHE_TAG_WIDTH-1:0]  dmem_2_a_bits_source,
+    output [DCACHE_NOSM_TAG_WIDTH-1:0]  dmem_2_a_bits_source,
     output [31:0] dmem_2_a_bits_address,
     output [3:0]  dmem_2_a_bits_mask,
     output [31:0] dmem_2_a_bits_data,
@@ -109,7 +109,7 @@ module Vortex import VX_gpu_pkg::*; #(
     input  [2:0]  dmem_3_d_bits_opcode,
     // input  [1:0]  dmem_3_d_bits_param,
     input  [3:0]  dmem_3_d_bits_size,
-    input  [DCACHE_TAG_WIDTH-1:0]  dmem_3_d_bits_source,
+    input  [DCACHE_NOSM_TAG_WIDTH-1:0]  dmem_3_d_bits_source,
     // input  [2:0]  dmem_3_d_bits_sink,
     // input         dmem_3_d_bits_denied,
     input  [31:0] dmem_3_d_bits_data,
@@ -118,7 +118,7 @@ module Vortex import VX_gpu_pkg::*; #(
     output [2:0]  dmem_3_a_bits_opcode,
     // output [2:0]  dmem_3_a_bits_param,
     output [3:0]  dmem_3_a_bits_size,
-    output [DCACHE_TAG_WIDTH-1:0]  dmem_3_a_bits_source,
+    output [DCACHE_NOSM_TAG_WIDTH-1:0]  dmem_3_a_bits_source,
     output [31:0] dmem_3_a_bits_address,
     output [3:0]  dmem_3_a_bits_mask,
     output [31:0] dmem_3_a_bits_data,
@@ -198,9 +198,13 @@ module Vortex import VX_gpu_pkg::*; #(
         .TAG_WIDTH (ICACHE_TAG_WIDTH)
     ) icache_bus_if();
 
+    // NOTE(hansung): need to use DCACHE_NOSM_TAG_WIDTH here instead of
+    // DCACHE_TAG_WIDTH; the latter is only used inside the core to
+    // differentiate between requests going to the outside cache vs. going to
+    // the shared memory.
     VX_mem_bus_if #(
         .DATA_SIZE (DCACHE_WORD_SIZE), 
-        .TAG_WIDTH (DCACHE_TAG_WIDTH)
+        .TAG_WIDTH (DCACHE_NOSM_TAG_WIDTH)
     ) dcache_bus_if[DCACHE_NUM_REQS]();
 
     // always @(posedge clock) begin
@@ -381,7 +385,7 @@ module Vortex import VX_gpu_pkg::*; #(
     end
     // Delay reset signal by a few cycles to make time for resetting the DCR
     // (device configuration registers).
-    assign core_reset = reset || (reset_start_counter != 4'h0) || intr_reset;
+    assign core_reset = reset || (reset_start_counter != 4'h0); // || intr_reset;
     assign dcr_reset = !reset && (reset_start_counter != 4'h0);
 
     // A small FSM that tries to set DCR "properly" in the same order as
