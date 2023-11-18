@@ -341,33 +341,27 @@ module Vortex import VX_gpu_pkg::*; #(
     assign dcache_bus_if[2].req_ready = dmem_2_a_ready;
     assign dcache_bus_if[3].req_ready = dmem_3_a_ready;
 
-    // assign {dmem_3_a_bits_corrupt, dmem_2_a_bits_corrupt, dmem_1_a_bits_corrupt, dmem_0_a_bits_corrupt} = '0;
-    // assign {dmem_3_a_bits_param, dmem_2_a_bits_param, dmem_1_a_bits_param, dmem_0_a_bits_param} = '0;
-
     /* fpu */
 
     // assign {fpu_hartid, fpu_time, fpu_inst, fpu_fromint_data, fpu_fcsr_rm, fpu_dmem_resp_val, fpu_dmem_resp_type,
     //         fpu_dmem_resp_tag, fpu_valid, fpu_killx, fpu_killm, fpu_keep_clock_enabled} = '0;
 
     assign cease = ~busy;
-    assign wfi = 1'b0;
+    assign wfi = 1'b0; // FIXME: unused
 
-    // TODO: fix this for Vortex 2.0
-
-    // always @(posedge clock) begin
-    //     for (integer i = 0; i < 4; i++) begin
-    //         if (dcache_req_if.valid[i] && dcache_req_if.ready[i] && dcache_req_if.rw[i]) begin
-    //             if ({dcache_req_if.addr[i], 2'b0}[31:28] == 4'hc) begin // heap address
-    //                 $display("[%d] STORE HEAP MEM: CORE=%d, THREAD=%d, ADDRESS=0x%X, DATA=0x%08X",
-    //                   $time(), CORE_ID, i, {dcache_req_if.addr[i], 2'b0}, dcache_req_if.data[i]);
-    //             end
-    //         end
-    //         // if (dcache_rsp_if.valid[i] && dcache_rsp_if.ready) begin
-    //         //     $display("[%d] LOAD HEAP MEM: CORE=%d, THREAD=%d, DATA=0x%08X",
-    //         //       $time(), CORE_ID, i, dcache_rsp_if.data);
-    //         // end
-    //     end
-    // end
+    genvar i;
+    generate for (i = 0; i < 4; i++) begin
+        always @(posedge clock) begin
+            if (dcache_bus_if[i].req_valid && dcache_bus_if[i].req_ready && dcache_bus_if[i].req_data.rw) begin
+                // anything that starts with 0xC is heap address
+                if ({dcache_bus_if[i].req_data.addr, 2'b0}[31:28] == 4'hc) begin
+                    $display("[%d] STORE HEAP MEM: CORE=%d, THREAD=%d, ADDRESS=0x%X, DATA=0x%08X",
+                             $time(), CORE_ID, i, {dcache_bus_if[i].req_data.addr, 2'b0}, dcache_bus_if[i].req_data.data);
+                end
+            end
+        end
+    end
+    endgenerate
 
     logic sim_ebreak;
     logic [`NUM_REGS-1:0][`XLEN-1:0] sim_wb_value;
@@ -554,7 +548,7 @@ module Vortex import VX_gpu_pkg::*; #(
 
     always @(*) begin
         if (busy === 1'b0) begin
-            $display("no more active warps");
+            $display("---------------- no more active warps ----------------");
 
             @(negedge clock);
 
