@@ -270,10 +270,14 @@ module Vortex import VX_gpu_pkg::*; #(
 
     // When there's a write ACK coming back, ready bit should always be 1 to
     // accept them because core does not accept them on their own
-    assign dmem_0_d_ready = dcache_bus_if[0].rsp_ready || (dmem_0_d_bits_opcode == 3'd0 /*AccessAck*/);
-    assign dmem_1_d_ready = dcache_bus_if[1].rsp_ready || (dmem_1_d_bits_opcode == 3'd0 /*AccessAck*/);
-    assign dmem_2_d_ready = dcache_bus_if[2].rsp_ready || (dmem_2_d_bits_opcode == 3'd0 /*AccessAck*/);
-    assign dmem_3_d_ready = dcache_bus_if[3].rsp_ready || (dmem_3_d_bits_opcode == 3'd0 /*AccessAck*/);
+    assign dmem_0_d_ready = dcache_bus_if[0].rsp_ready ||
+                            (dmem_0_d_valid && (dmem_0_d_bits_opcode == 3'd0 /*AccessAck*/));
+    assign dmem_1_d_ready = dcache_bus_if[1].rsp_ready ||
+                            (dmem_1_d_valid && (dmem_1_d_bits_opcode == 3'd0 /*AccessAck*/));
+    assign dmem_2_d_ready = dcache_bus_if[2].rsp_ready ||
+                            (dmem_2_d_valid && (dmem_2_d_bits_opcode == 3'd0 /*AccessAck*/));
+    assign dmem_3_d_ready = dcache_bus_if[3].rsp_ready ||
+                            (dmem_3_d_valid && (dmem_3_d_bits_opcode == 3'd0 /*AccessAck*/));
 
     assign dmem_0_a_valid = dcache_bus_if[0].req_valid;
     assign dmem_1_a_valid = dcache_bus_if[1].req_valid;
