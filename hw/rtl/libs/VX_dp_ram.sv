@@ -305,7 +305,7 @@ module VX_dp_ram #(
             `UNUSED_VAR (prev_waddr)
             assign rdata = ram[raddr];
         end else begin
-            assign rdata = (prev_write && (prev_waddr == raddr)) ? prev_data : ram[raddr];
+            assign rdata = (prev_write && (prev_waddr === raddr)) ? prev_data : ram[raddr];
         end
     end
 `endif
