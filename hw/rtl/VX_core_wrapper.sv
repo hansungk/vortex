@@ -310,19 +310,19 @@ module Vortex import VX_gpu_pkg::*; #(
     // Translate Vortex rw/byteen to TileLink opcode
     assign dmem_0_a_bits_opcode = 
         dcache_bus_if[0].req_data.rw ?
-        (&dcache_bus_if[0].req_data.byteen ? 3'd0 /*PutFull*/ : 3'd0 /*FIXME: PutPartial but spoofed to PutFull*/)
+        (&dcache_bus_if[0].req_data.byteen ? 3'd0 /*PutFull*/ : 3'd1 /*PutPartial*/)
         : 3'd4 /*Get*/;
     assign dmem_1_a_bits_opcode = 
         dcache_bus_if[1].req_data.rw ?
-        (&dcache_bus_if[1].req_data.byteen ? 3'd0 /*PutFull*/ : 3'd0 /*FIXME: PutPartial but spoofed to PutFull*/)
+        (&dcache_bus_if[1].req_data.byteen ? 3'd0 /*PutFull*/ : 3'd1 /*PutPartial*/)
         : 3'd4 /*Get*/;
     assign dmem_2_a_bits_opcode = 
         dcache_bus_if[2].req_data.rw ?
-        (&dcache_bus_if[2].req_data.byteen ? 3'd0 /*PutFull*/ : 3'd0 /*FIXME: PutPartial but spoofed to PutFull*/)
+        (&dcache_bus_if[2].req_data.byteen ? 3'd0 /*PutFull*/ : 3'd1 /*PutPartial*/)
         : 3'd4 /*Get*/;
     assign dmem_3_a_bits_opcode = 
         dcache_bus_if[3].req_data.rw ?
-        (&dcache_bus_if[3].req_data.byteen ? 3'd0 /*PutFull*/ : 3'd0 /*FIXME: PutPartial but spoofed to PutFull*/)
+        (&dcache_bus_if[3].req_data.byteen ? 3'd0 /*PutFull*/ : 3'd1 /*PutPartial*/)
         : 3'd4 /*Get*/;
 
     // Vortex cache requests are single-fixed-size
