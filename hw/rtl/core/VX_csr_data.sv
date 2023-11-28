@@ -163,8 +163,10 @@ import VX_fpu_pkg::*;
             `VX_CSR_NUM_CORES  : read_data_ro_r = 32'(`NUM_CORES * `NUM_CLUSTERS);           
             `VX_CSR_MCYCLE     : read_data_ro_r = 32'(cycles[31:0]);
             `VX_CSR_MCYCLE_H   : read_data_ro_r = 32'(cycles[`PERF_CTR_BITS-1:32]);
-            `VX_CSR_MPM_RESERVED : read_data_ro_r = 'x;
-            `VX_CSR_MPM_RESERVED_H : read_data_ro_r = 'x;  
+            // NOTE(hansung): setting to 'x makes verification with simx hard;
+            // set to '0 instead
+            `VX_CSR_MPM_RESERVED : read_data_ro_r = 32'h0;
+            `VX_CSR_MPM_RESERVED_H : read_data_ro_r = 32'h0;
             `VX_CSR_MINSTRET   : read_data_ro_r = 32'(commit_csr_if.instret[31:0]);
             `VX_CSR_MINSTRET_H : read_data_ro_r = 32'(commit_csr_if.instret[`PERF_CTR_BITS-1:32]);       
             
