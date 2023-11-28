@@ -15,6 +15,7 @@
 `define VX_CACHE_DEFINE_VH
 
 `include "VX_define.vh"   
+`include "VX_gpu_pkg.sv"
 
 `define CS_REQ_SEL_BITS         `CLOG2(NUM_REQS)
 
