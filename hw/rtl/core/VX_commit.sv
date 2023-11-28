@@ -195,7 +195,7 @@ module VX_commit import VX_gpu_pkg::*; #(
     end
     assign sim_wb_value = sim_wb_value_r;
     
-`ifdef DBG_TRACE_CORE_PIPELINE
+`ifdef DBG_TRACE_CORE_PIPELINE_VCS
     for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin
         always @(posedge clk) begin
             if (alu_commit_if[i].valid && alu_commit_if[i].ready) begin

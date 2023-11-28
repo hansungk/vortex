@@ -536,7 +536,7 @@ module VX_decode  #(
     
     assign fetch_if.ibuf_pop = decode_if.ibuf_pop;
 
-`ifdef DBG_TRACE_CORE_PIPELINE
+`ifdef DBG_TRACE_CORE_PIPELINE_VCS
     always @(posedge clk) begin
         if (decode_if.valid && decode_if.ready) begin
             `TRACE(1, ("%d: core%0d-decode: wid=%0d, PC=0x%0h, instr=0x%0h, ex=", $time, CORE_ID, decode_if.data.wid, decode_if.data.PC, instr));
