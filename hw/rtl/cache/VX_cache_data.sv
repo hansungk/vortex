@@ -93,7 +93,12 @@ module VX_cache_data #(
         assign wren  = fill;
     end
     
-    wire [`CLOG2(NUM_WAYS)-1:0] way_idx;
+    generate if (NUM_WAYS == 1) begin
+      wire [0:0] way_idx;
+    end else begin
+      wire [`CLOG2(NUM_WAYS)-1:0] way_idx;
+    end
+    endgenerate
 
     VX_onehot_encoder #(
         .N (NUM_WAYS)
