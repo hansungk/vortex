@@ -59,7 +59,7 @@
 // `define STARTUP_ADDR 32'h80000000
 // 0x10100 is the address of _hang100 section in bootrom.
 // see testchipip linker.ld
-`define STARTUP_ADDR 32'h10100
+`define STARTUP_ADDR 32'h10040
 `endif
 
 `ifndef IO_BASE_ADDR
