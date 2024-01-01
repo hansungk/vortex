@@ -200,12 +200,16 @@ module Vortex import VX_gpu_pkg::*; #(
 
     // NOTE(hansung): need to use DCACHE_NOSM_TAG_WIDTH here instead of
     // DCACHE_TAG_WIDTH; the latter is only used inside the core to
-    // differentiate between requests going to the outside cache vs. going to
-    // the shared memory.
+    // differentiate between requests going to the cache vs. sharedmem.
     VX_mem_bus_if #(
         .DATA_SIZE (DCACHE_WORD_SIZE), 
         .TAG_WIDTH (DCACHE_NOSM_TAG_WIDTH)
     ) dcache_bus_if[DCACHE_NUM_REQS]();
+
+    VX_mem_bus_if #(
+        .DATA_SIZE (DCACHE_WORD_SIZE), 
+        .TAG_WIDTH (DCACHE_NOSM_TAG_WIDTH)
+    ) smem_bus_if[DCACHE_NUM_REQS]();
 
     // always @(posedge clock) begin
     //   `ASSERT(DCACHE_NUM_REQS == NUM_THREADS, "DCACHE_NUM_REQS doesn't match NUM_THREADS");
@@ -345,6 +349,17 @@ module Vortex import VX_gpu_pkg::*; #(
     assign dcache_bus_if[2].req_ready = dmem_2_a_ready;
     assign dcache_bus_if[3].req_ready = dmem_3_a_ready;
 
+    /* smem */
+
+    assign smem_bus_if[0].req_ready = 1'd1;
+    assign smem_bus_if[1].req_ready = 1'd1;
+    assign smem_bus_if[2].req_ready = 1'd1;
+    assign smem_bus_if[3].req_ready = 1'd1;
+    assign smem_bus_if[0].rsp_valid = 1'd0;
+    assign smem_bus_if[1].rsp_valid = 1'd0;
+    assign smem_bus_if[2].rsp_valid = 1'd0;
+    assign smem_bus_if[3].rsp_valid = 1'd0;
+
     /* fpu */
 
     // assign {fpu_hartid, fpu_time, fpu_inst, fpu_fromint_data, fpu_fcsr_rm, fpu_dmem_resp_val, fpu_dmem_resp_type,
@@ -468,6 +483,8 @@ module Vortex import VX_gpu_pkg::*; #(
     `endif
         
         .dcr_bus_if     (dcr_bus_if),
+
+        .smem_bus_if    (smem_bus_if),
 
         .dcache_bus_if  (dcache_bus_if),
 

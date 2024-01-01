@@ -24,7 +24,8 @@ module VX_smem_unit import VX_gpu_pkg::*; #(
 `endif
 
     VX_mem_bus_if.slave     dcache_bus_in_if [DCACHE_NUM_REQS],
-    VX_mem_bus_if.master    dcache_bus_out_if [DCACHE_NUM_REQS]
+    VX_mem_bus_if.master    dcache_bus_out_if [DCACHE_NUM_REQS],
+    VX_mem_bus_if.master    smem_bus_out_if [DCACHE_NUM_REQS]
 );
     `UNUSED_PARAM (CORE_ID)
 
@@ -85,17 +86,24 @@ module VX_smem_unit import VX_gpu_pkg::*; #(
     `RESET_RELAY (switch_reset, reset);
 
     for (genvar i = 0; i < DCACHE_NUM_REQS; ++i) begin
+        assign smem_bus_out_if[i].req_valid = switch_out_bus_if[i * 2 + 1].req_valid;
+        assign smem_bus_out_if[i].req_data  = switch_out_bus_if[i * 2 + 1].req_data;
+        assign switch_out_bus_if[i * 2 + 1].req_ready = smem_bus_out_if[i].req_ready;
+
+        assign switch_out_bus_if[i * 2 + 1].rsp_valid = smem_bus_out_if[i].rsp_valid;
+        assign switch_out_bus_if[i * 2 + 1].rsp_data  = smem_bus_out_if[i].rsp_data;
+        assign smem_bus_out_if[i].rsp_ready = switch_out_bus_if[i * 2 + 1].rsp_ready;
 
         assign smem_req_valid[i] = switch_out_bus_if[i * 2 + 1].req_valid;
         assign smem_req_rw[i] = switch_out_bus_if[i * 2 + 1].req_data.rw;
         assign smem_req_byteen[i] = switch_out_bus_if[i * 2 + 1].req_data.byteen;
         assign smem_req_data[i] = switch_out_bus_if[i * 2 + 1].req_data.data;
         assign smem_req_tag[i] = switch_out_bus_if[i * 2 + 1].req_data.tag;
-        assign switch_out_bus_if[i * 2 + 1].req_ready = smem_req_ready[i];
+        // assign switch_out_bus_if[i * 2 + 1].req_ready = smem_req_ready[i];
 
-        assign switch_out_bus_if[i * 2 + 1].rsp_valid = smem_rsp_valid[i];
-        assign switch_out_bus_if[i * 2 + 1].rsp_data.data = smem_rsp_data[i];
-        assign switch_out_bus_if[i * 2 + 1].rsp_data.tag = smem_rsp_tag[i];
+        // assign switch_out_bus_if[i * 2 + 1].rsp_valid = smem_rsp_valid[i];
+        // assign switch_out_bus_if[i * 2 + 1].rsp_data.data = smem_rsp_data[i];
+        // assign switch_out_bus_if[i * 2 + 1].rsp_data.tag = smem_rsp_tag[i];
         assign smem_rsp_ready[i] = switch_out_bus_if[i * 2 + 1].rsp_ready;
 
         assign smem_req_addr[i] = switch_out_bus_if[i * 2 + 1].req_data.addr[SMEM_ADDR_WIDTH-1:0];

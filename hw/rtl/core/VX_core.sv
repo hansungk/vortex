@@ -32,6 +32,8 @@ module VX_core import VX_gpu_pkg::*; #(
 
     VX_dcr_bus_if.slave     dcr_bus_if,
 
+    VX_mem_bus_if.master    smem_bus_if [DCACHE_NUM_REQS],
+
     VX_mem_bus_if.master    dcache_bus_if [DCACHE_NUM_REQS],
 
     VX_mem_bus_if.master    icache_bus_if,
@@ -249,7 +251,8 @@ module VX_core import VX_gpu_pkg::*; #(
         .cache_perf         (smem_perf),
     `endif
         .dcache_bus_in_if   (dcache_bus_tmp_if),
-        .dcache_bus_out_if  (dcache_bus_if)
+        .dcache_bus_out_if  (dcache_bus_if),
+        .smem_bus_out_if    (smem_bus_if)
     );
 
 `else
