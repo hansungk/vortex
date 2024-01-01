@@ -85,8 +85,10 @@ module VX_smem_unit import VX_gpu_pkg::*; #(
 
     `RESET_RELAY (switch_reset, reset);
 
+    localparam USE_EXTERNAL_SMEM = 1'b1;
+
     for (genvar i = 0; i < DCACHE_NUM_REQS; ++i) begin
-      if (1'b1) begin
+      if (USE_EXTERNAL_SMEM) begin
         assign smem_req_valid[i] = 1'b0;
         assign smem_rsp_ready[i] = 1'b0;
 
