@@ -52,6 +52,27 @@ static int read_kernel_file(const char* filename, uint8_t** data, size_t* size) 
   return 0;
 }
 
+static int write_operand_file(const char* filename, void* data, size_t size) {
+  if (nullptr == filename || nullptr == data || 0 == size)
+    return -1;
+
+  FILE* fp = fopen(filename, "wb");
+  if (NULL == fp) {
+    fprintf(stderr, "Failed to write operand data.\n");
+    return -1;
+  }
+
+  size_t wsize = fwrite(data, size, 1, fp);
+  if (wsize != 1) {
+    fprintf(stderr, "Failed to write operand data.\n");
+    return -1;
+  }
+
+  fclose(fp);
+
+  return 0;
+}
+
 static bool almost_equal(float a, float b, int ulp = 4) {
   union fi_t { int i; float f; };
   fi_t fa, fb;
@@ -169,6 +190,10 @@ int main (int argc, char **argv) {
     h_dst[i] = 0xdeadbeef;
     //printf("*** [%d]: h_src=%f, h_dst=%f\n", i, h_src[i], h_dst[i]);
   }
+
+  // NOTE(hansung): Dump operand buffer to a file
+  if (write_operand_file("sharedmem.input.src.bin", h_src, nbytes) != 0)
+    return EXIT_FAILURE;
 
   // Creating command queue
   commandQueue = CL_CHECK2(clCreateCommandQueue(context, device_id, 0, &_err));  
