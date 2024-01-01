@@ -6,7 +6,7 @@ __kernel void sharedmem (__global volatile const float *src,
   smem[gid] = src[gid];
   float read;
   __attribute__((opencl_unroll_hint))
-  for (int i = 0; i < 500; i++) {
+  for (int i = 0; i < 5000; i++) {
 	  read = smem[gid];
   }
   dst[gid] = read;
