@@ -249,12 +249,12 @@
 
 // Size of Instruction Buffer
 `ifndef IBUF_SIZE
-`define IBUF_SIZE   (2 * (`NUM_WARPS / `ISSUE_WIDTH))
+`define IBUF_SIZE   (8 * (`NUM_WARPS / `ISSUE_WIDTH))
 `endif
 
 // Size of LSU Request Queue
 `ifndef LSUQ_SIZE
-`define LSUQ_SIZE   (2 * (`NUM_THREADS / `NUM_LSU_LANES))
+`define LSUQ_SIZE   (8 * (`NUM_THREADS / `NUM_LSU_LANES))
 `endif
 
 // LSU Duplicate Address Check
