@@ -113,7 +113,7 @@ module Vortex import VX_gpu_pkg::*; #(
     // output        fpu_killm,
     // output        fpu_keep_clock_enabled,
 
-    output        cease,
+    output        finished,
 
     input         traceStall,
     output        wfi
@@ -122,20 +122,38 @@ module Vortex import VX_gpu_pkg::*; #(
     logic [3:0] intr_counter;
     logic msip_1d, intr_reset;
     logic busy;
+    reg busy_prev;
+    reg finished_reg;
 
     assign intr_reset = |intr_counter;
-    /* interrupts */
+    /* busy and interrupts */
     always @(posedge clock) begin
-        msip_1d <= interrupts_msip;
-        if (reset) begin
-            intr_counter <= 4'h0;
-        end else if (~msip_1d && interrupts_msip) begin
-            // rising edge
-            intr_counter <= 4'h6;
-        end else begin
-            intr_counter <= intr_counter > 0 ? intr_counter - 4'h1 : 4'h0;
+      msip_1d <= interrupts_msip;
+      if (reset) begin
+        busy_prev <= 1'b0;
+        finished_reg <= 1'b0;
+        intr_counter <= 4'h0;
+      end else begin
+        // Vortex core's busy signal goes up some cycles after the reset,
+        // so we can't simply use ~busy as finished because of the initial
+        // ephemeral state.  Instead detect the *negedge* of the busy
+        // signal and use that to indicate finish.
+        busy_prev <= busy;
+        if (busy_prev && !busy) begin
+          finished_reg <= 1'b1;
         end
+
+        if (~msip_1d && interrupts_msip) begin
+          // rising edge
+          intr_counter <= 4'h6;
+        end else begin
+          intr_counter <= intr_counter > 0 ? intr_counter - 4'h1 : 4'h0;
+        end
+      end
     end
+
+    assign finished = finished_reg;
+    assign wfi = 1'b0; // FIXME: unused
 
     // ------------------------------------------------------------------------
     // TL <-> Vortex core-cache interface adapter
@@ -386,9 +404,6 @@ module Vortex import VX_gpu_pkg::*; #(
 
     // assign {fpu_hartid, fpu_time, fpu_inst, fpu_fromint_data, fpu_fcsr_rm, fpu_dmem_resp_val, fpu_dmem_resp_type,
     //         fpu_dmem_resp_tag, fpu_valid, fpu_killx, fpu_killm, fpu_keep_clock_enabled} = '0;
-
-    assign cease = ~busy;
-    assign wfi = 1'b0; // FIXME: unused
 
     genvar i;
     generate for (i = 0; i < 4; i++) begin
