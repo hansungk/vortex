@@ -50,6 +50,7 @@
 `define TRACE(level, args) $write args
 `else
 `ifdef VERILATOR
+`define SIMULATION
 `define TRACING_ON      /* verilator tracing_on */
 `define TRACING_OFF     /* verilator tracing_off */
 `ifndef NDEBUG
