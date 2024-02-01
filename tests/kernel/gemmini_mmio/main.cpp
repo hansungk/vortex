@@ -24,7 +24,7 @@
 //   gemmini_extended_mvout_spad(dst_addr, 1, src_addr, cols, rows)
 
 int main() {
-  volatile uint64_t *bogus = (uint64_t *)0x00001000;
+  volatile uint32_t *bogus = (uint32_t *)0xff001ff0;
 
   gemmini_config_ld(0);
   gemmini_config_st(0);
