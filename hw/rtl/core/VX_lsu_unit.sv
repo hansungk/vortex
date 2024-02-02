@@ -160,7 +160,7 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
                    && (~mem_req_rw || st_rsp_ready); // writes commit directly
 
     for (genvar i = 0; i < NUM_LANES; ++i) begin
-        assign mem_req_mask[i] = execute_if[0].data.tmask[i] && (~lsu_is_dup || (i == 0));
+        assign mem_req_mask[i] = is_fence ? 1'b0 : (execute_if[0].data.tmask[i] && (~lsu_is_dup || (i == 0)));
     end
 
     assign mem_req_rw = ~execute_if[0].data.wb;    
