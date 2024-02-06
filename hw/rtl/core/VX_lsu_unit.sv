@@ -519,7 +519,7 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
     ) ld_rsp_buf (
         .clk       (clk),
         .reset     (reset),
-        .valid_in  (mem_rsp_valid),
+        .valid_in  (mem_rsp_valid && !mem_rsp_rw),
         .ready_in  (mem_rsp_ready),
         .data_in   ({rsp_uuid, rsp_wid, rsp_tmask, rsp_pc, rsp_rd, rsp_data, rsp_pid, mem_rsp_sop_pkt, mem_rsp_eop_pkt}),
         .data_out  ({commit_ld_if.data.uuid, commit_ld_if.data.wid, commit_ld_if.data.tmask, commit_ld_if.data.PC, commit_ld_if.data.rd, commit_ld_if.data.data, commit_ld_if.data.pid, commit_ld_if.data.sop, commit_ld_if.data.eop}),

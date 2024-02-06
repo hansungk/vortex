@@ -63,21 +63,19 @@ input wire                              clk,
         );
 
         reg [NUM_REQS-1:0] rsp_valid_sel;
-        reg                rsp_rw_sel;
         reg [NUM_REQS-1:0] rsp_ready_sel;
         wire rsp_ready_unqual;
 
         wire [TAG_WIDTH-1:0] rsp_tag_sel = rsp_tag_in[grant_index];
+        wire                 rsp_rw_sel = rsp_rw_in[grant_index];
         
         always @(*) begin                
             rsp_valid_sel = '0;              
-            rsp_rw_sel = '0;              
             rsp_ready_sel = '0;
-            
+
             for (integer i = 0; i < NUM_REQS; ++i) begin
                 if (rsp_tag_in[i][TAG_SEL_BITS-1:0] == rsp_tag_sel[TAG_SEL_BITS-1:0]) begin
                     rsp_valid_sel[i] = rsp_valid_in[i];                    
-                    rsp_rw_sel = rsp_rw_in[i];
                     rsp_ready_sel[i] = rsp_ready_unqual;
                 end
             end

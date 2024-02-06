@@ -34,7 +34,7 @@ module VX_smem_switch #(
     localparam LOG_NUM_REQS  = `CLOG2(NUM_REQS);
     localparam TAG_OUT_WIDTH = TAG_WIDTH - LOG_NUM_REQS;
     localparam REQ_DATAW     = TAG_OUT_WIDTH + ADDR_WIDTH + 1 + DATA_SIZE + DATA_WIDTH;
-    localparam RSP_DATAW     = TAG_OUT_WIDTH + DATA_WIDTH;
+    localparam RSP_DATAW     = TAG_OUT_WIDTH + DATA_WIDTH + 1;
 
     wire [NUM_REQS-1:0]                req_valid_out;
     wire [NUM_REQS-1:0][REQ_DATAW-1:0] req_data_out;
@@ -94,7 +94,7 @@ module VX_smem_switch #(
     
     for (genvar i = 0; i < NUM_REQS; ++i) begin
         assign rsp_valid_out[i] = bus_out_if[i].rsp_valid;
-        assign rsp_data_out[i] = {bus_out_if[i].rsp_data.tag, bus_out_if[i].rsp_data.data};
+        assign rsp_data_out[i] = {bus_out_if[i].rsp_data.tag, bus_out_if[i].rsp_data.data, bus_out_if[i].rsp_data.rw};
         assign bus_out_if[i].rsp_ready = rsp_ready_out[i];
     end
 
@@ -125,6 +125,6 @@ module VX_smem_switch #(
         .data_out (bus_in_if.rsp_data.tag)
     );
 
-    assign {rsp_tag_in, bus_in_if.rsp_data.data} = rsp_data_in;
+    assign {rsp_tag_in, bus_in_if.rsp_data.data, bus_in_if.rsp_data.rw} = rsp_data_in;
 
 endmodule

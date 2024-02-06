@@ -48,6 +48,7 @@ module VX_mem_adapter #(
     output wire [DST_TAG_WIDTH-1:0]     mem_req_tag_out,
     input wire                          mem_req_ready_out,
 
+    // TODO(hansung): rsp_rw
     input wire                          mem_rsp_valid_out, 
     input wire [DST_DATA_WIDTH-1:0]     mem_rsp_data_out, 
     input wire [DST_TAG_WIDTH-1:0]      mem_rsp_tag_out,

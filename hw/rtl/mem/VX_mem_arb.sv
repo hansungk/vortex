@@ -90,6 +90,7 @@ module VX_mem_arb #(
     ///////////////////////////////////////////////////////////////////////////
 
     wire [NUM_INPUTS-1:0]                 rsp_valid_out;
+    // TODO(hansung): rsp_rw
     wire [NUM_INPUTS-1:0][RSP_DATAW-1:0]  rsp_data_out;
     wire [NUM_INPUTS-1:0]                 rsp_ready_out;
 

@@ -39,6 +39,7 @@ module VX_smem_unit import VX_gpu_pkg::*; #(
     wire [DCACHE_NUM_REQS-1:0][DCACHE_NOSM_TAG_WIDTH-1:0] smem_req_tag;
     wire [DCACHE_NUM_REQS-1:0]                  smem_req_ready;
     wire [DCACHE_NUM_REQS-1:0]                  smem_rsp_valid;
+    wire [DCACHE_NUM_REQS-1:0]                  smem_rsp_rw;
     wire [DCACHE_NUM_REQS-1:0][DCACHE_WORD_SIZE*8-1:0] smem_rsp_data;
     wire [DCACHE_NUM_REQS-1:0][DCACHE_NOSM_TAG_WIDTH-1:0] smem_rsp_tag;
     wire [DCACHE_NUM_REQS-1:0]                  smem_rsp_ready;
@@ -73,6 +74,7 @@ module VX_smem_unit import VX_gpu_pkg::*; #(
 
         // Core response
         .rsp_valid  (smem_rsp_valid),
+        // TODO(hansung): rsp_rw not yet supported by internal smem
         .rsp_data   (smem_rsp_data),
         .rsp_tag    (smem_rsp_tag),
         .rsp_ready  (smem_rsp_ready)

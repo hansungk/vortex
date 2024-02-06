@@ -181,7 +181,8 @@ module VX_mem_scheduler #(
 
     wire rsp_complete;
 
-    assign ibuf_push  = reqq_push && ~req_rw;
+    // assign ibuf_push  = reqq_push && ~req_rw;
+    assign ibuf_push  = reqq_push;
     assign ibuf_pop   = crsp_valid && crsp_ready && rsp_complete;
     assign ibuf_raddr = mem_rsp_tag_s[0 +: QUEUE_ADDRW];
     assign ibuf_din   = req_tag[TAG_ONLY_WIDTH-1:0];
@@ -203,6 +204,14 @@ module VX_mem_scheduler #(
     );
 
     `UNUSED_VAR (ibuf_empty)
+
+    always @(posedge clk) begin
+      if (!reset) begin
+        if (ibuf_full) begin
+          $display("%d: ibuf_full: %d, ibuf_empty: %d", $time, ibuf_full, ibuf_empty);
+        end
+      end
+    end
 
     // Handle memory requests /////////////////////////////////////////////////
 
@@ -557,8 +566,7 @@ module VX_mem_scheduler #(
         end
         if (rsp_valid && rsp_ready) begin
           if (rsp_rw) begin
-            `TRACE(1, ("%d: %s-rsp-wr: valid=%b, sop=%b, eop=%b, data=", $time, INSTANCE_ID, rsp_mask, rsp_sop, rsp_eop));
-            `TRACE_ARRAY1D(1, rsp_data, NUM_REQS);
+            `TRACE(1, ("%d: %s-rsp-wr: valid=%b, sop=%b, eop=%b", $time, INSTANCE_ID, rsp_mask, rsp_sop, rsp_eop));
             `TRACE(1, (", tag=0x%0h (#%0d)\n", rsp_tag, rsp_dbg_uuid));
           end else begin
             `TRACE(1, ("%d: %s-rsp-rd: valid=%b, sop=%b, eop=%b, data=", $time, INSTANCE_ID, rsp_mask, rsp_sop, rsp_eop));
@@ -581,9 +589,14 @@ module VX_mem_scheduler #(
             `TRACE(1, (", ibuf_idx=%0d, batch_idx=%0d (#%0d)\n", ibuf_waddr, req_batch_idx, mem_req_dbg_uuid));
         end 
         if (mem_rsp_fire_s) begin
-            `TRACE(1, ("%d: %s-mem-rsp: valid=%b, rw=%b, data=", $time, INSTANCE_ID, mem_rsp_mask_s, mem_rsp_rw_s));                
+          if (mem_rsp_rw_s) begin
+            `TRACE(1, ("%d: %s-mem-rsp-wr: valid=%b", $time, INSTANCE_ID, mem_rsp_mask_s));
+            `TRACE(1, (", ibuf_idx=%0d, batch_idx=%0d (#%0d)\n", ibuf_raddr, rsp_batch_idx, mem_rsp_dbg_uuid));
+          end else begin
+            `TRACE(1, ("%d: %s-mem-rsp-rd: valid=%b, data=", $time, INSTANCE_ID, mem_rsp_mask_s));
             `TRACE_ARRAY1D(1, mem_rsp_data_s, NUM_BANKS);
             `TRACE(1, (", ibuf_idx=%0d, batch_idx=%0d (#%0d)\n", ibuf_raddr, rsp_batch_idx, mem_rsp_dbg_uuid));
+          end
         end
     end
 `endif
