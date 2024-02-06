@@ -148,6 +148,7 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
     wire                            mem_req_ready;
 
     wire                            mem_rsp_valid;
+    wire                            mem_rsp_rw;  
     wire [NUM_LANES-1:0]            mem_rsp_mask;
     wire [NUM_LANES-1:0][`XLEN-1:0] mem_rsp_data;
     wire [TAG_WIDTH-1:0]            mem_rsp_tag;
@@ -317,6 +318,7 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
     wire [DCACHE_NUM_REQS-1:0][CACHE_TAG_WIDTH-1:0] cache_req_tag;
     wire [DCACHE_NUM_REQS-1:0]              cache_req_ready;
     wire [DCACHE_NUM_REQS-1:0]              cache_rsp_valid;
+    wire [DCACHE_NUM_REQS-1:0]              cache_rsp_rw;
     wire [DCACHE_NUM_REQS-1:0][`XLEN-1:0] cache_rsp_data;
     wire [DCACHE_NUM_REQS-1:0][CACHE_TAG_WIDTH-1:0] cache_rsp_tag;
     wire [DCACHE_NUM_REQS-1:0]              cache_rsp_ready;
@@ -353,6 +355,7 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
         
         // Output response
         .rsp_valid      (mem_rsp_valid),
+        .rsp_rw         (mem_rsp_rw),
         .rsp_mask       (mem_rsp_mask),
         .rsp_data       (mem_rsp_data),
         .rsp_tag        (mem_rsp_tag),
@@ -371,6 +374,7 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
 
         // Memory response
         .mem_rsp_valid  (cache_rsp_valid),
+        .mem_rsp_rw     (cache_rsp_rw),
         .mem_rsp_data   (cache_rsp_data),
         .mem_rsp_tag    (cache_rsp_tag),
         .mem_rsp_ready  (cache_rsp_ready)
@@ -386,6 +390,7 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
 
         assign cache_rsp_valid[i] = cache_bus_if[i].rsp_valid;
         assign cache_rsp_data[i] = cache_bus_if[i].rsp_data.data;
+        assign cache_rsp_rw[i] = cache_bus_if[i].rsp_data.rw;
         assign cache_bus_if[i].rsp_ready = cache_rsp_ready[i];
     end
 
@@ -532,7 +537,7 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
     ) st_rsp_buf (
         .clk       (clk),
         .reset     (reset),
-        .valid_in  (mem_req_fire && mem_req_rw),
+        .valid_in  (mem_req_fire && mem_req_rw), // TODO rsp rw
         .ready_in  (st_rsp_ready),
         .data_in   ({execute_if[0].data.uuid, execute_if[0].data.wid, execute_if[0].data.tmask, execute_if[0].data.PC, execute_if[0].data.pid, execute_if[0].data.sop, execute_if[0].data.eop}),
         .data_out  ({commit_st_if.data.uuid, commit_st_if.data.wid, commit_st_if.data.tmask, commit_st_if.data.PC, commit_st_if.data.pid, commit_st_if.data.sop, commit_st_if.data.eop}),
@@ -603,9 +608,9 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
         ila_lsu ila_lsu_inst (
             .clk    (clk),
             .probe0 ({mem_req_data_0, execute_if[0].data.uuid, execute_if[0].data.wid, execute_if[0].data.PC, mem_req_mask, full_addr_0, mem_req_byteen, mem_req_rw, mem_req_ready, mem_req_valid}),
-            .probe1 ({rsp_data_0, rsp_uuid, mem_rsp_eop, rsp_pc, rsp_rd, rsp_tmask, rsp_wid, mem_rsp_ready, mem_rsp_valid}),
+            .probe1 ({rsp_data_0, rsp_uuid, mem_rsp_eop, rsp_pc, rsp_rd, rsp_tmask, rsp_wid, mem_rsp_ready, mem_rsp_valid}), // TODO rsp rw
             .probe2 ({cache_bus_if.req_data.data, cache_bus_if.req_data.tag, cache_bus_if.req_data.byteen, cache_bus_if.req_data.addr, cache_bus_if.req_data.rw, cache_bus_if.req_ready, cache_bus_if.req_valid}),
-            .probe3 ({cache_bus_if.rsp_data.data, cache_bus_if.rsp_data.tag, cache_bus_if.rsp_ready, cache_bus_if.rsp_valid})
+            .probe3 ({cache_bus_if.rsp_data.data, cache_bus_if.rsp_data.tag, cache_bus_if.rsp_data.rw, cache_bus_if.rsp_ready, cache_bus_if.rsp_valid})
         );
     `endif
     end

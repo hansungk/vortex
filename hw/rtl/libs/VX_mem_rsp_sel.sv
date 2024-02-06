@@ -26,12 +26,14 @@ input wire                              clk,
 
     // input response
     input wire [NUM_REQS-1:0]           rsp_valid_in,
+    input wire [NUM_REQS-1:0]           rsp_rw_in,
     input wire [NUM_REQS-1:0][DATA_WIDTH-1:0] rsp_data_in,
     input wire [NUM_REQS-1:0][TAG_WIDTH-1:0] rsp_tag_in,
     output wire [NUM_REQS-1:0]          rsp_ready_in,
 
     // output responses
     output wire                         rsp_valid_out,
+    output wire                         rsp_rw_out,
     output wire [NUM_REQS-1:0]          rsp_mask_out,
     output wire [NUM_REQS-1:0][DATA_WIDTH-1:0] rsp_data_out,
     output wire [TAG_WIDTH-1:0]         rsp_tag_out,
@@ -61,6 +63,7 @@ input wire                              clk,
         );
 
         reg [NUM_REQS-1:0] rsp_valid_sel;
+        reg                rsp_rw_sel;
         reg [NUM_REQS-1:0] rsp_ready_sel;
         wire rsp_ready_unqual;
 
@@ -68,11 +71,13 @@ input wire                              clk,
         
         always @(*) begin                
             rsp_valid_sel = '0;              
+            rsp_rw_sel = '0;              
             rsp_ready_sel = '0;
             
             for (integer i = 0; i < NUM_REQS; ++i) begin
                 if (rsp_tag_in[i][TAG_SEL_BITS-1:0] == rsp_tag_sel[TAG_SEL_BITS-1:0]) begin
                     rsp_valid_sel[i] = rsp_valid_in[i];                    
+                    rsp_rw_sel = rsp_rw_in[i];
                     rsp_ready_sel[i] = rsp_ready_unqual;
                 end
             end
@@ -81,17 +86,17 @@ input wire                              clk,
         assign rsp_fire = grant_valid && rsp_ready_unqual;
         
         VX_elastic_buffer #(
-            .DATAW   (NUM_REQS + TAG_WIDTH + (NUM_REQS * DATA_WIDTH)),
+            .DATAW   (NUM_REQS + TAG_WIDTH + 1 + (NUM_REQS * DATA_WIDTH)),
             .SIZE    (`OUT_REG_TO_EB_SIZE(OUT_REG)),
             .OUT_REG (`OUT_REG_TO_EB_REG(OUT_REG))
         ) out_buf (
             .clk       (clk),
             .reset     (reset),
             .valid_in  (grant_valid),        
-            .data_in   ({rsp_valid_sel, rsp_tag_sel, rsp_data_in}),
+            .data_in   ({rsp_valid_sel, rsp_tag_sel, rsp_rw_sel, rsp_data_in}),
             .ready_in  (rsp_ready_unqual),      
             .valid_out (rsp_valid_out),
-            .data_out  ({rsp_mask_out, rsp_tag_out, rsp_data_out}),
+            .data_out  ({rsp_mask_out, rsp_tag_out, rsp_rw_out, rsp_data_out}),
             .ready_out (rsp_ready_out)
         );  
 
@@ -100,6 +105,7 @@ input wire                              clk,
     end else begin
 
         assign rsp_valid_out = rsp_valid_in;
+        assign rsp_rw_out    = rsp_rw_in;
         assign rsp_mask_out  = 1'b1;
         assign rsp_tag_out   = rsp_tag_in;
         assign rsp_data_out  = rsp_data_in;

@@ -51,6 +51,7 @@ module VX_mem_scheduler #(
 
     // Output response
     output wire                             rsp_valid,
+    output wire                             rsp_rw,
     output wire [NUM_REQS-1:0]              rsp_mask,
     output wire [NUM_REQS-1:0][DATA_WIDTH-1:0] rsp_data,
     output wire [TAG_WIDTH-1:0]             rsp_tag,
@@ -69,6 +70,7 @@ module VX_mem_scheduler #(
 
     // Memory response
     input wire [NUM_BANKS-1:0]              mem_rsp_valid,
+    input wire [NUM_BANKS-1:0]              mem_rsp_rw,
     input wire [NUM_BANKS-1:0][DATA_WIDTH-1:0] mem_rsp_data,
     input wire [NUM_BANKS-1:0][MEM_TAGW-1:0] mem_rsp_tag,    
     output wire [NUM_BANKS-1:0]             mem_rsp_ready
@@ -94,6 +96,7 @@ module VX_mem_scheduler #(
     wire [NUM_BANKS-1:0]            mem_req_ready_s;
 
     wire                            mem_rsp_valid_s;
+    wire                            mem_rsp_rw_s;
     wire [NUM_BANKS-1:0]            mem_rsp_mask_s;
     wire [NUM_BANKS-1:0][DATA_WIDTH-1:0] mem_rsp_data_s;
     wire [MEM_TAGW-1:0]             mem_rsp_tag_s;
@@ -122,6 +125,7 @@ module VX_mem_scheduler #(
     wire [TAG_ONLY_WIDTH-1:0]       ibuf_dout;
 
     wire                            crsp_valid;
+    wire                            crsp_rw;
     wire [NUM_REQS-1:0]             crsp_mask;
     wire [NUM_REQS-1:0][DATA_WIDTH-1:0] crsp_data;
     wire [TAG_WIDTH-1:0]            crsp_tag;
@@ -351,10 +355,12 @@ module VX_mem_scheduler #(
         .clk           (clk),
         .reset         (reset),
         .rsp_valid_in  (mem_rsp_valid),
+        .rsp_rw_in     (mem_rsp_rw),
         .rsp_data_in   (mem_rsp_data),
         .rsp_tag_in    (mem_rsp_tag),
         .rsp_ready_in  (mem_rsp_ready),
         .rsp_valid_out (mem_rsp_valid_s),
+        .rsp_rw_out    (mem_rsp_rw_s),
         .rsp_mask_out  (mem_rsp_mask_s),
         .rsp_data_out  (mem_rsp_data_s),
         .rsp_tag_out   (mem_rsp_tag_s),
@@ -404,6 +410,7 @@ module VX_mem_scheduler #(
         assign mem_rsp_ready_s = crsp_ready;
         
         assign crsp_valid = mem_rsp_valid_s;
+        assign crsp_rw = mem_rsp_rw_s;
 
         assign crsp_mask = curr_mask;
         assign crsp_sop = rsp_sop_r[ibuf_raddr];
@@ -440,6 +447,7 @@ module VX_mem_scheduler #(
         assign mem_rsp_ready_s = crsp_ready || ~rsp_complete;      
 
         assign crsp_valid = mem_rsp_valid_s && rsp_complete;
+        assign crsp_rw = mem_rsp_rw_s;
 
         assign crsp_mask = rsp_orig_mask[ibuf_raddr];
         assign crsp_sop = 1'b1;
@@ -462,7 +470,7 @@ module VX_mem_scheduler #(
     // Send response to caller
 
     VX_elastic_buffer #(
-        .DATAW   (NUM_REQS + 1 + 1 + (NUM_REQS * DATA_WIDTH) + TAG_WIDTH),
+        .DATAW   (NUM_REQS + 1 + 1 + 1 + (NUM_REQS * DATA_WIDTH) + TAG_WIDTH),
         .SIZE    (`OUT_REG_TO_EB_SIZE(CORE_OUT_REG)),
         .OUT_REG (`OUT_REG_TO_EB_REG(CORE_OUT_REG))
     ) rsp_buf (
@@ -470,8 +478,8 @@ module VX_mem_scheduler #(
         .reset     (reset),
         .valid_in  (crsp_valid),  
         .ready_in  (crsp_ready),
-        .data_in   ({crsp_mask, crsp_sop, crsp_eop, crsp_data, crsp_tag}),
-        .data_out  ({rsp_mask,  rsp_sop,  rsp_eop,  rsp_data,  rsp_tag}),        
+        .data_in   ({crsp_mask, crsp_rw, crsp_sop, crsp_eop, crsp_data, crsp_tag}),
+        .data_out  ({rsp_mask,  rsp_rw,  rsp_sop,  rsp_eop,  rsp_data,  rsp_tag}),        
         .valid_out (rsp_valid),        
         .ready_out (rsp_ready)
     );
@@ -548,9 +556,15 @@ module VX_mem_scheduler #(
             `TRACE(1, (", tag=0x%0h (#%0d)\n", req_tag, req_dbg_uuid));           
         end
         if (rsp_valid && rsp_ready) begin
-            `TRACE(1, ("%d: %s-rsp: valid=%b, sop=%b, eop=%b, data=", $time, INSTANCE_ID, rsp_mask, rsp_sop, rsp_eop));
+          if (rsp_rw) begin
+            `TRACE(1, ("%d: %s-rsp-wr: valid=%b, sop=%b, eop=%b, data=", $time, INSTANCE_ID, rsp_mask, rsp_sop, rsp_eop));
             `TRACE_ARRAY1D(1, rsp_data, NUM_REQS);
             `TRACE(1, (", tag=0x%0h (#%0d)\n", rsp_tag, rsp_dbg_uuid));
+          end else begin
+            `TRACE(1, ("%d: %s-rsp-rd: valid=%b, sop=%b, eop=%b, data=", $time, INSTANCE_ID, rsp_mask, rsp_sop, rsp_eop));
+            `TRACE_ARRAY1D(1, rsp_data, NUM_REQS);
+            `TRACE(1, (", tag=0x%0h (#%0d)\n", rsp_tag, rsp_dbg_uuid));
+          end
         end
         if (| mem_req_fire_s) begin
             if (| mem_req_rw_s) begin
@@ -567,7 +581,7 @@ module VX_mem_scheduler #(
             `TRACE(1, (", ibuf_idx=%0d, batch_idx=%0d (#%0d)\n", ibuf_waddr, req_batch_idx, mem_req_dbg_uuid));
         end 
         if (mem_rsp_fire_s) begin
-            `TRACE(1, ("%d: %s-mem-rsp: valid=%b, data=", $time, INSTANCE_ID, mem_rsp_mask_s));                
+            `TRACE(1, ("%d: %s-mem-rsp: valid=%b, rw=%b, data=", $time, INSTANCE_ID, mem_rsp_mask_s, mem_rsp_rw_s));                
             `TRACE_ARRAY1D(1, mem_rsp_data_s, NUM_BANKS);
             `TRACE(1, (", ibuf_idx=%0d, batch_idx=%0d (#%0d)\n", ibuf_raddr, rsp_batch_idx, mem_rsp_dbg_uuid));
         end

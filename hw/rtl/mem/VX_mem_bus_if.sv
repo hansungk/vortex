@@ -29,6 +29,7 @@ interface VX_mem_bus_if #(
     } req_data_t;
 
     typedef struct packed {
+        logic                   rw;    
         logic [DATA_SIZE*8-1:0] data;
         logic [TAG_WIDTH-1:0]   tag;
     } rsp_data_t;
