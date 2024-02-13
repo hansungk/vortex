@@ -19,6 +19,10 @@ module VX_schedule import VX_gpu_pkg::*; #(
     input wire              clk,
     input wire              reset,
 
+`ifdef PERF_ENABLE
+    VX_pipeline_perf_if.schedule perf_schedule_if,
+`endif
+
     // configuration
     input base_dcrs_t       base_dcrs,
 
@@ -304,13 +308,20 @@ module VX_schedule import VX_gpu_pkg::*; #(
     localparam GNW_WIDTH = `LOG2UP(`NUM_CLUSTERS * `NUM_CORES * `NUM_WARPS);
     reg [`UUID_WIDTH-1:0] instr_uuid;
     wire [GNW_WIDTH-1:0] g_wid = (GNW_WIDTH'(CORE_ID) << `NW_BITS) + GNW_WIDTH'(schedule_wid);
+`ifdef SV_DPI
     always @(posedge clk) begin
         if (reset) begin
             instr_uuid <= `UUID_WIDTH'(dpi_uuid_gen(1, 0, 0));
         end else if (schedule_fire) begin
             instr_uuid <= `UUID_WIDTH'(dpi_uuid_gen(0, 32'(g_wid), 64'(schedule_pc)));
-        end
+        end        
     end
+`else
+    wire [GNW_WIDTH+16-1:0] w_uuid = {g_wid, 16'(schedule_pc)};
+    always @(*) begin
+        instr_uuid = `UUID_WIDTH'(w_uuid);
+    end
+`endif
 `else
     wire [`UUID_WIDTH-1:0] instr_uuid = '0;
 `endif
@@ -349,7 +360,7 @@ module VX_schedule import VX_gpu_pkg::*; #(
         .empty     (no_pending_instr)
     );
 
-    `BUFFER_BUSY (busy, (active_warps != 0 || ~no_pending_instr), 1);
+    `BUFFER_EX(busy, (active_warps != 0 || ~no_pending_instr), 1'b1, 1);
 
     // export CSRs
     assign sched_csr_if.cycles = cycles;
@@ -375,5 +386,26 @@ module VX_schedule import VX_gpu_pkg::*; #(
         end
     end
     `RUNTIME_ASSERT(timeout_ctr < `STALL_TIMEOUT, ("%t: *** core%0d-scheduler-timeout: stalled_warps=%b", $time, CORE_ID, stalled_warps));
+
+`ifdef PERF_ENABLE    
+    reg [`PERF_CTR_BITS-1:0] perf_sched_idles;
+    reg [`PERF_CTR_BITS-1:0] perf_sched_stalls;
+
+    wire schedule_idle = ~schedule_valid;
+    wire schedule_stall = schedule_if.valid && ~schedule_if.ready;
+
+    always @(posedge clk) begin
+        if (reset) begin
+            perf_sched_idles  <= '0;
+            perf_sched_stalls <= '0;            
+        end else begin
+            perf_sched_idles  <= perf_sched_idles + `PERF_CTR_BITS'(schedule_idle);
+            perf_sched_stalls <= perf_sched_stalls + `PERF_CTR_BITS'(schedule_stall);
+        end
+    end
+
+    assign perf_schedule_if.sched_idles = perf_sched_idles;
+    assign perf_schedule_if.sched_stalls = perf_sched_stalls;    
+`endif
 
 endmodule

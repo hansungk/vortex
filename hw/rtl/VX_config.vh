@@ -136,6 +136,18 @@
 `endif
 `endif
 
+`ifdef L2_ENABLE
+`define L2_LINE_SIZE `MEM_BLOCK_SIZE
+`else
+`define L2_LINE_SIZE `L1_LINE_SIZE
+`endif
+
+`ifdef L3_ENABLE
+`define L3_LINE_SIZE `MEM_BLOCK_SIZE
+`else
+`define L3_LINE_SIZE `L2_LINE_SIZE
+`endif
+
 `ifdef XLEN_64
 
 `ifndef STARTUP_ADDR
@@ -191,13 +203,21 @@
 `define STALL_TIMEOUT (100000 * (1 ** (`L2_ENABLED + `L3_ENABLED)))
 `endif
 
+`ifndef SV_DPI
+`define DPI_DISABLE
+`endif
+
 `ifndef FPU_FPNEW
 `ifndef FPU_DSP
 `ifndef FPU_DPI
-`ifdef SYNTHESIS
-`define FPU_DSP
-`else
+`ifndef SYNTHESIS
+`ifndef DPI_DISABLE
 `define FPU_DPI
+`else
+`define FPU_DSP
+`endif
+`else
+`define FPU_DSP
 `endif
 `endif
 `endif
@@ -223,18 +243,18 @@
 
 // Number of ALU units
 `ifndef NUM_ALU_LANES
-`define NUM_ALU_LANES   `UP(`NUM_THREADS / 2)
+`define NUM_ALU_LANES   `NUM_THREADS
 `endif
 `ifndef NUM_ALU_BLOCKS
-`define NUM_ALU_BLOCKS  `UP(`ISSUE_WIDTH / 1)
+`define NUM_ALU_BLOCKS  `ISSUE_WIDTH
 `endif
 
 // Number of FPU units
 `ifndef NUM_FPU_LANES
-`define NUM_FPU_LANES   `UP(`NUM_THREADS / 2)
+`define NUM_FPU_LANES   `NUM_THREADS
 `endif
 `ifndef NUM_FPU_BLOCKS
-`define NUM_FPU_BLOCKS  `UP(`ISSUE_WIDTH / 1)
+`define NUM_FPU_BLOCKS  `ISSUE_WIDTH
 `endif
 
 // Number of LSU units
@@ -258,7 +278,10 @@
 `endif
 
 // LSU Duplicate Address Check
-`ifdef LSU_DUP
+`ifndef LSU_DUP_DISABLE
+`define LSU_DUP_ENABLE
+`endif
+`ifdef LSU_DUP_ENABLE
 `define LSU_DUP_ENABLED 1
 `else
 `define LSU_DUP_ENABLED 0
@@ -285,8 +308,8 @@
 // Floating-Point Units ///////////////////////////////////////////////////////
 
 // Size of FPU Request Queue
-`ifndef FPU_REQ_QUEUE_SIZE
-`define FPU_REQ_QUEUE_SIZE (2 * (`NUM_THREADS / `NUM_FPU_LANES))
+`ifndef FPUQ_SIZE
+`define FPUQ_SIZE (2 * (`NUM_THREADS / `NUM_FPU_LANES))
 `endif
 
 // FNCP Latency
@@ -377,7 +400,7 @@
 
 // Number of Cache Units
 `ifndef NUM_ICACHES
-`define NUM_ICACHES `UP(`NUM_CORES / 4)
+`define NUM_ICACHES `UP(`SOCKET_SIZE / 4)
 `endif
 
 // Cache Size
@@ -407,7 +430,7 @@
 
 // Number of Associative Ways
 `ifndef ICACHE_NUM_WAYS
-`define ICACHE_NUM_WAYS 2
+`define ICACHE_NUM_WAYS 1
 `endif
 
 // Dcache Configurable Knobs //////////////////////////////////////////////////
@@ -426,7 +449,7 @@
 
 // Number of Cache Units
 `ifndef NUM_DCACHES
-`define NUM_DCACHES `UP(`NUM_CORES / 4)
+`define NUM_DCACHES `UP(`SOCKET_SIZE / 4)
 `endif
 
 // Cache Size
@@ -436,7 +459,7 @@
 
 // Number of Banks
 `ifndef DCACHE_NUM_BANKS
-`define DCACHE_NUM_BANKS (`NUM_LSU_LANES)
+`define DCACHE_NUM_BANKS `MIN(`NUM_LSU_LANES, 4)
 `endif
 
 // Core Response Queue Size
@@ -461,7 +484,7 @@
 
 // Number of Associative Ways
 `ifndef DCACHE_NUM_WAYS
-`define DCACHE_NUM_WAYS 2
+`define DCACHE_NUM_WAYS 1
 `endif
 
 // SM Configurable Knobs //////////////////////////////////////////////////////
@@ -520,7 +543,7 @@
 
 // Number of Associative Ways
 `ifndef L2_NUM_WAYS
-`define L2_NUM_WAYS 4
+`define L2_NUM_WAYS 2
 `endif
 
 // L3cache Configurable Knobs /////////////////////////////////////////////////
