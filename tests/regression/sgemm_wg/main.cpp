@@ -1,4 +1,5 @@
 #include <iostream>
+#include <fstream>
 #include <unistd.h>
 #include <string.h>
 #include <vortex.h>
@@ -66,15 +67,15 @@ void gen_input_data(uint32_t len) {
   src_data.resize(len);
 
   for (uint32_t i = 0; i < len; ++i) {
-    src_data[i] = (float)i;
+    src_data[i] = static_cast<float>(i);
     std::cout << i << ": value=" << src_data[i] << std::endl;
   }  
 }
 
-void gen_ref_data(uint32_t num_points) {
-  ref_data.resize(num_points);
+void gen_ref_data(uint32_t len) {
+  ref_data.resize(len);
 
-  for (uint32_t i = 0; i < num_points; ++i) {
+  for (uint32_t i = 0; i < len; ++i) {
     float ref_value = 2 * src_data.at(i);
     ref_data.at(i) = ref_value;
   }
@@ -141,8 +142,8 @@ int main(int argc, char *argv[]) {
   // generate reference data
   gen_ref_data(num_points);
 
-  uint32_t src_buf_size = src_data.size() * sizeof(int32_t);  
-  uint32_t dst_buf_size = ref_data.size() * sizeof(int32_t);
+  uint32_t src_buf_size = src_data.size() * sizeof(src_data[0]);  
+  uint32_t dst_buf_size = ref_data.size() * sizeof(src_data[0]);
 
   std::cout << "number of points: " << num_points << std::endl;
   std::cout << "buffer size: " << dst_buf_size << " bytes" << std::endl;
@@ -176,6 +177,18 @@ int main(int argc, char *argv[]) {
     auto buf_ptr = staging_buf.data();
     memcpy(buf_ptr, &kernel_arg, sizeof(kernel_arg_t));
     RT_CHECK(vx_copy_to_dev(device, KERNEL_ARG_DEV_MEM_ADDR, staging_buf.data(), sizeof(kernel_arg_t)));
+
+    std::cout << "uploading argument buffer to device, device mem address="
+              << std::hex << KERNEL_ARG_DEV_MEM_ADDR << ", size=" << std::dec
+              << sizeof(kernel_arg_t) << " bytes\n";
+    std::ofstream file("args.bin", std::ios::binary | std::ios::out);
+    if (!file) {
+        std::cerr << "error: failed to open args.bin for writing\n";
+        exit(EXIT_FAILURE);
+    }
+    file.write(reinterpret_cast<char *>(staging_buf.data()),
+               sizeof(kernel_arg_t));
+    file.close();
   }
 
   // upload source buffer
@@ -184,6 +197,17 @@ int main(int argc, char *argv[]) {
     auto buf_ptr = staging_buf.data();
     memcpy(buf_ptr, src_data.data(), num_points * sizeof(float));      
     RT_CHECK(vx_copy_to_dev(device, kernel_arg.src_addr, staging_buf.data(), src_buf_size));
+
+    std::cout << "uploading source buffer to device, device mem address="
+              << std::hex << kernel_arg.src_addr << ", size=" << std::dec
+              << src_buf_size << " bytes\n";
+    std::ofstream file("input.bin", std::ios::binary | std::ios::out);
+    if (!file) {
+        std::cerr << "error: failed to open args.bin for writing\n";
+        exit(EXIT_FAILURE);
+    }
+    file.write(reinterpret_cast<char *>(buf_ptr), src_buf_size);
+    file.close();
   }
 
   // clear destination buffer
