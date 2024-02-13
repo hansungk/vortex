@@ -1,13 +1,15 @@
 #ifndef _COMMON_H_
 #define _COMMON_H_
 
+#include <cstdint>
+
 #define KERNEL_ARG_DEV_MEM_ADDR 0x7fff0000
 #define DEV_SMEM_START_ADDR 0xff000000
 
 typedef struct {
-  uint32_t num_points;
-  uint64_t src_addr;
-  uint64_t dst_addr;  
+  uint32_t matrix_dim;
+  uint64_t addr_a;
+  uint64_t addr_c;
 } kernel_arg_t;
 
 #endif

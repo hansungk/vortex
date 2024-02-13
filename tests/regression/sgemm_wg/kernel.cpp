@@ -4,18 +4,30 @@
 #include "common.h"
 
 void kernel_body(int task_id, kernel_arg_t* __UNIFORM__ arg) {
-  uint32_t num_points = arg->num_points;
-  float *src_ptr = (float *)arg->src_addr;
-  float *dst_ptr = (float *)arg->dst_addr;
+  const float *global_a = (const float *)arg->addr_a;
+  float *global_c = (float *)arg->addr_c;
 
-  float *local_a = (float *)DEV_SMEM_START_ADDR;
+  // assumes NT == NW == matrix_dim
+  const uint32_t dim = arg->matrix_dim;
+  const uint32_t row = vx_warp_id();
+  const uint32_t col = vx_thread_id();
 
-  local_a[num_points - 1 - task_id] = 2 * src_ptr[num_points - 1 - task_id];
-  // local_a[task_id] = 2 * src_ptr[task_id];
+  float *local_c = (float *)DEV_SMEM_START_ADDR;
+  float *local_a = (float *)DEV_SMEM_START_ADDR + (dim * dim);
+  float *local_b = (float *)DEV_SMEM_START_ADDR + 2 * (dim * dim);
+
+  local_a[dim * row + col] = global_a[dim * row + col];
+  local_c[dim * row + col] = 0.0f;
 
   vx_barrier(0, vx_num_warps());
 
-  dst_ptr[task_id] = local_a[task_id];
+  for (uint32_t k = 0; k < dim; k++) {
+    local_c[dim * row + col] += local_a[dim * row + k] * local_a[dim * k + col];
+  }
+
+  vx_barrier(0, vx_num_warps());
+
+  global_c[dim * row + col] = local_c[dim * row + col];
 }
 
 int main() {
