@@ -5,34 +5,49 @@
 
 void kernel_body(int task_id, kernel_arg_t* __UNIFORM__ arg) {
   const float *global_a = (const float *)arg->addr_a;
+  const float *global_b = (const float *)arg->addr_b;
   float *global_c = (float *)arg->addr_c;
 
   // assumes NT == NW == matrix_dim
-  const uint32_t dim = arg->matrix_dim;
-  const uint32_t row = vx_warp_id();
-  const uint32_t col = vx_thread_id();
+  const uint32_t dim_m = arg->dim_m;
+  const uint32_t dim_n = arg->dim_n;
+  const uint32_t dim_k = arg->dim_k;
+  const uint32_t block_dim = vx_num_warps();
+  const uint32_t local_row = vx_warp_id();
+  const uint32_t local_col = vx_thread_id();
 
-  float *local_c = (float *)DEV_SMEM_START_ADDR;
-  float *local_a = (float *)DEV_SMEM_START_ADDR + (dim * dim);
-  float *local_b = (float *)DEV_SMEM_START_ADDR + 2 * (dim * dim);
+  // each thread generates one output element
+  float reg_c = 0.0f;
 
-  local_a[dim * row + col] = global_a[dim * row + col];
-  local_c[dim * row + col] = 0.0f;
+  for (uint32_t k = 0; k < dim_k; k += block_dim) {
+    float *local_a = (float *)DEV_SMEM_START_ADDR;
+    float *local_b = (float *)DEV_SMEM_START_ADDR + (block_dim * block_dim);
 
-  vx_barrier(0, vx_num_warps());
+    // FIXME: assumes local block size is square shape
+    // TODO: "local_row" should be global_row
+    uint32_t offset_global_a = dim_k * local_row + (k + local_col);
+    uint32_t offset_global_b = dim_n * (local_row + k) + local_col;
+    local_a[block_dim * local_row + local_col] = global_a[offset_global_a];
+    local_b[block_dim * local_row + local_col] = global_b[offset_global_b];
 
-  for (uint32_t k = 0; k < dim; k++) {
-    local_c[dim * row + col] += local_a[dim * row + k] * local_a[dim * k + col];
+    vx_barrier(0, vx_num_warps());
+    vx_fence();
+
+    for (uint32_t local_k = 0; local_k < block_dim; local_k++) {
+      reg_c += local_a[block_dim * local_row + local_k] *
+               local_b[block_dim * local_k + local_col];
+    }
+
+    vx_barrier(0, vx_num_warps());
+    vx_fence();
   }
 
-  vx_barrier(0, vx_num_warps());
-
-  global_c[dim * row + col] = local_c[dim * row + col];
+  global_c[dim_n * local_row + local_col] = reg_c;
 }
 
 int main() {
-	kernel_arg_t* arg = (kernel_arg_t*)KERNEL_ARG_DEV_MEM_ADDR;
-        int threads_per_core = vx_num_warps() * vx_num_threads();
-	vx_spawn_tasks(threads_per_core, (vx_spawn_tasks_cb)kernel_body, arg);
-	return 0;
+  kernel_arg_t *arg = (kernel_arg_t *)KERNEL_ARG_DEV_MEM_ADDR;
+  int threads_per_core = vx_num_warps() * vx_num_threads();
+  vx_spawn_tasks(threads_per_core, (vx_spawn_tasks_cb)kernel_body, arg);
+  return 0;
 }

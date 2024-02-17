@@ -21,7 +21,8 @@
 const char* kernel_file = "kernel.bin";
 uint32_t count = 0;
 
-std::vector<float> src_data;
+std::vector<float> src_a_data;
+std::vector<float> src_b_data;
 std::vector<float> ref_data;
 
 vx_device_h device = nullptr;
@@ -58,37 +59,43 @@ static void parse_args(int argc, char **argv) {
 void cleanup() {
   if (device) {
     vx_mem_free(device, kernel_arg.addr_a);
+    vx_mem_free(device, kernel_arg.addr_b);
     vx_mem_free(device, kernel_arg.addr_c);
     vx_dev_close(device);
   }
 }
 
-void generate_source_matrix(uint32_t dim) {
-  src_data.resize(dim * dim);
+void generate_source_matrix(uint32_t dim_m, uint32_t dim_n, uint32_t dim_k) {
+  src_a_data.resize(dim_m * dim_k);
+  src_b_data.resize(dim_k * dim_n);
 
-  for (uint32_t i = 0; i < dim * dim; ++i) {
-    src_data[i] = static_cast<float>(i);
-    std::cout << i << ": value=" << src_data[i] << std::endl;
+  for (uint32_t i = 0; i < src_a_data.size(); ++i) {
+    src_a_data[i] = static_cast<float>(i);
+    std::cout << "A: " << i << ": value=" << src_a_data[i] << std::endl;
+  }
+  for (uint32_t i = 0; i < src_b_data.size(); ++i) {
+    src_b_data[i] = static_cast<float>(i);
+    std::cout << "B: " << i << ": value=" << src_b_data[i] << std::endl;
   }
 }
 
-void generate_reference_matmul(uint32_t dim) {
-  ref_data.resize(dim * dim);
+void generate_reference_matmul(uint32_t dim_m, uint32_t dim_n, uint32_t dim_k) {
+  ref_data.resize(dim_m * dim_n);
 
-  for (uint32_t i = 0; i < dim; ++i) {
-    for (uint32_t j = 0; j < dim; ++j) {
+  for (uint32_t i = 0; i < dim_m; ++i) {
+    for (uint32_t j = 0; j < dim_n; ++j) {
       float ref = 0.0f;
-      for (uint32_t k = 0; k < dim; ++k) {
-        ref += src_data[dim * i + k] * src_data[dim * k + j];
+      for (uint32_t k = 0; k < dim_k; ++k) {
+        ref += src_a_data[dim_k * i + k] * src_b_data[dim_n * k + j];
       }
-      ref_data.at(dim * i + j) = ref;
+      ref_data.at(dim_n * i + j) = ref;
     }
   }
 }
 
 int run_test(const kernel_arg_t& kernel_arg,
              uint32_t buf_size,
-             uint32_t dim) {
+             uint32_t dim_m, uint32_t dim_n) {
   // start device
   std::cout << "start device" << std::endl;
   RT_CHECK(vx_start(device));
@@ -106,7 +113,7 @@ int run_test(const kernel_arg_t& kernel_arg,
   {
     int errors = 0;
     auto buf_ptr = (float*)staging_buf.data();
-    for (uint32_t i = 0; i < dim * dim; ++i) {
+    for (uint32_t i = 0; i < dim_m * dim_n; ++i) {
       float ref = ref_data.at(i);
       float cur = buf_ptr[i];
       if (cur != ref) {
@@ -139,16 +146,17 @@ int main(int argc, char *argv[]) {
   std::cout << "open device connection" << std::endl;
   RT_CHECK(vx_dev_open(&device));
 
-  uint32_t matrix_size = count;
-  uint32_t matrix_dim = 4; // FIXME: hardcoded
+  uint32_t dim_m = 4; // FIXME: hardcoded
+  uint32_t dim_n = 4; // FIXME: hardcoded
+  uint32_t dim_k = 128; // FIXME: hardcoded
 
-  generate_source_matrix(matrix_dim);
-  generate_reference_matmul(matrix_dim);
+  generate_source_matrix(dim_m, dim_n, dim_k);
+  generate_reference_matmul(dim_m, dim_n, dim_k);
 
-  uint32_t src_buf_size = src_data.size() * sizeof(src_data[0]);
-  uint32_t dst_buf_size = ref_data.size() * sizeof(src_data[0]);
+  uint32_t src_a_buf_size = src_a_data.size() * sizeof(src_a_data[0]);
+  uint32_t src_b_buf_size = src_b_data.size() * sizeof(src_b_data[0]);
+  uint32_t dst_buf_size = ref_data.size() * sizeof(src_a_data[0]);
 
-  std::cout << "number of elements: " << matrix_size << std::endl;
   std::cout << "buffer size: " << dst_buf_size << " bytes" << std::endl;
 
   // upload program
@@ -157,20 +165,26 @@ int main(int argc, char *argv[]) {
 
   // allocate device memory
   std::cout << "allocate device memory" << std::endl;
-  RT_CHECK(vx_mem_alloc(device, src_buf_size, VX_MEM_TYPE_GLOBAL, &kernel_arg.addr_a));
+  RT_CHECK(vx_mem_alloc(device, src_a_buf_size, VX_MEM_TYPE_GLOBAL, &kernel_arg.addr_a));
+  RT_CHECK(vx_mem_alloc(device, src_b_buf_size, VX_MEM_TYPE_GLOBAL, &kernel_arg.addr_b));
   RT_CHECK(vx_mem_alloc(device, dst_buf_size, VX_MEM_TYPE_GLOBAL, &kernel_arg.addr_c));
 
-  kernel_arg.matrix_dim = matrix_dim;
+  kernel_arg.dim_m = dim_m;
+  kernel_arg.dim_n = dim_n;
+  kernel_arg.dim_k = dim_k;
 
-  std::cout << "dev_src=0x" << std::hex << kernel_arg.addr_a << std::endl;
-  std::cout << "dev_dst=0x" << std::hex << kernel_arg.addr_c << std::endl;
+  std::cout << "dev_addr_a=0x" << std::hex << kernel_arg.addr_a << std::endl;
+  std::cout << "dev_addr_b=0x" << std::hex << kernel_arg.addr_b << std::endl;
+  std::cout << "dev_addr_c=0x" << std::hex << kernel_arg.addr_c << std::endl;
 
   // allocate staging buffer
   {
     std::cout << "allocate staging buffer" << std::endl;
-    uint32_t staging_buf_size = std::max<uint32_t>(src_buf_size,
-                                    std::max<uint32_t>(dst_buf_size,
-                                      sizeof(kernel_arg_t)));
+    uint32_t staging_buf_size = std::max<uint32_t>(
+        src_a_buf_size,
+        std::max<uint32_t>(
+            src_b_buf_size,
+            std::max<uint32_t>(dst_buf_size, sizeof(kernel_arg_t))));
     staging_buf.resize(staging_buf_size);
   }
 
@@ -196,28 +210,47 @@ int main(int argc, char *argv[]) {
 
   // upload source buffer
   {
-    std::cout << "upload source buffer" << std::endl;
-    auto buf_ptr = staging_buf.data();
-    memcpy(buf_ptr, src_data.data(), matrix_size * sizeof(float));
-    RT_CHECK(vx_copy_to_dev(device, kernel_arg.addr_a, staging_buf.data(), src_buf_size));
+    {
+        auto buf_ptr = staging_buf.data();
+        memcpy(buf_ptr, src_a_data.data(), src_a_data.size() * sizeof(float));
+        RT_CHECK(vx_copy_to_dev(device, kernel_arg.addr_a, staging_buf.data(),
+                                src_a_buf_size));
 
-    std::cout << "uploading source buffer to device, device mem address="
-              << std::hex << kernel_arg.addr_a << ", size=" << std::dec
-              << src_buf_size << " bytes\n";
-    std::ofstream file("input.bin", std::ios::binary | std::ios::out);
-    if (!file) {
+        std::cout << "uploading source A matrix to device, device mem address="
+                  << std::hex << kernel_arg.addr_a << ", size=" << std::dec
+                  << src_a_buf_size << " bytes\n";
+        std::ofstream file("input.a.bin", std::ios::binary | std::ios::out);
+        if (!file) {
         std::cerr << "error: failed to open args.bin for writing\n";
         exit(EXIT_FAILURE);
+        }
+        file.write(reinterpret_cast<char *>(buf_ptr), src_a_buf_size);
+        file.close();
     }
-    file.write(reinterpret_cast<char *>(buf_ptr), src_buf_size);
-    file.close();
+    {
+        auto buf_ptr = staging_buf.data();
+        memcpy(buf_ptr, src_b_data.data(), src_b_data.size() * sizeof(float));
+        RT_CHECK(vx_copy_to_dev(device, kernel_arg.addr_b, staging_buf.data(),
+                                src_b_buf_size));
+
+        std::cout << "uploading source B matrix to device, device mem address="
+                  << std::hex << kernel_arg.addr_b << ", size=" << std::dec
+                  << src_b_buf_size << " bytes\n";
+        std::ofstream file("input.b.bin", std::ios::binary | std::ios::out);
+        if (!file) {
+        std::cerr << "error: failed to open args.bin for writing\n";
+        exit(EXIT_FAILURE);
+        }
+        file.write(reinterpret_cast<char *>(buf_ptr), src_b_buf_size);
+        file.close();
+    }
   }
 
   // clear destination buffer
   {
     std::cout << "clear destination buffer" << std::endl;
     auto buf_ptr = (int32_t*)staging_buf.data();
-    for (uint32_t i = 0; i < matrix_size; ++i) {
+    for (uint32_t i = 0; i < ref_data.size(); ++i) {
       buf_ptr[i] = 0xdeadbeef;
     }
     RT_CHECK(vx_copy_to_dev(device, kernel_arg.addr_c, staging_buf.data(), dst_buf_size));
@@ -225,13 +258,12 @@ int main(int argc, char *argv[]) {
 
   // run tests
   std::cout << "run tests" << std::endl;
-  RT_CHECK(run_test(kernel_arg, dst_buf_size, kernel_arg.matrix_dim));
+  RT_CHECK(run_test(kernel_arg, dst_buf_size, kernel_arg.dim_m, kernel_arg.dim_n));
+  std::cout << "PASSED!" << std::endl;
 
   // cleanup
   std::cout << "cleanup" << std::endl;
   cleanup();
-
-  std::cout << "PASSED!" << std::endl;
 
   return 0;
 }
