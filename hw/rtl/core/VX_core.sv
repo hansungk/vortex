@@ -45,7 +45,7 @@ module VX_core import VX_gpu_pkg::*; #(
     output wire [`NUM_REGS-1:0][`XLEN-1:0] sim_wb_value,
 
     // Status
-    output wire             busy
+    output wire             busy    //stays 1 when busy, 0 when done (termination) detect the negative edge
 );
     VX_schedule_if      schedule_if();
     VX_fetch_if         fetch_if();
@@ -258,7 +258,7 @@ module VX_core import VX_gpu_pkg::*; #(
 
 `endif
 
-`ifdef PERF_ENABLE
+`ifdef PERF_ENABLE  // expose these perf counter to console using $display, %time; flag: --perf=0?
 
     wire [`CLOG2(DCACHE_NUM_REQS+1)-1:0] perf_dcache_rd_req_per_cycle;
     wire [`CLOG2(DCACHE_NUM_REQS+1)-1:0] perf_dcache_wr_req_per_cycle;
@@ -332,6 +332,33 @@ module VX_core import VX_gpu_pkg::*; #(
     assign pipeline_perf_if.load_latency = perf_dcache_lat;
     assign pipeline_perf_if.ifetch_latency = perf_icache_lat;
     assign pipeline_perf_if.load_latency = perf_dcache_lat;
+
+    
+    always @(negedge busy) begin
+        if (!reset) begin
+        $display("time : %t", $time);
+        $display("perf_dcache_rd_req_per_cycle: %h", perf_dcache_rd_req_per_cycle);
+        $display("perf_dcache_wr_req_per_cycle: %h", perf_dcache_wr_req_per_cycle);
+        $display("perf_dcache_rsp_per_cycle: %h", perf_dcache_rsp_per_cycle);
+        $display("perf_icache_pending_read_cycle: %h", perf_icache_pending_read_cycle);
+        $display("perf_dcache_pending_read_cycle: %h", perf_dcache_pending_read_cycle);
+        $display("perf_icache_pending_reads: %h", perf_icache_pending_reads);
+        $display("perf_dcache_pending_reads: %h", perf_dcache_pending_reads);
+        $display("perf_ifetches: %h", perf_ifetches);
+        $display("perf_loads: %h", perf_loads);
+        $display("perf_stores: %h", perf_stores);
+        $display("perf_icache_req_fire: %b", perf_icache_req_fire);
+        $display("perf_icache_rsp_fire: %b", perf_icache_rsp_fire);
+        $display("perf_dcache_rd_req_fire: %b", perf_dcache_rd_req_fire);
+        $display("perf_dcache_rd_req_fire_r: %b", perf_dcache_rd_req_fire_r);
+        $display("perf_dcache_wr_req_fire: %b", perf_dcache_wr_req_fire);
+        $display("perf_dcache_wr_req_fire_r: %b", perf_dcache_wr_req_fire_r);
+        $display("perf_dcache_rsp_fire: %b", perf_dcache_rsp_fire);
+        $display("scheduler idle: %d", pipeline_perf_if.sched_idles[31:0]);
+        $display("Instruction: %d",commit_csr_if.instret[31:0]);
+        $display("Cycle: %d",sched_csr_if.cycles);
+        end
+    end
 
 `endif
 
