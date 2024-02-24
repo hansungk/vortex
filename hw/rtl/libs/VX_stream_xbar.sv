@@ -21,8 +21,7 @@ module VX_stream_xbar #(
     parameter IN_WIDTH      = `LOG2UP(NUM_INPUTS),
     parameter OUT_WIDTH     = `LOG2UP(NUM_OUTPUTS),
     parameter ARBITER       = "P",
-    parameter LOCK_ENABLE   = 0,
-    parameter OUT_REG      = 0,
+    parameter OUT_REG       = 0,
     parameter MAX_FANOUT    = `MAX_FANOUT,
     parameter PERF_CTR_BITS = `CLOG2(NUM_INPUTS+1)
 ) (
@@ -66,7 +65,6 @@ module VX_stream_xbar #(
                     .NUM_OUTPUTS (1),
                     .DATAW       (DATAW),
                     .ARBITER     (ARBITER),
-                    .LOCK_ENABLE (LOCK_ENABLE),
                     .MAX_FANOUT  (MAX_FANOUT),
                     .OUT_REG     (OUT_REG)
                 ) xbar_arb (
@@ -95,7 +93,6 @@ module VX_stream_xbar #(
                 .NUM_OUTPUTS (1),
                 .DATAW       (DATAW),
                 .ARBITER     (ARBITER),
-                .LOCK_ENABLE (LOCK_ENABLE),
                 .MAX_FANOUT  (MAX_FANOUT),
                 .OUT_REG     (OUT_REG)
             ) xbar_arb (
@@ -173,25 +170,27 @@ module VX_stream_xbar #(
     end
 
     // compute inputs collision
-    // we have a collision when there exists a valid transfer with mutiple input candicates
-    // we caount the unique duplicates each cycle.
+    // we have a collision when there exists a valid transfer with multiple input candicates
+    // we count the unique duplicates each cycle.
     
+    reg [NUM_INPUTS-1:0] per_cycle_collision, per_cycle_collision_r;
+    wire [`CLOG2(NUM_INPUTS+1)-1:0] collision_count;
     reg [PERF_CTR_BITS-1:0] collisions_r;
-    reg [NUM_INPUTS-1:0] per_cycle_collision;
 
     always @(*) begin
         per_cycle_collision = 0;
         for (integer i = 0; i < NUM_INPUTS; ++i) begin
             for (integer j = 1; j < (NUM_INPUTS-i); ++j) begin
-                if (valid_in[i] && valid_in[j+i] && sel_in[i] == sel_in[j+i]) begin
-                    per_cycle_collision[i] |= ready_in[i] | ready_in[j+i];
-                end
+                per_cycle_collision[i] |= valid_in[i]
+                                       && valid_in[j+i] 
+                                       && (sel_in[i] == sel_in[j+i])
+                                       && (ready_in[i] | ready_in[j+i]);
             end
         end
     end
-
-    wire [`CLOG2(NUM_INPUTS+1)-1:0] collision_count;
-    `POP_COUNT(collision_count, per_cycle_collision);
+    
+    `BUFFER(per_cycle_collision_r, per_cycle_collision);    
+    `POP_COUNT(collision_count, per_cycle_collision_r);
 
     always @(posedge clk) begin
         if (reset) begin

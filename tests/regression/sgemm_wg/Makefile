@@ -4,6 +4,6 @@ SRCS = main.cpp
 
 VX_SRCS = kernel.cpp
 
-OPTS ?= -n256
+OPTS ?= -n16
 
 include ../common.mk
