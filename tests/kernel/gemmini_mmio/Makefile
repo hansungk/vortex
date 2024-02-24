@@ -12,6 +12,8 @@ RISCV_PREFIX ?= riscv$(XLEN)-unknown-elf
 
 VORTEX_KN_PATH ?= $(realpath ../../../kernel)
 
+GEMMINI_SW_PATH ?= $(realpath /scratch/yrh/chipyard/generators/gemmini/software/gemmini-rocc-tests)
+
 CC = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-gcc
 AR = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-gcc-ar
 DP = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-objdump
@@ -20,7 +22,7 @@ CP = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-objcopy
 SIM_DIR = ../../../sim
 
 CFLAGS += -O3 -v -mcmodel=medany -fno-exceptions -nostartfiles -fdata-sections -ffunction-sections
-CFLAGS += -I$(VORTEX_KN_PATH)/include -I$(VORTEX_KN_PATH)/../hw
+CFLAGS += -I$(VORTEX_KN_PATH)/include -I$(VORTEX_KN_PATH)/../hw -I$(GEMMINI_SW_PATH)
 
 LDFLAGS += -lm -Wl,-Bstatic,--gc-sections,-T,$(VORTEX_KN_PATH)/linker/vx_link$(XLEN).ld,--defsym=STARTUP_ADDR=0x80000000 $(VORTEX_KN_PATH)/libvortexrt.a
 

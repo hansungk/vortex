@@ -3,92 +3,106 @@
 #include <vx_intrinsics.h>
 #include <vx_print.h>
 #include <include/gemmini.h>
-
-// #define ADDR_LEN 32
-// #define XCUSTOM_ACC 3
-// #define k_MVOUT_SPAD 23
-
-#define pfence() { for (int i = 0; i < 10; i++) *((uint32_t *) 0xffff0000) = 0xdeadbeef; }
-
-#define ROCC_INSTRUCTION_RS1_RS2(x, rs1, rs2, funct) { \
-    /* printf("function %d\n", funct); */ \
-    uint32_t instruction = (0x7B) | (0 << 7) | (3 << 12) | (1 << 15) | (2 << 20) | ((uint32_t) funct << 25); \
-    *((volatile uint64_t*) 0xff100010) = (uint64_t) (rs1); \
-    *((volatile uint64_t*) 0xff100018) = (uint64_t) (rs2); \
-    pfence(); \
-    /* gemmini_fence(); */ \
-    *((volatile uint32_t*) 0xff100000) = instruction; \
-}
-
-// #define gemmini_extended_mvout_spad(dst_addr, dst_stride, src_addr, cols, rows) \
-//   ROCC_INSTRUCTION_RS1_RS2(XCUSTOM_ACC, ((uint64_t)(dst_stride) << 32) | (uint64_t)(dst_addr), ((uint64_t)(rows) << (ADDR_LEN + 16)) | ((uint64_t)(cols) << ADDR_LEN) | (uint64_t)(src_addr), k_MVOUT_SPAD)
-
-// #define gemmini_mvout_spad(dst_addr, src_addr, cols, rows) \
-//   gemmini_extended_mvout_spad(dst_addr, 1, src_addr, cols, rows)
+#include "gemmini_mmio.h"
 
 int main() {
 
-  char *print_buf = ((char *) 0xff005000);
-  sprintf(print_buf, "hello world\n");
+  char *print_buf = (char *) PRINT_BUF;
+
+  sprintf(print_buf, "\n%d\n", DIM);
 
   gemmini_config_ld(0);
-  gemmini_config_st(0);
   gemmini_extended_config_ex(WEIGHT_STATIONARY, 0, 0, 1, 0, 0);
 
-  // bogus loop to give slack for MMIO to settle without fences
-
   // load up A and B and C
-  float *smem_A = (float *)0xff000000; // byte addressed
   uint32_t spad_A = 0x00000000;
-  float *smem_B = (float *)0xff000040;
-  uint32_t spad_B = 0x00000004; // 16B word addressed
-  float *smem_C = (float *)0xff000080;
-  uint32_t acc_C = 0x80000000;
-  uint32_t spad_C = 0x00000008;
-  float *smem_D = (float *)0xff0000c0;
-  uint32_t spad_D = 0x0000000c;
+  uint32_t spad_B = 0x00000100; // 16B word addressed
+  uint32_t acc_C = 0x80000000; // accmem + accumulate
+  uint32_t spad_C = 0x00000200;
 
-  for (int i = 0; i < DIM; i++) {
-    for (int j = 0; j < DIM; j++) {
-      smem_A[i * DIM + j] = 1.0f;
-      smem_B[i * DIM + j] = 1.0f;
-      smem_C[i * DIM + j] = 0.0f;
-      smem_D[i * DIM + j] = 0.0f;
+  float *smem_A = (float *) SPAD_TO_SMEM(spad_A); // 0xff000000; // byte addressed
+  float *smem_B = (float *) SPAD_TO_SMEM(spad_B); // 0xff000200;
+  float *smem_C = (float *) SPAD_TO_SMEM(spad_C); // 0xff000400;
+
+  int I = 5;
+  int J = 5;
+  int K = 5;
+
+  gemmini_config_st(DIM * 4 * J)
+
+  // load A with 128->1 in row-major order
+  for (int i = 0; i < I; i++) {
+    for (int k = 0; k < K; k++) {
+      int tile_byte_offset = (i * K + k) * DIM * DIM;
+      for (int x = 0; x < DIM; x++)
+        for (int y = 0; y < DIM; y++)
+          smem_A[tile_byte_offset + x * DIM + y] = (float) ((I * K * DIM * DIM - ((i * DIM + x) * DIM * K + (k * DIM + y))) % 64);
     }
   }
-  pfence();
-  sprintf(print_buf, "\nC before\n");
-  for (int i = 0; i < DIM; i++) {
-    for (int j = 0; j < DIM; j++) {
-      sprintf(print_buf, "%d ", (int) (smem_C[i * DIM + j]));
+
+  // load B with 0->191 in row-major order
+  for (int k = 0; k < K; k++) {
+    for (int j = 0; j < J; j++) {
+      int tile_byte_offset = (k * J + j) * DIM * DIM;
+      for (int x = 0; x < DIM; x++)
+        for (int y = 0; y < DIM; y++)
+          smem_B[tile_byte_offset + x * DIM + y] = (float) (((k * DIM + x) * DIM * J + (j * DIM + y)) % 64);
     }
-    sprintf(print_buf, "\n");
   }
 
-  pfence();
-
-  gemmini_extended_preload(spad_B, acc_C, DIM, DIM, DIM, DIM);
+  for (int i = 0; i < I * J * DIM * DIM; i++) smem_C[i] = 0.f;
 
   pfence();
 
-  gemmini_extended_compute_preloaded(spad_A, spad_D, DIM, DIM, DIM, DIM);
+  // sprintf(print_buf, "\nA in\n");
+  // for (int i = I * DIM - 1; i < I * DIM; i++) {
+  //   for (int j = 0; j < K * DIM; j++) {
+  //     sprintf(print_buf, "%d ", (int) (smem_A[SMEM_MAT_OFFSET(i, j, K * DIM)]));
+  //   }
+  //   sprintf(print_buf, "\n");
+  // }
 
-  pfence();
+  // sprintf(print_buf, "\nB in\n");
+  // for (int i = 0; i < K * DIM; i++) {
+  //   for (int j = 0; j < J * DIM; j++) {
+  //     sprintf(print_buf, "%d ", (int) (smem_B[SMEM_MAT_OFFSET(i, j, J * DIM)]));
+  //   }
+  //   sprintf(print_buf, "\n");
+  //   if (i == 2) i = K * DIM - 3;
+  // }
 
+  // gemmini_extended_preload(spad_B, acc_C, DIM, DIM, DIM, DIM);
+  // gemmini_extended_compute_preloaded(spad_A, GARBAGE_ADDR, DIM, DIM, DIM, DIM);
   // gemmini_extended_mvout(0xc0000000, 0xff000000, DIM, DIM);
-  gemmini_mvout_spad(spad_C, acc_C, DIM, DIM);
-
-  pfence();
-
-
-  sprintf(print_buf, "\nC after\n");
+  // gemmini_extended_mvout_spad(spad_C, 1, acc_C, DIM, DIM);
   
-  for (int i = 0; i < DIM; i++) {
-    for (int j = 0; j < DIM; j++) {
-      sprintf(print_buf, "%d ", (int) (100 * smem_C[i * DIM + j]));
+  sp_tiled_matmul_full_spad_ws(spad_A, spad_B, /*spad_D=*/0, spad_C,
+      /*I=*/I, /*J=*/J, /*K=*/K, /*pad_I=*/0, /*pad_J=*/0, /*pad_K=*/0,
+      /*a_transpose=*/0, /*b_transpose=*/0, /*full_C=*/0, /*low_D=*/0,
+      /*no_bias=*/1, /*repeating_bias=*/0, /*act=*/NO_ACTIVATION);
+
+  for (int i = 0; i < 32; i++) pfence();
+
+  // check results
+  for (int i = 0; i < I * DIM; i++) {
+    for (int j = 0; j < J * DIM; j++) {
+      int sum = 0;
+      for (int k = 0; k < K * DIM; k++) sum += ((I * K * DIM * DIM - i * K * DIM - k) % 64) * ((k * J * DIM + j) % 64);
+      if ((int) (smem_C[SMEM_MAT_OFFSET(i, j, J * DIM)] * 10) != (int) (sum * 10)) {
+        sprintf(print_buf, "TEST FAILED (actual/reference)\n");
+        for (int ii = 0; ii < I * DIM; ii++) {
+          for (int jj = 0; jj < J * DIM; jj++) {
+            sum = 0;
+            for (int k = 0; k < K * DIM; k++) sum += ((I * K * DIM * DIM - ii * K * DIM - k) % 64) * ((k * J * DIM + jj) % 64);
+            sprintf(print_buf, "%d/%d ", (int) (smem_C[SMEM_MAT_OFFSET(ii, jj, J * DIM)]), (int) sum);
+          }
+          sprintf(print_buf, "\n");
+        }
+        return 1;
+      }
     }
-    sprintf(print_buf, "\n");
   }
+  sprintf(print_buf, "TEST PASSED\n");
 
   return 0;
 }
