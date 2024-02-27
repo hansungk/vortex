@@ -238,9 +238,9 @@ int main (int argc, char **argv) {
   }
 
   // NOTE(hansung): Dump operand buffer to a file
-  if (write_operand_file("matmul.input.a.bin", h_a.data(), nbytes) != 0)
+  if (write_operand_file("convolution.input.input.bin", h_i.data(), i_nbytes) != 0)
     return EXIT_FAILURE;
-  if (write_operand_file("matmul.input.b.bin", h_b.data(), nbytes) != 0)
+  if (write_operand_file("convolution.input.weights.bin", h_w.data(), w_nbytes) != 0)
     return EXIT_FAILURE;
 
   // Creating command queue
