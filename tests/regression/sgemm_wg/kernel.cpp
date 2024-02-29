@@ -5,8 +5,11 @@
 
 #define BM 8
 #define BN BM
-#define BK 8
-#define TM (BM/BK)
+#define BK 2
+// #define TM (BM/BK)
+// #define TN (BN/BK)
+#define TM 4
+#define TN 4
 
 void thread_block_gemm(kernel_arg_t *__UNIFORM__ arg,
                               const uint32_t tid_in_threadblock,
@@ -40,33 +43,63 @@ void thread_block_gemm(kernel_arg_t *__UNIFORM__ arg,
   const uint32_t global_a_row = BM * threadblock_id_y + local_a_row;
   const uint32_t global_b_col = BN * threadblock_id_x + local_b_col;
 
+  const uint32_t local_c_row = tid_in_threadblock / (BN / TN);
+  const uint32_t local_c_col = tid_in_threadblock % (BN / TN);
+
   // each thread generates TM output element
-  float reg_c[TM] = { 0.0f };
+  float reg_c[TM * TN] = { 0.0f };
+  float reg_a[TM] = { 0.0f };
+  float reg_b[TN] = { 0.0f };
 
   volatile float *local_a = sharedmem_per_threadblock;
-  const size_t local_a_elems = threadblock_dim_x * threadblock_dim_y;
+  // const size_t local_a_elems = threadblock_dim_x * threadblock_dim_y;
+  const size_t local_a_elems = (BM * BK);
   volatile float *local_b = sharedmem_per_threadblock + local_a_elems;
 
-  for (uint32_t k = 0; k < dim_k; k += BK) {
-    uint32_t global_a_offset = dim_k * global_a_row + (k + local_a_col);
-    uint32_t global_b_offset = dim_n * (k + local_b_row) + global_b_col;
+  constexpr uint32_t stride_a = (BM * BN) / BK / (TM * TN);
+  constexpr uint32_t stride_b = (BM * BN) / BN / (TM * TN);
 
-    local_a[BK * local_a_row + local_a_col] = A[global_a_offset];
-    local_b[BN * local_b_row + local_b_col] = B[global_b_offset];
+  for (uint32_t k = 0; k < dim_k; k += BK) {
+    for (uint32_t load_offset = 0; load_offset < BM; load_offset += stride_a) {
+      const uint32_t global_a_offset =
+          dim_k * (global_a_row + load_offset) + (k + local_a_col);
+      local_a[BK * (local_a_row + load_offset) + local_a_col] =
+          A[global_a_offset];
+    }
+    for (uint32_t load_offset = 0; load_offset < BK; load_offset += stride_b) {
+      const uint32_t global_b_offset =
+          dim_n * (k + local_b_row + load_offset) + global_b_col;
+      local_b[BN * (local_b_row + load_offset) + local_b_col] =
+          B[global_b_offset];
+    }
 
     vx_barrier(threadblock_id_in_core, threadblock_dim_y);
     vx_fence();
 
-#pragma GCC unroll TM
     for (uint32_t local_k = 0; local_k < BK; local_k++) {
-      // Compute multiple result elements (TM) per thread
-      const float local_b_tmp = local_b[BN * local_k + local_b_col];
 #pragma GCC unroll TM
-      for (uint32_t result_idx = 0; result_idx < TM; result_idx++) {
-        // NOTE use of local_b_row
-        reg_c[result_idx] +=
-            local_a[BK * (TM * local_b_row + result_idx) + local_k] *
-            local_b_tmp;
+      for (uint32_t res_idx_m = 0; res_idx_m < TM; res_idx_m++) {
+        reg_a[res_idx_m] =
+            local_a[BK * (TM * local_c_row + res_idx_m) + local_k];
+      }
+#pragma GCC unroll TN
+      for (uint32_t res_idx_n = 0; res_idx_n < TN; res_idx_n++) {
+        reg_b[res_idx_n] =
+            local_b[BN * local_k + (TN * local_c_col + res_idx_n)];
+      }
+
+      // Compute multiple result elements (TM) per thread
+#pragma GCC unroll TM
+      for (uint32_t res_idx_m = 0; res_idx_m < TM; res_idx_m++) {
+#pragma GCC unroll TN
+        for (uint32_t res_idx_n = 0; res_idx_n < TN; res_idx_n++) {
+          // NOTE use of local_b_row
+          reg_c[TN * res_idx_m + res_idx_n] +=
+              reg_a[res_idx_m] * reg_b[res_idx_n];
+          // reg_c[TN * res_idx_m + res_idx_n] +=
+          //     local_a[BK * (TM * local_c_row + res_idx_m) + local_k] *
+          //     local_b[BN * local_k + (TN * local_c_col + res_idx_n)];
+        }
       }
     }
 
@@ -75,10 +108,14 @@ void thread_block_gemm(kernel_arg_t *__UNIFORM__ arg,
   }
 
 #pragma GCC unroll TM
-  for (uint32_t result_idx = 0; result_idx < TM; result_idx++) {
-    // NOTE use of local_b_row and global_b_col here
-    C[dim_n * (BM * threadblock_id_y + TM * local_b_row + result_idx) +
-             global_b_col] = reg_c[result_idx];
+  for (uint32_t res_idx_m = 0; res_idx_m < TM; res_idx_m++) {
+#pragma GCC unroll TN
+    for (uint32_t res_idx_n = 0; res_idx_n < TN; res_idx_n++) {
+      // NOTE use of local_b_row and global_b_col here
+      C[dim_n * (BM * threadblock_id_y + TM * local_c_row + res_idx_m) +
+        (BN * threadblock_id_x + TN * local_c_col + res_idx_n)] =
+          reg_c[TN * res_idx_m + res_idx_n];
+    }
   }
 }
 
@@ -86,10 +123,11 @@ void kernel_body(int task_id, kernel_arg_t* __UNIFORM__ arg) {
   // @perf: All threads are running these compute whose result is mostly same
   // across the threadblock
 
-  const uint32_t threadblocks_per_core = vx_num_threads() * vx_num_warps() / (BM*BK);
+  const uint32_t threads_per_threadblock = ((BM * BN) / (TM * TN));
+  const uint32_t threadblocks_per_core =
+      vx_num_threads() * vx_num_warps() / threads_per_threadblock;
   const uint32_t threadblock_dim_x = vx_num_threads();
   const uint32_t threadblock_dim_y = vx_num_warps() / threadblocks_per_core;
-  const uint32_t threads_per_threadblock = threadblock_dim_x * threadblock_dim_y;
   const int threadblock_id = task_id / threads_per_threadblock;
   const int threadblock_id_in_core = threadblock_id % threadblocks_per_core;
   const int tid_in_threadblock = task_id % threads_per_threadblock;
@@ -102,7 +140,7 @@ void kernel_body(int task_id, kernel_arg_t* __UNIFORM__ arg) {
 
   float *sharedmem_per_threadblock =
       (float *)DEV_SMEM_START_ADDR +
-      (2 * threads_per_threadblock) * threadblock_id_in_core;
+      (2 * BM * BK) * threadblock_id_in_core;
   thread_block_gemm(arg, tid_in_threadblock,
                     threadblock_dim_x, threadblock_dim_y, threadblock_id_x,
                     threadblock_id_y, threadblock_id_in_core,
@@ -111,7 +149,7 @@ void kernel_body(int task_id, kernel_arg_t* __UNIFORM__ arg) {
 
 int main() {
   kernel_arg_t *arg = (kernel_arg_t *)KERNEL_ARG_DEV_MEM_ADDR;
-  const uint32_t grid_size = arg->dim_m * arg->dim_n / TM;
+  const uint32_t grid_size = arg->dim_m * arg->dim_n / (TM * TN);
   vx_spawn_tasks(grid_size, (vx_spawn_tasks_cb)kernel_body, arg);
   return 0;
 }
