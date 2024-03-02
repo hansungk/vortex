@@ -337,7 +337,18 @@ module VX_core import VX_gpu_pkg::*; #(
     real ifetches = perf_ifetches;
     real dcache_lat = perf_dcache_lat;
     real loads = perf_loads;
+    real scheduler_idles = pipeline_perf_if.sched_idles;
+    real scheduler_stalls = pipeline_perf_if.sched_stalls;
+    real ibuf_stalls = pipeline_perf_if.ibf_stalls;
+    real scrb_alu_per_core = pipeline_perf_if.units_uses[`EX_ALU];
+    real scrb_fpu_per_core = pipeline_perf_if.units_uses[`EX_FPU];
+    real scrb_lsu_per_core = pipeline_perf_if.units_uses[`EX_LSU];
+    real scrb_sfu_per_core = pipeline_perf_if.units_uses[`EX_SFU];
+    real scrb_tot = scrb_alu_per_core+scrb_fpu_per_core+scrb_lsu_per_core+scrb_sfu_per_core;
 
+    real scrb_wctl_per_core = pipeline_perf_if.sfu_uses[`SFU_WCTL];
+    real scrb_csrs_per_core = pipeline_perf_if.sfu_uses[`SFU_CSRS];
+    real sfu_tot = scrb_wctl_per_core+scrb_csrs_per_core;
     
     always @(negedge busy) begin
         if (!reset) begin
@@ -359,11 +370,11 @@ module VX_core import VX_gpu_pkg::*; #(
         $display("perf_dcache_rsp_fire: %b", perf_dcache_rsp_fire);
 
         $display("Instructions: %d, Cycles: %d, IPC: %f", commit_csr_if.instret, sched_csr_if.cycles, instrs/cycles);
-        $display("scheduler idle: %d", pipeline_perf_if.sched_idles);
-        $display("scheduler stalls: %d", pipeline_perf_if.sched_stalls);
-        $display("ibuffer stalls: %d",pipeline_perf_if.ibf_stalls);
-        $display("issue stalls: %d",pipeline_perf_if.scb_stalls);
-        $display("sfu stalls: %d",pipeline_perf_if.units_uses[2]);
+        $display("scheduler idle: %d (%f)", pipeline_perf_if.sched_idles, scheduler_idles/cycles);
+        $display("scheduler stalls: %d (%f)", pipeline_perf_if.sched_stalls, scheduler_stalls/cycles);
+        $display("ibuffer stalls: %d (%f)",pipeline_perf_if.ibf_stalls, ibuf_stalls/cycles);
+        $display("issue stalls: %d(alu=%f, fpu=%f, lsu=%f, sfu=%f)",pipeline_perf_if.scb_stalls, scrb_alu_per_core/scrb_tot, scrb_fpu_per_core/scrb_tot, scrb_lsu_per_core/scrb_tot, scrb_sfu_per_core/scrb_tot);
+        $display("sfu stalls: %d (scrs=%f, wctl=%f)",pipeline_perf_if.units_uses[`EX_SFU], scrb_csrs_per_core/sfu_tot, scrb_wctl_per_core/sfu_tot);
         $display("ifetches: %d", perf_ifetches);
         $display("ifetch latency: %f Cycles", icache_lat/ifetches);
         $display("loads: %d", perf_loads);
