@@ -115,7 +115,7 @@
 ///////////////////////////////////////////////////////////////////////////////
 
 `define INST_OP_BITS    4
-`define INST_MOD_BITS   3
+`define INST_MOD_BITS   4
 `define INST_FMT_BITS   2
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -140,6 +140,7 @@
 `define INST_ALU_IS_BR(mod)  mod[0]
 `define INST_ALU_IS_M(mod)   mod[1]
 `define INST_ALU_IS_W(mod)   mod[2]
+`define INST_ALU_IS_RED(mod) mod[3]
 
 `define INST_BR_EQ           4'b0000
 `define INST_BR_NE           4'b0010
@@ -175,6 +176,17 @@
 `define INST_M_IS_MULH(op)   (op[1:0] != 0)
 `define INST_M_SIGNED_A(op)  (op[1:0] != 1)
 `define INST_M_IS_REM(op)    op[1]
+
+`define INST_RED_ADD         4'b0000
+`define INST_RED_ADDU        4'b1000
+`define INST_RED_MIN         4'b0001
+`define INST_RED_MINU        4'b1001
+`define INST_RED_MAX         4'b0010
+`define INST_RED_MAXU        4'b1010
+`define INST_RED_AND         4'b0011
+`define INST_RED_OR          4'b0100
+`define INST_RED_XOR         4'b0101
+`define INST_RED_BITS        4
 
 `define INST_FMT_B           3'b000
 `define INST_FMT_H           3'b001
