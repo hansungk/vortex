@@ -506,6 +506,8 @@ module Vortex import VX_gpu_pkg::*; #(
     assign dcr_bus_if.write_addr  = dcr_write_addr;
     assign dcr_bus_if.write_data  = dcr_write_data;
 
+    VX_mem_perf_if mem_perf_if();
+
     VX_core #(
         .CORE_ID (CORE_ID)
     ) core (
@@ -516,7 +518,7 @@ module Vortex import VX_gpu_pkg::*; #(
 
     `ifdef PERF_ENABLE
         // NOTE unused
-        .mem_perf_if    (mem_perf_tmp_if),
+        .mem_perf_if    (mem_perf_if),
     `endif
         
         .dcr_bus_if     (dcr_bus_if),
