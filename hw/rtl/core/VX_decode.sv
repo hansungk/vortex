@@ -148,13 +148,21 @@ module VX_decode  #(
     always @(*) begin
 
         ex_type   = '0;
+`ifdef VCS
+        op_type   = '0;
+`else
         op_type   = 'x;
+`endif
         op_mod    = '0;
         rd_r      = '0;
         rs1_r     = '0;
         rs2_r     = '0;
         rs3_r     = '0;
+`ifdef VCS
+        imm       = '0;
+`else
         imm       = 'x;
+`endif
         use_imm   = 0;
         use_PC    = 0;
         use_rd    = 0;
