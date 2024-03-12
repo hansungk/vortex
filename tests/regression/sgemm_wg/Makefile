@@ -1,6 +1,6 @@
 PROJECT = sgemm_wg
 
-SRCS = main.cpp
+SRCS = main.cpp common.h
 
 VX_SRCS = kernel.cpp
 
