@@ -155,7 +155,9 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
     wire                            mem_rsp_eop;
     wire                            mem_rsp_ready;
 
-    assign mem_req_valid = lsu_valid;
+    // don't stay up and create bogus valids when LSU is not ready due to
+    // st_rsp_ready
+    assign mem_req_valid = lsu_valid && (~mem_req_rw || st_rsp_ready);
     assign lsu_ready = mem_req_ready 
                    && (~mem_req_rw || st_rsp_ready); // writes commit directly
 
