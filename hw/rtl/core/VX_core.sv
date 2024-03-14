@@ -47,7 +47,7 @@ module VX_core import VX_gpu_pkg::*; #(
     output wire [`NUM_REGS-1:0][`XLEN-1:0] sim_wb_value,
 
     // Status
-    output wire             busy
+    output wire             busy    //stays 1 when busy, 0 when done (termination) detect the negative edge
 );
     VX_schedule_if      schedule_if();
     VX_fetch_if         fetch_if();
@@ -261,7 +261,7 @@ module VX_core import VX_gpu_pkg::*; #(
 
 `endif
 
-`ifdef PERF_ENABLE
+`ifdef PERF_ENABLE  // expose these perf counter to console using $display, %time; flag: --perf=0?
 
     wire [`CLOG2(DCACHE_NUM_REQS+1)-1:0] perf_dcache_rd_req_per_cycle;
     wire [`CLOG2(DCACHE_NUM_REQS+1)-1:0] perf_dcache_wr_req_per_cycle;
@@ -334,7 +334,57 @@ module VX_core import VX_gpu_pkg::*; #(
     assign pipeline_perf_if.stores = perf_stores;
     assign pipeline_perf_if.load_latency = perf_dcache_lat;
     assign pipeline_perf_if.ifetch_latency = perf_icache_lat;
-    assign pipeline_perf_if.load_latency = perf_dcache_lat;
+    real instrs = commit_csr_if.instret;
+    real cycles = sched_csr_if.cycles;
+    real icache_lat = perf_icache_lat;
+    real ifetches = perf_ifetches;
+    real dcache_lat = perf_dcache_lat;
+    real loads = perf_loads;
+    real scheduler_idles = pipeline_perf_if.sched_idles;
+    real scheduler_stalls = pipeline_perf_if.sched_stalls;
+    real ibuf_stalls = pipeline_perf_if.ibf_stalls;
+    real scrb_alu_per_core = pipeline_perf_if.units_uses[`EX_ALU];
+    real scrb_fpu_per_core = pipeline_perf_if.units_uses[`EX_FPU];
+    real scrb_lsu_per_core = pipeline_perf_if.units_uses[`EX_LSU];
+    real scrb_sfu_per_core = pipeline_perf_if.units_uses[`EX_SFU];
+    real scrb_tot = scrb_alu_per_core+scrb_fpu_per_core+scrb_lsu_per_core+scrb_sfu_per_core;
+
+    real scrb_wctl_per_core = pipeline_perf_if.sfu_uses[`SFU_WCTL];
+    real scrb_csrs_per_core = pipeline_perf_if.sfu_uses[`SFU_CSRS];
+    real sfu_tot = scrb_wctl_per_core+scrb_csrs_per_core;
+    
+    always @(negedge busy) begin
+        if (!reset) begin
+        $display("====================CORE : %d===================",CORE_ID);
+        $display("time : %t", $time);
+        $display("perf_dcache_rd_req_per_cycle: %d", perf_dcache_rd_req_per_cycle);
+        $display("perf_dcache_wr_req_per_cycle: %d", perf_dcache_wr_req_per_cycle);
+        $display("perf_dcache_rsp_per_cycle: %d", perf_dcache_rsp_per_cycle);
+        $display("perf_icache_pending_read_cycle: %d", perf_icache_pending_read_cycle);
+        $display("perf_dcache_pending_read_cycle: %d", perf_dcache_pending_read_cycle);
+        $display("perf_icache_pending_reads: %d", perf_icache_pending_reads);
+        $display("perf_dcache_pending_reads: %d", perf_dcache_pending_reads);
+        $display("perf_icache_req_fire: %b", perf_icache_req_fire);
+        $display("perf_icache_rsp_fire: %b", perf_icache_rsp_fire);
+        $display("perf_dcache_rd_req_fire: %b", perf_dcache_rd_req_fire);
+        $display("perf_dcache_rd_req_fire_r: %b", perf_dcache_rd_req_fire_r);
+        $display("perf_dcache_wr_req_fire: %b", perf_dcache_wr_req_fire);
+        $display("perf_dcache_wr_req_fire_r: %b", perf_dcache_wr_req_fire_r);
+        $display("perf_dcache_rsp_fire: %b", perf_dcache_rsp_fire);
+
+        $display("Instructions: %d, Cycles: %d, IPC: %f", commit_csr_if.instret, sched_csr_if.cycles, instrs/cycles);
+        $display("scheduler idle: %d (%f)", pipeline_perf_if.sched_idles, scheduler_idles/cycles);
+        $display("scheduler stalls: %d (%f)", pipeline_perf_if.sched_stalls, scheduler_stalls/cycles);
+        $display("ibuffer stalls: %d (%f)",pipeline_perf_if.ibf_stalls, ibuf_stalls/cycles);
+        $display("issue stalls: %d(alu=%f, fpu=%f, lsu=%f, sfu=%f)",pipeline_perf_if.scb_stalls, scrb_alu_per_core/scrb_tot, scrb_fpu_per_core/scrb_tot, scrb_lsu_per_core/scrb_tot, scrb_sfu_per_core/scrb_tot);
+        $display("sfu stalls: %d (scrs=%f, wctl=%f)",pipeline_perf_if.units_uses[`EX_SFU], scrb_csrs_per_core/sfu_tot, scrb_wctl_per_core/sfu_tot);
+        $display("ifetches: %d", perf_ifetches);
+        $display("ifetch latency: %f Cycles", icache_lat/ifetches);
+        $display("loads: %d", perf_loads);
+        $display("load latency: %f Cycles", dcache_lat/loads);
+        $display("stores: %d", perf_stores);
+        end
+    end
 
 `endif
 
