@@ -4,6 +4,7 @@
 
 module Vortex import VX_gpu_pkg::*; #(
     parameter CORE_ID = 0,
+    parameter CORES_PER_CLUSTER = 1,
     parameter BOOTROM_HANG100 = 32'h10100,
     parameter NUM_THREADS = 0
 ) (
@@ -73,6 +74,18 @@ module Vortex import VX_gpu_pkg::*; #(
     output [(DCACHE_NUM_REQS * 4) - 1:0]                     smem_a_bits_mask,
     output [(DCACHE_NUM_REQS * 32) - 1:0]                    smem_a_bits_data,
 
+    // gbar ------------------------------------------------
+
+    output [CORES_PER_CLUSTER - 1:0]               gbar_req_valid,
+    output [(CORES_PER_CLUSTER * `NB_WIDTH) - 1:0] gbar_req_id,
+    output [(CORES_PER_CLUSTER * `NC_WIDTH) - 1:0] gbar_req_size_m1,
+    output [(CORES_PER_CLUSTER * `NC_WIDTH) - 1:0] gbar_req_core_id,
+    input  [CORES_PER_CLUSTER - 1:0]               gbar_req_ready,
+    input  [CORES_PER_CLUSTER - 1:0]               gbar_rsp_valid,
+    input  [(CORES_PER_CLUSTER * `NB_WIDTH) - 1:0] gbar_rsp_id,
+
+    // fpu (unused) ----------------------------------------
+    //
     // input         fpu_fcsr_flags_valid,
     // input  [4:0]  fpu_fcsr_flags_bits,
     // // input  [63:0] fpu_store_data,
@@ -400,13 +413,27 @@ module Vortex import VX_gpu_pkg::*; #(
     assign smem_bus_if[2].req_ready = smem_a_ready[2];
     assign smem_bus_if[3].req_ready = smem_a_ready[3];
 
-    /* fpu */
+    // gbar -------------------------------------------------------------------
+`ifdef GBAR_ENABLE
+    VX_gbar_bus_if per_core_gbar_bus_if[CORES_PER_CLUSTER]();
+
+    for (genvar i = 0; i < CORES_PER_CLUSTER; i++) begin
+      assign gbar_req_valid[i] = per_core_gbar_bus_if[i].req_valid;
+      assign gbar_req_id[i * `NB_WIDTH +: `NB_WIDTH] = per_core_gbar_bus_if[i].req_id;
+      assign gbar_req_size_m1[i * `NC_WIDTH +: `NC_WIDTH] = per_core_gbar_bus_if[i].req_size_m1;
+      assign gbar_req_core_id[i * `NC_WIDTH +: `NC_WIDTH] = per_core_gbar_bus_if[i].req_core_id;
+      assign per_core_gbar_bus_if[i].req_ready = gbar_req_ready[i];
+      assign per_core_gbar_bus_if[i].rsp_valid = gbar_rsp_valid[i];
+      assign per_core_gbar_bus_if[i].rsp_id = gbar_rsp_id[i * `NB_WIDTH +: `NB_WIDTH];
+    end
+`endif
+
+    // fpu --------------------------------------------------------------------
 
     // assign {fpu_hartid, fpu_time, fpu_inst, fpu_fromint_data, fpu_fcsr_rm, fpu_dmem_resp_val, fpu_dmem_resp_type,
     //         fpu_dmem_resp_tag, fpu_valid, fpu_killx, fpu_killm, fpu_keep_clock_enabled} = '0;
 
-    genvar i;
-    generate for (i = 0; i < 4; i++) begin
+    for (genvar i = 0; i < 4; i++) begin
         always @(posedge clock) begin
             if (dcache_bus_if[i].req_valid && dcache_bus_if[i].req_ready && dcache_bus_if[i].req_data.rw) begin
                 // anything that starts with 0xC is heap address
@@ -417,7 +444,6 @@ module Vortex import VX_gpu_pkg::*; #(
             end
         end
     end
-    endgenerate
 
     logic sim_ebreak;
     logic [`NUM_REGS-1:0][`XLEN-1:0] sim_wb_value;
@@ -530,8 +556,7 @@ module Vortex import VX_gpu_pkg::*; #(
         .icache_bus_if  (icache_bus_if),
 
     `ifdef GBAR_ENABLE
-        // NOTE unused
-        .gbar_bus_if    (per_core_gbar_bus_if[i]),
+        .gbar_bus_if    (per_core_gbar_bus_if[CORE_ID]),
     `endif
 
         .sim_ebreak     (sim_ebreak),
