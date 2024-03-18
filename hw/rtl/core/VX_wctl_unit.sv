@@ -109,7 +109,13 @@ module VX_wctl_unit import VX_gpu_pkg::*; #(
     assign barrier.valid    = is_bar;
     assign barrier.id       = rs1_data[`NB_WIDTH-1:0];
 `ifdef GBAR_ENABLE
+`ifdef GBAR_CLUSTER_ENABLE
+    // all barriers are cluster-wide barriers, which is implemented by
+    // modifying the global barrier logic
+    assign barrier.is_global = 1'b1;
+`else
     assign barrier.is_global = rs1_data[31];
+`endif
 `else
     assign barrier.is_global = 1'b0;
 `endif

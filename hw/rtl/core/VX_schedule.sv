@@ -231,7 +231,13 @@ module VX_schedule import VX_gpu_pkg::*; #(
         `ifdef GBAR_ENABLE
             if (warp_ctl_if.valid && warp_ctl_if.barrier.valid
              && warp_ctl_if.barrier.is_global 
+        `ifdef GBAR_CLUSTER_ENABLE
+             // engage cluster barrier as soon as the barrier count is
+             // fulfilled, instead of requiring all warps to be synchronized
+             && (active_barrier_count[`NW_WIDTH-1:0] == warp_ctl_if.barrier.size_m1[`NW_WIDTH-1:0])) begin
+        `else
              && (curr_barrier_mask_n == active_warps)) begin
+        `endif
                 gbar_req_valid <= 1;
                 gbar_req_id <= warp_ctl_if.barrier.id;
                 gbar_req_size_m1 <= warp_ctl_if.barrier.size_m1[`NC_WIDTH-1:0];
