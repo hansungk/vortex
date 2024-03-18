@@ -4,7 +4,6 @@
 
 module Vortex import VX_gpu_pkg::*; #(
     parameter CORE_ID = 0,
-    parameter CORES_PER_CLUSTER = 1,
     parameter BOOTROM_HANG100 = 32'h10100,
     parameter NUM_THREADS = 0
 ) (
@@ -76,13 +75,13 @@ module Vortex import VX_gpu_pkg::*; #(
 
     // gbar ------------------------------------------------
 
-    output [CORES_PER_CLUSTER - 1:0]               gbar_req_valid,
-    output [(CORES_PER_CLUSTER * `NB_WIDTH) - 1:0] gbar_req_id,
-    output [(CORES_PER_CLUSTER * `NC_WIDTH) - 1:0] gbar_req_size_m1,
-    output [(CORES_PER_CLUSTER * `NC_WIDTH) - 1:0] gbar_req_core_id,
-    input  [CORES_PER_CLUSTER - 1:0]               gbar_req_ready,
-    input  [CORES_PER_CLUSTER - 1:0]               gbar_rsp_valid,
-    input  [(CORES_PER_CLUSTER * `NB_WIDTH) - 1:0] gbar_rsp_id,
+    output                   gbar_req_valid,
+    output [`NB_WIDTH - 1:0] gbar_req_id,
+    output [`NC_WIDTH - 1:0] gbar_req_size_m1,
+    output [`NC_WIDTH - 1:0] gbar_req_core_id,
+    input                    gbar_req_ready,
+    input                    gbar_rsp_valid,
+    input  [`NB_WIDTH - 1:0] gbar_rsp_id,
 
     // fpu (unused) ----------------------------------------
     //
@@ -415,17 +414,14 @@ module Vortex import VX_gpu_pkg::*; #(
 
     // gbar -------------------------------------------------------------------
 `ifdef GBAR_ENABLE
-    VX_gbar_bus_if per_core_gbar_bus_if[CORES_PER_CLUSTER]();
-
-    for (genvar i = 0; i < CORES_PER_CLUSTER; i++) begin
-      assign gbar_req_valid[i] = per_core_gbar_bus_if[i].req_valid;
-      assign gbar_req_id[i * `NB_WIDTH +: `NB_WIDTH] = per_core_gbar_bus_if[i].req_id;
-      assign gbar_req_size_m1[i * `NC_WIDTH +: `NC_WIDTH] = per_core_gbar_bus_if[i].req_size_m1;
-      assign gbar_req_core_id[i * `NC_WIDTH +: `NC_WIDTH] = per_core_gbar_bus_if[i].req_core_id;
-      assign per_core_gbar_bus_if[i].req_ready = gbar_req_ready[i];
-      assign per_core_gbar_bus_if[i].rsp_valid = gbar_rsp_valid[i];
-      assign per_core_gbar_bus_if[i].rsp_id = gbar_rsp_id[i * `NB_WIDTH +: `NB_WIDTH];
-    end
+    VX_gbar_bus_if gbar_bus_if();
+    assign gbar_req_valid = gbar_bus_if.req_valid;
+    assign gbar_req_id = gbar_bus_if.req_id;
+    assign gbar_req_size_m1 = gbar_bus_if.req_size_m1;
+    assign gbar_req_core_id = gbar_bus_if.req_core_id;
+    assign gbar_bus_if.req_ready = gbar_req_ready;
+    assign gbar_bus_if.rsp_valid = gbar_rsp_valid;
+    assign gbar_bus_if.rsp_id = gbar_rsp_id;
 `endif
 
     // fpu --------------------------------------------------------------------
@@ -556,7 +552,7 @@ module Vortex import VX_gpu_pkg::*; #(
         .icache_bus_if  (icache_bus_if),
 
     `ifdef GBAR_ENABLE
-        .gbar_bus_if    (per_core_gbar_bus_if[CORE_ID]),
+        .gbar_bus_if    (gbar_bus_if),
     `endif
 
         .sim_ebreak     (sim_ebreak),
