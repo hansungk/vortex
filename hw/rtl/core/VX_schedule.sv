@@ -162,10 +162,22 @@ module VX_schedule import VX_gpu_pkg::*; #(
             stalled_warps_n[warp_ctl_if.wid] = 0; // unlock warp
         end
     `ifdef GBAR_ENABLE
+    `ifdef GBAR_CLUSTER_ENABLE
+        // don't check req_id == rsp_id, otherwise it limits us to
+        // 1 outstanding request.  instead assume that any response coming
+        // back contains a valid id
+        if (gbar_bus_if.rsp_valid) begin
+            barrier_masks_n[gbar_bus_if.rsp_id] = '0;
+            // instead of unlocking all warps, only unlock those that requests
+            // for this barrier
+            barrier_stalls_n &= ~barrier_masks[gbar_bus_if.rsp_id];
+        end
+    `else
         if (gbar_bus_if.rsp_valid && (gbar_req_id == gbar_bus_if.rsp_id)) begin
             barrier_masks_n[gbar_bus_if.rsp_id] = '0;
             barrier_stalls_n = '0; // unlock all warps
         end
+    `endif
     `endif
 
         // Branch handling
