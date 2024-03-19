@@ -374,40 +374,47 @@ module VX_core import VX_gpu_pkg::*; #(
         if (!reset) begin
         $display("====================CORE : %d===================",CORE_ID);
         $display("time : %t", $time);
-        $display("perf_dcache_rd_req_per_cycle: %d", perf_dcache_rd_req_per_cycle);
-        $display("perf_dcache_wr_req_per_cycle: %d", perf_dcache_wr_req_per_cycle);
-        $display("perf_dcache_rsp_per_cycle: %d", perf_dcache_rsp_per_cycle);
-        $display("perf_icache_pending_read_cycle: %d", perf_icache_pending_read_cycle);
-        $display("perf_dcache_pending_read_cycle: %d", perf_dcache_pending_read_cycle);
-        $display("perf_icache_pending_reads: %d", perf_icache_pending_reads);
-        $display("perf_dcache_pending_reads: %d", perf_dcache_pending_reads);
-        $display("perf_icache_req_fire: %b", perf_icache_req_fire);
-        $display("perf_icache_rsp_fire: %b", perf_icache_rsp_fire);
-        $display("perf_dcache_rd_req_fire: %b", perf_dcache_rd_req_fire);
-        $display("perf_dcache_rd_req_fire_r: %b", perf_dcache_rd_req_fire_r);
-        $display("perf_dcache_wr_req_fire: %b", perf_dcache_wr_req_fire);
-        $display("perf_dcache_wr_req_fire_r: %b", perf_dcache_wr_req_fire_r);
-        $display("perf_dcache_rsp_fire: %b", perf_dcache_rsp_fire);
+        // $display("perf_dcache_rd_req_per_cycle: %d", perf_dcache_rd_req_per_cycle);
+        // $display("perf_dcache_wr_req_per_cycle: %d", perf_dcache_wr_req_per_cycle);
+        // $display("perf_dcache_rsp_per_cycle: %d", perf_dcache_rsp_per_cycle);
+        // $display("perf_icache_pending_read_cycle: %d", perf_icache_pending_read_cycle);
+        // $display("perf_dcache_pending_read_cycle: %d", perf_dcache_pending_read_cycle);
+        // $display("perf_icache_pending_reads: %d", perf_icache_pending_reads);
+        // $display("perf_dcache_pending_reads: %d", perf_dcache_pending_reads);
+        // $display("perf_icache_req_fire: %b", perf_icache_req_fire);
+        // $display("perf_icache_rsp_fire: %b", perf_icache_rsp_fire);
+        // $display("perf_dcache_rd_req_fire: %b", perf_dcache_rd_req_fire);
+        // $display("perf_dcache_rd_req_fire_r: %b", perf_dcache_rd_req_fire_r);
+        // $display("perf_dcache_wr_req_fire: %b", perf_dcache_wr_req_fire);
+        // $display("perf_dcache_wr_req_fire_r: %b", perf_dcache_wr_req_fire_r);
+        // $display("perf_dcache_rsp_fire: %b", perf_dcache_rsp_fire);
 
         $display("Instructions: %d, Cycles: %d, IPC: %f", commit_csr_if.instret, sched_csr_if.cycles,
           $itor(instrs) / $itor(cycles));
         $display("scheduler idle: %d cycles (%f%%)", pipeline_perf_if.sched_idles,
-          $itor(scheduler_idles) / $itor(cycles));
+          $itor(scheduler_idles) / $itor(cycles) * 100.0);
         $display("scheduler stalls: %d cycles (%f%%)", pipeline_perf_if.sched_stalls,
-          $itor(scheduler_stalls) / $itor(cycles));
+          $itor(scheduler_stalls) / $itor(cycles) * 100.0);
         $display("ibuffer stalls: %d cycles (%f%%)",pipeline_perf_if.ibf_stalls,
-          $itor(ibuf_stalls) / $itor(cycles));
+          $itor(ibuf_stalls) / $itor(cycles) * 100.0);
         // see VX_scoreboard.sv
-        $display("issue stalls: %d (ISSUE_WIDTH=%d) (alu=%f%%, fpu=%f%%, lsu=%f%%, sfu=%f%%)",
-          pipeline_perf_if.scb_stalls,
-          `ISSUE_WIDTH,
-          $itor(scrb_alu_per_core) / $itor(scrb_tot),
-          $itor(scrb_fpu_per_core) / $itor(scrb_tot),
-          $itor(scrb_lsu_per_core) / $itor(scrb_tot),
-          $itor(scrb_sfu_per_core) / $itor(scrb_tot));
+        $display("issue stalls: %d (summed across ISSUE_WIDTH=%d)",
+          pipeline_perf_if.scb_stalls, `ISSUE_WIDTH);
+        $display("issue stalls: alu %d (%f%%)",
+          scrb_alu_per_core,
+          $itor(scrb_alu_per_core) / $itor(scrb_tot) * 100.0);
+        $display("issue stalls: fpu %d (%f%%)",
+          scrb_fpu_per_core,
+          $itor(scrb_fpu_per_core) / $itor(scrb_tot) * 100.0);
+        $display("issue stalls: lsu %d (%f%%)",
+          scrb_lsu_per_core,
+          $itor(scrb_lsu_per_core) / $itor(scrb_tot) * 100.0);
+        $display("issue stalls: sfu %d (%f%%)",
+          scrb_sfu_per_core,
+          $itor(scrb_sfu_per_core) / $itor(scrb_tot) * 100.0);
         $display("sfu stalls: %d (scrs=%f, wctl=%f)",pipeline_perf_if.units_uses[`EX_SFU],
-          $itor(scrb_csrs_per_core) / $itor(sfu_tot),
-          $itor(scrb_wctl_per_core) / $itor(sfu_tot));
+          $itor(scrb_csrs_per_core) / $itor(sfu_tot) * 100.0,
+          $itor(scrb_wctl_per_core) / $itor(sfu_tot) * 100.0);
         $display("ifetches: %d", perf_ifetches);
         $display("ifetch latency: %f Cycles",
           $itor(icache_lat) / $itor(ifetches));
