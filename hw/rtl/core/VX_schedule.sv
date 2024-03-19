@@ -168,8 +168,8 @@ module VX_schedule import VX_gpu_pkg::*; #(
         // back contains a valid id
         if (gbar_bus_if.rsp_valid) begin
             barrier_masks_n[gbar_bus_if.rsp_id] = '0;
-            // instead of unlocking all warps, only unlock those that requests
-            // for this barrier
+            // instead of unlocking all warps, only unlock those that
+            // requested this barrier
             barrier_stalls_n &= ~barrier_masks[gbar_bus_if.rsp_id];
         end
     `else

@@ -334,24 +334,41 @@ module VX_core import VX_gpu_pkg::*; #(
     assign pipeline_perf_if.stores = perf_stores;
     assign pipeline_perf_if.load_latency = perf_dcache_lat;
     assign pipeline_perf_if.ifetch_latency = perf_icache_lat;
-    real instrs = commit_csr_if.instret;
-    real cycles = sched_csr_if.cycles;
-    real icache_lat = perf_icache_lat;
-    real ifetches = perf_ifetches;
-    real dcache_lat = perf_dcache_lat;
-    real loads = perf_loads;
-    real scheduler_idles = pipeline_perf_if.sched_idles;
-    real scheduler_stalls = pipeline_perf_if.sched_stalls;
-    real ibuf_stalls = pipeline_perf_if.ibf_stalls;
-    real scrb_alu_per_core = pipeline_perf_if.units_uses[`EX_ALU];
-    real scrb_fpu_per_core = pipeline_perf_if.units_uses[`EX_FPU];
-    real scrb_lsu_per_core = pipeline_perf_if.units_uses[`EX_LSU];
-    real scrb_sfu_per_core = pipeline_perf_if.units_uses[`EX_SFU];
-    real scrb_tot = scrb_alu_per_core+scrb_fpu_per_core+scrb_lsu_per_core+scrb_sfu_per_core;
+    int instrs;
+    assign instrs = commit_csr_if.instret;
+    int cycles;
+    assign cycles = sched_csr_if.cycles;
+    int icache_lat;
+    assign icache_lat = perf_icache_lat;
+    int ifetches;
+    assign ifetches = perf_ifetches;
+    int dcache_lat;
+    assign dcache_lat = perf_dcache_lat;
+    int loads;
+    assign loads = perf_loads;
+    int scheduler_idles;
+    assign scheduler_idles = pipeline_perf_if.sched_idles;
+    int scheduler_stalls;
+    assign scheduler_stalls = pipeline_perf_if.sched_stalls;
+    int ibuf_stalls;
+    assign ibuf_stalls = pipeline_perf_if.ibf_stalls;
+    int scrb_alu_per_core;
+    assign scrb_alu_per_core = pipeline_perf_if.units_uses[`EX_ALU];
+    int scrb_fpu_per_core;
+    assign scrb_fpu_per_core = pipeline_perf_if.units_uses[`EX_FPU];
+    int scrb_lsu_per_core;
+    assign scrb_lsu_per_core = pipeline_perf_if.units_uses[`EX_LSU];
+    int scrb_sfu_per_core;
+    assign scrb_sfu_per_core = pipeline_perf_if.units_uses[`EX_SFU];
+    int scrb_tot;
+    assign scrb_tot = scrb_alu_per_core+scrb_fpu_per_core+scrb_lsu_per_core+scrb_sfu_per_core;
 
-    real scrb_wctl_per_core = pipeline_perf_if.sfu_uses[`SFU_WCTL];
-    real scrb_csrs_per_core = pipeline_perf_if.sfu_uses[`SFU_CSRS];
-    real sfu_tot = scrb_wctl_per_core+scrb_csrs_per_core;
+    int scrb_wctl_per_core;
+    assign scrb_wctl_per_core = pipeline_perf_if.sfu_uses[`SFU_WCTL];
+    int scrb_csrs_per_core;
+    assign scrb_csrs_per_core = pipeline_perf_if.sfu_uses[`SFU_CSRS];
+    int sfu_tot;
+    assign sfu_tot = scrb_wctl_per_core+scrb_csrs_per_core;
     
     always @(negedge busy) begin
         if (!reset) begin
@@ -372,16 +389,31 @@ module VX_core import VX_gpu_pkg::*; #(
         $display("perf_dcache_wr_req_fire_r: %b", perf_dcache_wr_req_fire_r);
         $display("perf_dcache_rsp_fire: %b", perf_dcache_rsp_fire);
 
-        $display("Instructions: %d, Cycles: %d, IPC: %f", commit_csr_if.instret, sched_csr_if.cycles, instrs/cycles);
-        $display("scheduler idle: %d (%f)", pipeline_perf_if.sched_idles, scheduler_idles/cycles);
-        $display("scheduler stalls: %d (%f)", pipeline_perf_if.sched_stalls, scheduler_stalls/cycles);
-        $display("ibuffer stalls: %d (%f)",pipeline_perf_if.ibf_stalls, ibuf_stalls/cycles);
-        $display("issue stalls: %d(alu=%f, fpu=%f, lsu=%f, sfu=%f)",pipeline_perf_if.scb_stalls, scrb_alu_per_core/scrb_tot, scrb_fpu_per_core/scrb_tot, scrb_lsu_per_core/scrb_tot, scrb_sfu_per_core/scrb_tot);
-        $display("sfu stalls: %d (scrs=%f, wctl=%f)",pipeline_perf_if.units_uses[`EX_SFU], scrb_csrs_per_core/sfu_tot, scrb_wctl_per_core/sfu_tot);
+        $display("Instructions: %d, Cycles: %d, IPC: %f", commit_csr_if.instret, sched_csr_if.cycles,
+          $itor(instrs) / $itor(cycles));
+        $display("scheduler idle: %d cycles (%f%%)", pipeline_perf_if.sched_idles,
+          $itor(scheduler_idles) / $itor(cycles));
+        $display("scheduler stalls: %d cycles (%f%%)", pipeline_perf_if.sched_stalls,
+          $itor(scheduler_stalls) / $itor(cycles));
+        $display("ibuffer stalls: %d cycles (%f%%)",pipeline_perf_if.ibf_stalls,
+          $itor(ibuf_stalls) / $itor(cycles));
+        // see VX_scoreboard.sv
+        $display("issue stalls: %d (ISSUE_WIDTH=%d) (alu=%f%%, fpu=%f%%, lsu=%f%%, sfu=%f%%)",
+          pipeline_perf_if.scb_stalls,
+          `ISSUE_WIDTH,
+          $itor(scrb_alu_per_core) / $itor(scrb_tot),
+          $itor(scrb_fpu_per_core) / $itor(scrb_tot),
+          $itor(scrb_lsu_per_core) / $itor(scrb_tot),
+          $itor(scrb_sfu_per_core) / $itor(scrb_tot));
+        $display("sfu stalls: %d (scrs=%f, wctl=%f)",pipeline_perf_if.units_uses[`EX_SFU],
+          $itor(scrb_csrs_per_core) / $itor(sfu_tot),
+          $itor(scrb_wctl_per_core) / $itor(sfu_tot));
         $display("ifetches: %d", perf_ifetches);
-        $display("ifetch latency: %f Cycles", icache_lat/ifetches);
+        $display("ifetch latency: %f Cycles",
+          $itor(icache_lat) / $itor(ifetches));
         $display("loads: %d", perf_loads);
-        $display("load latency: %f Cycles", dcache_lat/loads);
+        $display("load latency: %f Cycles",
+          $itor(dcache_lat) / $itor(loads));
         $display("stores: %d", perf_stores);
         end
     end
