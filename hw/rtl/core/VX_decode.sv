@@ -533,6 +533,12 @@ module VX_decode  #(
                     default:;
                 endcase
             end
+        `ifdef EXT_T_ENABLE
+            `INST_EXT4: begin
+                ex_type = `EX_TENSOR;
+                op_type = `INST_TENSOR_HMMA;
+            end
+        `endif
             default:;
         endcase
     end

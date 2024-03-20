@@ -58,8 +58,9 @@
 `define EX_LSU          1
 `define EX_SFU          2
 `define EX_FPU          (`EX_SFU + `EXT_F_ENABLED)
+`define EX_TENSOR       (`EX_FPU + `EXT_T_ENABLED)
 
-`define NUM_EX_UNITS    (3 + `EXT_F_ENABLED)
+`define NUM_EX_UNITS    (3 + `EXT_F_ENABLED + `EXT_T_ENABLED)
 `define EX_BITS         `CLOG2(`NUM_EX_UNITS)
 `define EX_WIDTH        `UP(`EX_BITS)
 
@@ -252,6 +253,8 @@
 `define INST_SFU_CSR(f3)     (4'h6 + 4'(f3) - 4'h1)
 `define INST_SFU_IS_WCTL(op) (op <= 5)
 `define INST_SFU_IS_CSR(op)  (op >= 6 && op <= 8)
+
+`define INST_TENSOR_HMMA     4'b0000
 
 ///////////////////////////////////////////////////////////////////////////////
 

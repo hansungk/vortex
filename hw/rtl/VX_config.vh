@@ -40,6 +40,10 @@
 `define EXT_F_ENABLE
 `endif
 
+`ifndef EXT_T_DISABLE
+`define EXT_T_ENABLE
+`endif
+
 `ifndef XLEN_32
 `ifndef XLEN_64
 `define XLEN_32
@@ -616,6 +620,12 @@
     `define EXT_F_ENABLED   1
 `else
     `define EXT_F_ENABLED   0
+`endif
+
+`ifdef EXT_T_ENABLE
+    `define EXT_T_ENABLED   1
+`else
+    `define EXT_T_ENABLED   0
 `endif
 
 `ifdef EXT_M_ENABLE

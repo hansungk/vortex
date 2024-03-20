@@ -27,6 +27,10 @@ module VX_commit import VX_gpu_pkg::*; #(
 `endif
     VX_commit_if.slave      sfu_commit_if [`ISSUE_WIDTH],
 
+`ifdef EXT_T_ENABLE
+    VX_commit_if.slave      tensor_commit_if [`ISSUE_WIDTH],
+`endif
+
     // outputs
     VX_writeback_if.master  writeback_if  [`ISSUE_WIDTH],
     VX_commit_csr_if.master commit_csr_if,
@@ -66,6 +70,9 @@ module VX_commit import VX_gpu_pkg::*; #(
             `ifdef EXT_F_ENABLE
                 fpu_commit_if[i].valid,
             `endif
+            `ifdef EXT_T_ENABLE
+                tensor_commit_if[i].valid,
+            `endif
                 alu_commit_if[i].valid,
                 lsu_commit_if[i].valid
             }),
@@ -74,6 +81,9 @@ module VX_commit import VX_gpu_pkg::*; #(
             `ifdef EXT_F_ENABLE
                 fpu_commit_if[i].ready,
             `endif
+            `ifdef EXT_T_ENABLE
+                tensor_commit_if[i].ready,
+            `endif
                 alu_commit_if[i].ready,
                 lsu_commit_if[i].ready                
             }),
@@ -81,6 +91,9 @@ module VX_commit import VX_gpu_pkg::*; #(
                 sfu_commit_if[i].data,
             `ifdef EXT_F_ENABLE
                 fpu_commit_if[i].data,
+            `endif
+            `ifdef EXT_T_ENABLE
+                tensor_commit_if[i].data,
             `endif
                 alu_commit_if[i].data,
                 lsu_commit_if[i].data       
@@ -157,7 +170,18 @@ module VX_commit import VX_gpu_pkg::*; #(
 
     // Committed instructions
 
-    wire [`ISSUE_WIDTH-1:0] committed = commit_fire & commit_eop;
+    // temporary hack to not underflow the pending instructions buffer
+    wire [`ISSUE_WIDTH-1:0] final_hmma;
+`ifdef EXT_T_ENABLE
+    for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin
+        assign final_hmma[i] = ~(tensor_commit_if[i].ready && tensor_commit_if[i].valid) || (tensor_commit_if[i].data.rd == `NR_BITS'(32 + 23)); 
+    end
+`else
+    assign final_hmma = '1;
+`endif
+
+
+    wire [`ISSUE_WIDTH-1:0] committed = (commit_fire & commit_eop) & final_hmma;
 
     VX_pipe_register #(
         .DATAW  (`ISSUE_WIDTH * (1 + `NW_WIDTH)),
