@@ -385,6 +385,11 @@
 `define LATENCY_FCVT 5
 `endif
 
+// Tensor Core Latency
+`ifndef LATENCY_HMMA
+`define LATENCY_HMMA 4
+`endif
+
 // Icache Configurable Knobs //////////////////////////////////////////////////
 
 // Cache Enable
