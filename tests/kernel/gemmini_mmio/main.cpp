@@ -16,19 +16,23 @@ int main() {
 
   // load up A and B and C
   uint32_t spad_A = 0x00000000;
-  uint32_t spad_B = 0x00000100; // 16B word addressed
+  uint32_t spad_B = 0x00000080; // 16B word addressed
   uint32_t acc_C = 0x80000000; // accmem + accumulate
-  uint32_t spad_C = 0x00000200;
+  uint32_t spad_C = 0x00000100;
 
-  float *smem_A = (float *) SPAD_TO_SMEM(spad_A); // 0xff000000; // byte addressed
+  volatile float *smem_A = (float *) SPAD_TO_SMEM(spad_A); // 0xff000000; // byte addressed
   float *smem_B = (float *) SPAD_TO_SMEM(spad_B); // 0xff000200;
   float *smem_C = (float *) SPAD_TO_SMEM(spad_C); // 0xff000400;
 
-  int I = 5;
-  int J = 5;
-  int K = 5;
+  int I = 32 / DIM;
+  int J = 32 / DIM;
+  int K = 32 / DIM;
 
-  gemmini_config_st(DIM * 4 * J)
+  sprintf(print_buf, "A spad: 0x%x-0x%x, smem: 0x%x-%x\n", spad_A, spad_A + I * K * DIM, (uint32_t) smem_A, (uint32_t) smem_A + sizeof(float) * I * K * DIM * DIM);
+  sprintf(print_buf, "B spad: 0x%x-0x%x, smem: 0x%x-%x\n", spad_B, spad_B + K * J * DIM, (uint32_t) smem_B, (uint32_t) smem_B + sizeof(float) * K * J * DIM * DIM);
+  sprintf(print_buf, "C spad: 0x%x-0x%x, smem: 0x%x-%x\n", spad_C, spad_C + I * J * DIM, (uint32_t) smem_C, (uint32_t) smem_C + sizeof(float) * I * J * DIM * DIM);
+
+  gemmini_config_st(DIM * 4 * J);
 
   // load A with 128->1 in row-major order
   for (int i = 0; i < I; i++) {
@@ -50,12 +54,12 @@ int main() {
     }
   }
 
-  for (int i = 0; i < I * J * DIM * DIM; i++) smem_C[i] = 0.f;
+  for (int i = 0; i < I * J * DIM * DIM; i++) smem_C[i] = 1.f;
 
-  pfence();
+  fence();
 
   // sprintf(print_buf, "\nA in\n");
-  // for (int i = I * DIM - 1; i < I * DIM; i++) {
+  // for (int i = 0; i < I * DIM; i++) {
   //   for (int j = 0; j < K * DIM; j++) {
   //     sprintf(print_buf, "%d ", (int) (smem_A[SMEM_MAT_OFFSET(i, j, K * DIM)]));
   //   }
@@ -81,7 +85,7 @@ int main() {
       /*a_transpose=*/0, /*b_transpose=*/0, /*full_C=*/0, /*low_D=*/0,
       /*no_bias=*/1, /*repeating_bias=*/0, /*act=*/NO_ACTIVATION);
 
-  for (int i = 0; i < 32; i++) pfence();
+  fence();
 
   // check results
   for (int i = 0; i < I * DIM; i++) {
