@@ -350,6 +350,8 @@ module VX_core import VX_gpu_pkg::*; #(
     assign scheduler_idles = pipeline_perf_if.sched_idles;
     int scheduler_stalls;
     assign scheduler_stalls = pipeline_perf_if.sched_stalls;
+    int scheduler_barrier_stalls;
+    assign scheduler_barrier_stalls = pipeline_perf_if.sched_barrier_stalls;
     int ibuf_stalls;
     assign ibuf_stalls = pipeline_perf_if.ibf_stalls;
     int scrb_alu_per_core;
@@ -395,6 +397,10 @@ module VX_core import VX_gpu_pkg::*; #(
           $itor(scheduler_idles) / $itor(cycles) * 100.0);
         $display("scheduler stalls: %d cycles (%f%%)", pipeline_perf_if.sched_stalls,
           $itor(scheduler_stalls) / $itor(cycles) * 100.0);
+        $display("scheduler barrier stalls: %d count across NUM_WARPS=%d (%f%%)",
+          pipeline_perf_if.sched_barrier_stalls,
+          `NUM_WARPS,
+          $itor(scheduler_barrier_stalls) / $itor(cycles) * 100.0);
         $display("ibuffer stalls: %d cycles (%f%%)",pipeline_perf_if.ibf_stalls,
           $itor(ibuf_stalls) / $itor(cycles) * 100.0);
         // see VX_scoreboard.sv
