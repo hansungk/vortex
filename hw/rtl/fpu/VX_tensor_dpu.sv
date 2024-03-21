@@ -6,6 +6,8 @@ module VX_tensor_dpu #(
     input clk,
     input reset,
 
+    input stall,
+
     input valid_in,
     input [3:0][1:0][31:0] A_tile,
     input [1:0][3:0][31:0] B_tile,
@@ -28,7 +30,7 @@ module VX_tensor_dpu #(
     ) shift_reg (
         .clk      (clk),
         .reset    (reset),
-        .enable   (1'b1),
+        .enable   (~stall),
         .data_in  ({valid_in, result_hmma}),
         .data_out ({valid_out, D_tile})
     );

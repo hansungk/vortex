@@ -17,6 +17,8 @@ module VX_tensor_tb(
         .clk(clk),
         .reset(reset),
 
+        .stall(1'b0),
+
         .valid_in(valid_in),
         .A_tile(A_tile),
         .B_tile(B_tile),

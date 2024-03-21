@@ -74,8 +74,8 @@ module VX_uop_sequencer import VX_gpu_pkg::*; (
                     NEXT,
                     HMMA_SET0_STEP0_1,
                     `EX_BITS'(`EX_TENSOR),
-                    `INST_OP_BITS'(0), // denotes that the first half is being computed
-                    `INST_MOD_BITS'(0), // field is unused for HMMA
+                    `INST_OP_BITS'(0), // denotes that the first step is being computed
+                    `INST_MOD_BITS'(0), // denotes that this is first substep (tensor core also tracks this)
                     1'b1, // write back
                     1'b0, // don't use PC
                     1'b0, // don't use immediate
@@ -92,8 +92,8 @@ module VX_uop_sequencer import VX_gpu_pkg::*; (
                     FINISH,
                     HMMA_SET0_STEP0_0,
                     `EX_BITS'(`EX_TENSOR),
-                    `INST_OP_BITS'(1), // denotes that the second half is being computed
-                    `INST_MOD_BITS'(0), // field is unused for HMMA
+                    `INST_OP_BITS'(0), // denotes that the first step is being computed
+                    `INST_MOD_BITS'(1), // denotes that this is first substep (tensor core also tracks this)
                     1'b1, // write back
                     1'b0, // don't use PC
                     1'b0, // don't use immediate
@@ -161,6 +161,12 @@ module VX_uop_sequencer import VX_gpu_pkg::*; (
     assign ibuffer_if.data = use_uop ? ibuffer_output : uop_sequencer_if.data;
 
     always @(posedge clk) begin
+        
+        if (use_uop) begin
+            $display("unexpectedly used uop at %d", $time);
+        end
+        
+
         if (reset) begin
             upc_r <= '0;
             use_uop_1d <= '0;
