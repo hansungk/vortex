@@ -44,6 +44,9 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
 
     `POP_COUNT(perf_stalls_per_cycle, perf_issue_stalls_per_cycle);    
 
+    // NOTE(hansung): Because of OR-reduce, things are counted as once even when
+    // multiple warps were using the same execution unit type at a given cycle.
+    // This might result in an overall undercount
     VX_reduce #(
         .DATAW_IN (`NUM_EX_UNITS),
         .N  (`ISSUE_WIDTH),
@@ -152,6 +155,7 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
         assign perf_issue_stalls_per_cycle[i] = ibuffer_if[i].valid && ~ibuffer_if[i].ready;
     `endif
 
+        // NOTE(hansung): why is inuse_rd checked? to prevent WAW?
         wire [3:0] operands_busy = {inuse_rd, inuse_rs1, inuse_rs2, inuse_rs3};
         wire operands_ready = ~(| operands_busy);
         
