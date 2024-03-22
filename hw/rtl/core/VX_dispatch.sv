@@ -176,36 +176,72 @@ module VX_dispatch import VX_gpu_pkg::*; #(
     end
 
 `ifdef PERF_ENABLE    
-    wire [`NUM_EX_UNITS-1:0] perf_unit_stalls_per_cycle, perf_unit_stalls_per_cycle_r;
+    wire [`NUM_EX_UNITS-1:0][`PERF_CTR_BITS-1:0] perf_unit_stalls_per_cycle_r;
+    wire [`NUM_EX_UNITS-1:0][`PERF_CTR_BITS-1:0] perf_unit_valids_per_cycle_r;
+    wire [`NUM_EX_UNITS-1:0][`PERF_CTR_BITS-1:0] perf_unit_fires_per_cycle_r;
+    reg [`NUM_EX_UNITS-1:0][`PERF_CTR_BITS-1:0] perf_unit_stalls_per_cycle;
+    reg [`NUM_EX_UNITS-1:0][`PERF_CTR_BITS-1:0] perf_unit_valids_per_cycle;
+    reg [`NUM_EX_UNITS-1:0][`PERF_CTR_BITS-1:0] perf_unit_fires_per_cycle;
     reg [`ISSUE_WIDTH-1:0][`NUM_EX_UNITS-1:0] perf_issue_unit_stalls_per_cycle;
+    reg [`ISSUE_WIDTH-1:0][`NUM_EX_UNITS-1:0] perf_issue_unit_valids_per_cycle;
+    reg [`ISSUE_WIDTH-1:0][`NUM_EX_UNITS-1:0] perf_issue_unit_fires_per_cycle;
     reg [`NUM_EX_UNITS-1:0][`PERF_CTR_BITS-1:0] perf_stalls_r;
+    reg [`NUM_EX_UNITS-1:0][`PERF_CTR_BITS-1:0] perf_valids_r;
+    reg [`NUM_EX_UNITS-1:0][`PERF_CTR_BITS-1:0] perf_fires_r;
 
     for (genvar i=0; i < `ISSUE_WIDTH; ++i) begin
         always @(*) begin        
             perf_issue_unit_stalls_per_cycle[i] = '0;
+            perf_issue_unit_valids_per_cycle[i] = '0;
+            perf_issue_unit_fires_per_cycle[i] = '0;
             if (operands_if[i].valid && ~operands_if[i].ready) begin
                 perf_issue_unit_stalls_per_cycle[i][operands_if[i].data.ex_type] = 1;
+            end
+            if (operands_if[i].valid) begin
+                perf_issue_unit_valids_per_cycle[i][operands_if[i].data.ex_type] = 1;
+            end
+            if (operands_if[i].valid && operands_if[i].ready) begin
+                perf_issue_unit_fires_per_cycle[i][operands_if[i].data.ex_type] = 1;
             end
         end
     end
 
-    VX_reduce #(
-        .DATAW_IN (`NUM_EX_UNITS),
-        .N  (`ISSUE_WIDTH),
-        .OP ("|")
-    ) reduce (
-        .data_in (perf_issue_unit_stalls_per_cycle),
-        .data_out (perf_unit_stalls_per_cycle)
-    );
+    for (genvar i=0; i < `NUM_EX_UNITS; ++i) begin
+        always @(*) begin
+            perf_unit_stalls_per_cycle[i] = '0;
+            perf_unit_valids_per_cycle[i] = '0;
+            perf_unit_fires_per_cycle[i] = '0;
+            for (integer isw = 0; isw < `ISSUE_WIDTH; ++isw) begin
+                perf_unit_stalls_per_cycle[i] = perf_unit_stalls_per_cycle[i] + perf_issue_unit_stalls_per_cycle[isw][i];
+                perf_unit_valids_per_cycle[i] = perf_unit_valids_per_cycle[i] + perf_issue_unit_valids_per_cycle[isw][i];
+                perf_unit_fires_per_cycle[i]  = perf_unit_fires_per_cycle[i]  + perf_issue_unit_fires_per_cycle[isw][i];
+            end
+        end
+    end
+
+    // VX_reduce #(
+    //     .DATAW_IN (`NUM_EX_UNITS),
+    //     .N  (`ISSUE_WIDTH),
+    //     .OP ("|")
+    // ) reduce (
+    //     .data_in (perf_issue_unit_stalls_per_cycle),
+    //     .data_out (perf_unit_stalls_per_cycle)
+    // );
 
     `BUFFER(perf_unit_stalls_per_cycle_r, perf_unit_stalls_per_cycle);
+    `BUFFER(perf_unit_valids_per_cycle_r, perf_unit_valids_per_cycle);
+    `BUFFER(perf_unit_fires_per_cycle_r, perf_unit_fires_per_cycle);
 
     for (genvar i = 0; i < `NUM_EX_UNITS; ++i) begin
         always @(posedge clk) begin
             if (reset) begin
                 perf_stalls_r[i] <= '0;
+                perf_valids_r[i] <= '0;
+                perf_fires_r[i] <= '0;
             end else begin
                 perf_stalls_r[i] <= perf_stalls_r[i] + `PERF_CTR_BITS'(perf_unit_stalls_per_cycle_r[i]);
+                perf_valids_r[i] <= perf_valids_r[i] + `PERF_CTR_BITS'(perf_unit_valids_per_cycle_r[i]);
+                perf_fires_r[i] <= perf_fires_r[i] + `PERF_CTR_BITS'(perf_unit_fires_per_cycle_r[i]);
             end
         end
     end
