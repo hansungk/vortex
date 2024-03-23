@@ -21,6 +21,7 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
 
 `ifdef PERF_ENABLE
     output reg [`PERF_CTR_BITS-1:0] perf_scb_stalls,
+    output reg [`PERF_CTR_BITS-1:0] perf_scb_fires,
     output reg [`PERF_CTR_BITS-1:0] perf_units_uses [`NUM_EX_UNITS],
     output reg [`PERF_CTR_BITS-1:0] perf_sfu_uses [`NUM_SFU_UNITS],
 `endif
@@ -49,7 +50,6 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
 
     `POP_COUNT(perf_stalls_per_cycle, perf_issue_stalls_per_cycle);    
     `POP_COUNT(perf_fires_per_cycle, perf_issue_fires_per_cycle);    
-    reg [`PERF_CTR_BITS-1:0] perf_scb_fires;
 
     for (genvar i=0; i < `NUM_EX_UNITS; ++i) begin
         always @(*) begin
