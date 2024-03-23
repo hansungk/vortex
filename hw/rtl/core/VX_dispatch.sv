@@ -22,6 +22,9 @@ module VX_dispatch import VX_gpu_pkg::*; #(
 
 `ifdef PERF_ENABLE
     output wire [`PERF_CTR_BITS-1:0] perf_stalls [`NUM_EX_UNITS],
+    output wire [`PERF_CTR_BITS-1:0] perf_valids [`NUM_EX_UNITS],
+    output wire [`PERF_CTR_BITS-1:0] perf_fires  [`NUM_EX_UNITS],
+    output wire [`PERF_CTR_BITS-1:0] perf_any_fire_cycles,
 `endif
     // inputs
     VX_operands_if.slave    operands_if [`ISSUE_WIDTH],
@@ -188,6 +191,7 @@ module VX_dispatch import VX_gpu_pkg::*; #(
     reg [`NUM_EX_UNITS-1:0][`PERF_CTR_BITS-1:0] perf_stalls_r;
     reg [`NUM_EX_UNITS-1:0][`PERF_CTR_BITS-1:0] perf_valids_r;
     reg [`NUM_EX_UNITS-1:0][`PERF_CTR_BITS-1:0] perf_fires_r;
+    reg [`PERF_CTR_BITS-1:0]                    perf_any_fire_cycles_r;
 
     for (genvar i=0; i < `ISSUE_WIDTH; ++i) begin
         always @(*) begin        
@@ -232,23 +236,38 @@ module VX_dispatch import VX_gpu_pkg::*; #(
     `BUFFER(perf_unit_valids_per_cycle_r, perf_unit_valids_per_cycle);
     `BUFFER(perf_unit_fires_per_cycle_r, perf_unit_fires_per_cycle);
 
+    reg perf_any_fire;
+    always @(*) begin
+        perf_any_fire = 1'b0;
+        for (integer i = 0; i < `NUM_EX_UNITS; ++i) begin
+            if (perf_unit_fires_per_cycle_r[i] != '0) begin
+                perf_any_fire = 1'b1;
+            end
+        end
+    end
+
     for (genvar i = 0; i < `NUM_EX_UNITS; ++i) begin
         always @(posedge clk) begin
             if (reset) begin
                 perf_stalls_r[i] <= '0;
                 perf_valids_r[i] <= '0;
                 perf_fires_r[i] <= '0;
+                perf_any_fire_cycles_r <= '0;
             end else begin
                 perf_stalls_r[i] <= perf_stalls_r[i] + `PERF_CTR_BITS'(perf_unit_stalls_per_cycle_r[i]);
                 perf_valids_r[i] <= perf_valids_r[i] + `PERF_CTR_BITS'(perf_unit_valids_per_cycle_r[i]);
                 perf_fires_r[i] <= perf_fires_r[i] + `PERF_CTR_BITS'(perf_unit_fires_per_cycle_r[i]);
+                perf_any_fire_cycles_r <= perf_any_fire_cycles_r + `PERF_CTR_BITS'(perf_any_fire);
             end
         end
     end
     
     for (genvar i=0; i < `NUM_EX_UNITS; ++i) begin
         assign perf_stalls[i] = perf_stalls_r[i];
+        assign perf_valids[i] = perf_valids_r[i];
+        assign perf_fires[i]  = perf_fires_r[i];
     end
+    assign perf_any_fire_cycles = perf_any_fire_cycles_r;
 `endif
 
 `ifdef DBG_TRACE_CORE_PIPELINE_VCS

@@ -21,6 +21,10 @@ interface VX_pipeline_perf_if ();
     wire [`PERF_CTR_BITS-1:0] scb_stalls;
     wire [`PERF_CTR_BITS-1:0] units_uses [`NUM_EX_UNITS];
     wire [`PERF_CTR_BITS-1:0] sfu_uses [`NUM_SFU_UNITS];
+    wire [`PERF_CTR_BITS-1:0] dispatch_stalls [`NUM_EX_UNITS];
+    wire [`PERF_CTR_BITS-1:0] dispatch_valids [`NUM_EX_UNITS];
+    wire [`PERF_CTR_BITS-1:0] dispatch_fires [`NUM_EX_UNITS];
+    wire [`PERF_CTR_BITS-1:0] dispatch_any_fire_cycles;
 
     wire [`PERF_CTR_BITS-1:0] ifetches;
     wire [`PERF_CTR_BITS-1:0] loads;
@@ -38,7 +42,11 @@ interface VX_pipeline_perf_if ();
         output ibf_stalls,
         output scb_stalls,
         output units_uses,
-        output sfu_uses
+        output sfu_uses,
+        output dispatch_stalls,
+        output dispatch_valids,
+        output dispatch_fires,
+        output dispatch_any_fire_cycles
     );
 
     modport slave (
@@ -49,6 +57,10 @@ interface VX_pipeline_perf_if ();
         input scb_stalls,
         input units_uses,
         input sfu_uses,
+        input dispatch_stalls,
+        input dispatch_valids,
+        input dispatch_fires,
+        input dispatch_any_fire_cycles,
         input ifetches,
         input loads,
         input stores,
