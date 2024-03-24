@@ -115,7 +115,7 @@ clean:
 	rm -rf $(PROJECT) *.o .depend
 
 clean-all: clean
-	rm -rf *.elf *.bin *.dump
+	rm -rf *.elf *.dump
 
 ifneq ($(MAKECMDGOALS),clean)
     -include .depend
