@@ -1,4 +1,5 @@
 #include <iostream>
+#include <fstream>
 #include <unistd.h>
 #include <string.h>
 #include <vector>
@@ -201,10 +202,19 @@ int main(int argc, char *argv[]) {
   memcpy(staging_buf.data(), &kernel_arg, sizeof(kernel_arg_t));
   RT_CHECK(vx_copy_to_dev(device, KERNEL_ARG_DEV_MEM_ADDR, staging_buf.data(), sizeof(kernel_arg_t)));
 
+  std::ofstream file("args.bin", std::ios::binary | std::ios::out);
+  if (!file) {
+    std::cerr << "error: failed to open args.bin for writing\n";
+    exit(EXIT_FAILURE);
+  }
+  file.write(reinterpret_cast<char *>(staging_buf.data()), sizeof(kernel_arg_t));
+  file.close();
+
   // generate source data
   source_data.resize(2 * num_points);
   for (uint32_t i = 0; i < source_data.size(); ++i) {
-    source_data[i] = Comparator<TYPE>::generate();
+    // source_data[i] = Comparator<TYPE>::generate();
+    source_data[i] = static_cast<float>(i);
   }
 
   // upload source buffer0
@@ -215,6 +225,14 @@ int main(int argc, char *argv[]) {
       buf_ptr[i] = source_data[2 * i + 0];
     }
     RT_CHECK(vx_copy_to_dev(device, kernel_arg.src0_addr, staging_buf.data(), buf_size));
+
+    std::ofstream file("input.a.bin", std::ios::binary | std::ios::out);
+    if (!file) {
+      std::cerr << "error: failed to open input.a.bin for writing\n";
+      exit(EXIT_FAILURE);
+    }
+    file.write(reinterpret_cast<char *>(buf_ptr), buf_size);
+    file.close();
   }
 
   // upload source buffer1
@@ -225,6 +243,14 @@ int main(int argc, char *argv[]) {
       buf_ptr[i] = source_data[2 * i + 1];
     }   
     RT_CHECK(vx_copy_to_dev(device, kernel_arg.src1_addr, staging_buf.data(), buf_size));
+
+    std::ofstream file("input.b.bin", std::ios::binary | std::ios::out);
+    if (!file) {
+      std::cerr << "error: failed to open input.b.bin for writing\n";
+      exit(EXIT_FAILURE);
+    }
+    file.write(reinterpret_cast<char *>(buf_ptr), buf_size);
+    file.close();
   }
 
   // clear destination buffer
