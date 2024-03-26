@@ -50,6 +50,7 @@ void vx_wspawn_wait();
 void vx_spawn_kernel(context_t * ctx, vx_spawn_kernel_cb callback, void * arg);
 
 void vx_spawn_tasks(int num_tasks, vx_spawn_tasks_cb callback, void * arg);
+void vx_spawn_tasks_cluster(int num_tasks, vx_spawn_tasks_cb callback, void * arg);
 
 void vx_serial(vx_serial_cb callback, void * arg);
 
