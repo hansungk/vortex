@@ -17,7 +17,9 @@
 #include <stdint.h>
 #include <stdio.h>
 
+#ifndef CORES_PER_CLUSTER
 #define CORES_PER_CLUSTER 2
+#endif
 
 #ifdef __cplusplus
 extern "C" {

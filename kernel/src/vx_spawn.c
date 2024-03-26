@@ -128,13 +128,24 @@ static void __attribute__ ((noinline)) spawn_tasks_rem_stub() {
   (p_wspawn_args->callback)(task_id, p_wspawn_args->arg);
 }
 
-static void __attribute__ ((noinline)) spawn_tasks_all_cb() {  
+static void __attribute__ ((noinline)) spawn_tasks_cluster_all_cb() {  
   // activate all threads
   vx_tmc(-1);
 
   // call stub routine
   // spawn_tasks_all_stub();
   spawn_tasks_cluster_all_stub();
+
+  // disable warp
+  vx_tmc_zero();
+}
+
+static void __attribute__ ((noinline)) spawn_tasks_all_cb() {  
+  // activate all threads
+  vx_tmc(-1);
+
+  // call stub routine
+  spawn_tasks_all_stub();
 
   // disable warp
   vx_tmc_zero();
@@ -189,7 +200,7 @@ void vx_spawn_tasks_cluster(int num_tasks, vx_spawn_tasks_cb callback, void *arg
   if (num_full_warps >= 1) {
     // execute callback on other warps
     int nw = MIN(num_full_warps, NW);
-    vx_wspawn(nw, spawn_tasks_all_cb);
+    vx_wspawn(nw, spawn_tasks_cluster_all_cb);
 
     // activate all threads
     vx_tmc(-1);
@@ -256,11 +267,7 @@ void vx_spawn_tasks(int num_tasks, vx_spawn_tasks_cb callback , void * arg) {
     rW = TW - fW * NW;                  // remaining warps
   }
 
-  int cluster_id = core_id / CORES_PER_CLUSTER;
-  const int tasks_per_cluster = tasks_per_core * CORES_PER_CLUSTER;
-  const int offset = cluster_id * tasks_per_cluster;
-  wspawn_tasks_args_t wspawn_args = { callback, arg, offset, fW, rW };
-  // wspawn_tasks_args_t wspawn_args = { callback, arg, core_id * tasks_per_core, fW, rW };
+  wspawn_tasks_args_t wspawn_args = { callback, arg, core_id * tasks_per_core, fW, rW };
   g_wspawn_args[core_id] = &wspawn_args;
 
 	if (TW >= 1)	{
@@ -272,7 +279,7 @@ void vx_spawn_tasks(int num_tasks, vx_spawn_tasks_cb callback , void * arg) {
     vx_tmc(-1);
 
     // call stub routine
-    spawn_tasks_cluster_all_stub();
+    spawn_tasks_all_stub();
   
     // back to single-threaded
     vx_tmc_one();
