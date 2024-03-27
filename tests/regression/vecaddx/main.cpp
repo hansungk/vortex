@@ -107,9 +107,9 @@ static void parse_args(int argc, char **argv) {
 
 void cleanup() {
   if (device) {    
-    vx_mem_free(device, kernel_arg.src0_addr);
-    vx_mem_free(device, kernel_arg.src1_addr);
-    vx_mem_free(device, kernel_arg.dst_addr);
+    // vx_mem_free(device, kernel_arg.src0_addr);
+    // vx_mem_free(device, kernel_arg.src1_addr);
+    // vx_mem_free(device, kernel_arg.dst_addr);
     vx_dev_close(device);
   }
 }
@@ -182,9 +182,12 @@ int main(int argc, char *argv[]) {
 
   // allocate device memory
   std::cout << "allocate device memory" << std::endl;
-  RT_CHECK(vx_mem_alloc(device, buf_size, VX_MEM_TYPE_GLOBAL, &kernel_arg.src0_addr));
-  RT_CHECK(vx_mem_alloc(device, buf_size, VX_MEM_TYPE_GLOBAL, &kernel_arg.src1_addr));
-  RT_CHECK(vx_mem_alloc(device, buf_size, VX_MEM_TYPE_GLOBAL, &kernel_arg.dst_addr));
+  // RT_CHECK(vx_mem_alloc(device, buf_size, VX_MEM_TYPE_GLOBAL, &kernel_arg.src0_addr));
+  // RT_CHECK(vx_mem_alloc(device, buf_size, VX_MEM_TYPE_GLOBAL, &kernel_arg.src1_addr));
+  // RT_CHECK(vx_mem_alloc(device, buf_size, VX_MEM_TYPE_GLOBAL, &kernel_arg.dst_addr));
+  kernel_arg.src0_addr = 0x20000UL;
+  kernel_arg.src1_addr = 0x28000UL;
+  kernel_arg.dst_addr = 0xc0000000UL;
 
   kernel_arg.num_points = num_points;
 
