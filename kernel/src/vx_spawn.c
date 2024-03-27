@@ -102,14 +102,15 @@ static void __attribute__ ((noinline)) spawn_tasks_cluster_all_stub() {
   int wid = vx_warp_id();
   int tid = vx_thread_id();
 
-  const int core_id_in_cluster = vx_core_id() % CORES_PER_CLUSTER;
-  const int cluster_wid = CORES_PER_CLUSTER * wid + core_id_in_cluster;
+  const int core_id_in_cluster = cid % CORES_PER_CLUSTER;
+  // round-robin warp_id allocation across cores in cluster
+  const int wid_in_cluster = CORES_PER_CLUSTER * wid + core_id_in_cluster;
 
   wspawn_tasks_args_t* p_wspawn_args = (wspawn_tasks_args_t*)g_wspawn_args[cid];
 
   // FIXME: handle RW
   int waves = p_wspawn_args->NWs;
-  int offset = p_wspawn_args->offset + (NT * cluster_wid + tid);
+  int offset = p_wspawn_args->offset + (NT * wid_in_cluster + tid);
 
   vx_spawn_tasks_cb callback = p_wspawn_args->callback;
   void* arg = p_wspawn_args->arg;
@@ -125,6 +126,25 @@ static void __attribute__ ((noinline)) spawn_tasks_rem_stub() {
   
   wspawn_tasks_args_t* p_wspawn_args = (wspawn_tasks_args_t*)g_wspawn_args[cid];
   int task_id = p_wspawn_args->offset + tid;
+  (p_wspawn_args->callback)(task_id, p_wspawn_args->arg);
+}
+
+static void __attribute__ ((noinline)) spawn_tasks_cluster_rem_stub() {
+  int NT  = vx_num_threads();
+  int cid = vx_core_id();
+  int tid = vx_thread_id();
+  int wid = vx_warp_id();
+
+  const int core_id_in_cluster = cid % CORES_PER_CLUSTER;
+  // round-robin warp_id allocation across cores in cluster
+  const int wid_in_cluster = CORES_PER_CLUSTER * wid + core_id_in_cluster;
+
+  wspawn_tasks_args_t* p_wspawn_args = (wspawn_tasks_args_t*)g_wspawn_args[cid];
+  // FIXME: This assumes that all cores but the last one are working with full
+  // warps, and only the last core has a partially-filled warp.
+  int offset = p_wspawn_args->offset + (NT * wid_in_cluster + tid);
+
+  int task_id = offset;
   (p_wspawn_args->callback)(task_id, p_wspawn_args->arg);
 }
 
@@ -224,8 +244,7 @@ void vx_spawn_tasks_cluster(int num_tasks, vx_spawn_tasks_cb callback, void *arg
     vx_tmc(tmask);
 
     // call stub routine
-    // FIXME: unimplemented for cluster!
-    spawn_tasks_rem_stub();
+    spawn_tasks_cluster_rem_stub();
 
     // back to single-threaded
     vx_tmc_one();
