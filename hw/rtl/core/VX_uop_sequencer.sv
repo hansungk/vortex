@@ -1,6 +1,6 @@
 `include "VX_define.vh"
 
-`define FREG(x) {1'b1, `NRI_BITS'(`CLOG2(x))}
+`define FREG(x) {1'b1, `NRI_BITS'(x)}
 
 module VX_uop_sequencer import VX_gpu_pkg::*; (
     input clk,
@@ -28,7 +28,6 @@ module VX_uop_sequencer import VX_gpu_pkg::*; (
     // reserve space at start of table for more uop sequences
     localparam HMMA_SET0_STEP0_0 = UPC_BITS'(0);
     localparam HMMA_SET0_STEP0_1 = UPC_BITS'(8);
-    /*
     localparam HMMA_SET0_STEP1_0 = UPC_BITS'(9);
     localparam HMMA_SET0_STEP1_1 = UPC_BITS'(10);
     localparam HMMA_SET0_STEP2_0 = UPC_BITS'(11);
@@ -62,49 +61,11 @@ module VX_uop_sequencer import VX_gpu_pkg::*; (
     localparam HMMA_SET3_STEP2_1 = UPC_BITS'(36);
     localparam HMMA_SET3_STEP3_0 = UPC_BITS'(37);
     localparam HMMA_SET3_STEP3_1 = UPC_BITS'(38);
-    */
     // register layout: f0-f7 used for A, f8-f15 used for B, f16-f23 used for C
 
-    
-    
     always @(*) begin
         case (upc)
-            HMMA_SET0_STEP0_0: begin 
-                uop = {
-                    NEXT,
-                    HMMA_SET0_STEP0_1,
-                    `EX_BITS'(`EX_TENSOR),
-                    `INST_OP_BITS'(0), // denotes that the first step is being computed
-                    `INST_MOD_BITS'(0), // denotes that this is first substep (tensor core also tracks this)
-                    1'b1, // write back
-                    1'b0, // don't use PC
-                    1'b0, // don't use immediate
-                    32'b0, // PC is unused - TODO: don't send a bogus PC down the pipeline as it is very confusing in trace
-                    32'b0, // immediate is unused
-                    `FREG(16), // rd=f16
-                    `FREG(0), // rs1=f0,
-                    `FREG(8), // rs2=f8
-                    `FREG(16) // rs3=f16
-                };
-            end
-            HMMA_SET0_STEP0_1: begin
-                uop = {
-                    FINISH,
-                    HMMA_SET0_STEP0_0,
-                    `EX_BITS'(`EX_TENSOR),
-                    `INST_OP_BITS'(0), // denotes that the first step is being computed
-                    `INST_MOD_BITS'(1), // denotes that this is first substep (tensor core also tracks this)
-                    1'b1, // write back
-                    1'b0, // don't use PC
-                    1'b0, // don't use immediate
-                    32'b0, // PC is unused - TODO: don't send a bogus PC down the pipeline as it is very confusing in trace
-                    32'b0, // immediate is unused
-                    `FREG(17), // rd=f17
-                    `FREG(1), // rs1=f1,
-                    `FREG(9), // rs2=f9
-                    `FREG(17) // rs3=f17
-                };
-            end
+            `include "VX_tensor_ucode.vh"
             default: begin
                 uop = '0;
             end
@@ -113,13 +74,15 @@ module VX_uop_sequencer import VX_gpu_pkg::*; (
 
     logic [UPC_BITS-1:0] upc, upc_r, upc_n;
 
-    logic [UBR_BITS-1:0] ubr = uop[UOP_TABLE_WIDTH-1:UOP_TABLE_WIDTH-UBR_BITS];
-    logic [UPC_BITS-1:0] next_upc = uop[UOP_TABLE_WIDTH-UBR_BITS-1:UOP_TABLE_WIDTH-UBR_BITS-UPC_BITS];
+    wire [UBR_BITS-1:0] ubr = uop[UOP_TABLE_WIDTH-1:UOP_TABLE_WIDTH-UBR_BITS];
+    wire [UPC_BITS-1:0] next_upc = uop[UOP_TABLE_WIDTH-UBR_BITS-1:UOP_TABLE_WIDTH-UBR_BITS-UPC_BITS];
 
-    logic uop_fire = use_uop && ibuffer_if.valid && ibuffer_if.ready;
-    logic uop_start = ~use_uop_1d && use_uop;
-    logic uop_finish = use_uop && uop_sequencer_if.valid && uop_sequencer_if.ready;
     logic use_uop, use_uop_1d;
+    wire uop_fire = use_uop && ibuffer_if.valid && ibuffer_if.ready;
+    
+    wire uop_start = ~use_uop_1d && use_uop;
+    wire uop_finish = use_uop && uop_sequencer_if.valid && uop_sequencer_if.ready;
+    
 
     // merging the 2 always blocks leads to spurious UNOPTFLAT verilator lint, but conceptually they should be linked
     always @(*) begin
@@ -149,7 +112,7 @@ module VX_uop_sequencer import VX_gpu_pkg::*; (
     end
 
     // copy UUID, wis, tmask from microcoded instruction
-    logic [IBUFFER_IF_DATAW-1:0] ibuffer_output = {
+    wire [IBUFFER_IF_DATAW-1:0] ibuffer_output = {
         uop_sequencer_if.data.uuid,
         uop_sequencer_if.data.wis,
         uop_sequencer_if.data.tmask,
@@ -161,11 +124,18 @@ module VX_uop_sequencer import VX_gpu_pkg::*; (
     assign ibuffer_if.data = use_uop ? ibuffer_output : uop_sequencer_if.data;
 
     always @(posedge clk) begin
-        
-        if (use_uop) begin
-            $display("unexpectedly used uop at %d", $time);
+        if (uop_start) begin
+            $display("UOP start @ %t", $time);
+            $display("use_uop=%0d, use_uop_1d=%0d, uop_start=%0d, ibuffer_if.valid=%0d, ibuffer_if.ready=%0d", use_uop, use_uop_1d, uop_start, ibuffer_if.valid, ibuffer_if.ready);
         end
-        
+
+        if (uop_fire) begin
+            $display("UOP fire @ %t", $time);
+        end
+
+        if (uop_finish) begin
+            $display("UOP finish @ %t", $time);
+        end
 
         if (reset) begin
             upc_r <= '0;

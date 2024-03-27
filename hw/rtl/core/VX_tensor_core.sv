@@ -9,7 +9,7 @@ module VX_tensor_core #(
     VX_dispatch_if.slave dispatch_if [`ISSUE_WIDTH],
     VX_commit_if.master commit_if [`ISSUE_WIDTH]
 );
-    `STATIC_ASSERT(`NUM_THREADS == 32, ("tensor core requires # of threads in a warp to be 32"));
+    `STATIC_ASSERT(`NUM_THREADS == 32, ("tensor core requires # of threads in a warp to be 32 (try running w/ CONFIGS=\"-DNUM_THREADS=32\")"));
     
     for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin
         VX_tensor_core_warp #(
@@ -34,20 +34,20 @@ module VX_tensor_core_warp import VX_gpu_pkg::*; #(
     VX_dispatch_if.slave dispatch_if,
     VX_commit_if.master commit_if
 );
-    logic [1:0] step = 2'(dispatch_if.data.op_type);
+    wire [1:0] step = 2'(dispatch_if.data.op_type);
     logic [3:0] octet_results_valid;
     logic [3:0] octet_results_ready;
     logic [`NUM_THREADS-1:0][`XLEN-1:0] wb_data_0;
     logic [`NUM_THREADS-1:0][`XLEN-1:0] wb_data_1;
     
     for (genvar i = 0; i < 4; ++i) begin
-        logic [7:0][31:0] octet_A = {
+        wire [7:0][31:0] octet_A = {
             dispatch_if.data.rs1_data[4*i +: 4], dispatch_if.data.rs1_data[16+4*i +: 4]
         };
-        logic [7:0][31:0] octet_B = {
+        wire [7:0][31:0] octet_B = {
             dispatch_if.data.rs2_data[4*i +: 4], dispatch_if.data.rs2_data[16+4*i +: 4]
         };
-        logic [7:0][31:0] octet_C = {
+        wire [7:0][31:0] octet_C = {
             dispatch_if.data.rs3_data[4*i +: 4], dispatch_if.data.rs3_data[16+4*i +: 4]
         };
 
@@ -141,11 +141,11 @@ module VX_tensor_core_warp import VX_gpu_pkg::*; #(
     );
 
     logic subcommit, subcommit_n;
-    logic all_valid = (& octet_results_valid);
+    wire all_valid = (& octet_results_valid);
     assign commit_if.valid = all_valid;
 
     localparam COMMIT_DATAW = `UUID_WIDTH + `NW_WIDTH + `NUM_THREADS + `XLEN + 1 + `NR_BITS + (`NUM_THREADS * `XLEN) + 1 + 1 + 1;
-    logic [COMMIT_DATAW-1:0] commit_if_data = {
+    wire [COMMIT_DATAW-1:0] commit_if_data = {
         dispatch_if_data_deq,
         subcommit == 1'b0 ? wb_data_0 : wb_data_1,
         1'b0,
@@ -227,7 +227,7 @@ module VX_tensor_octet #(
     end
 
     logic substep;
-    logic substep_n = (operands_ready && operands_valid) ? ~substep : substep;
+    wire substep_n = (operands_ready && operands_valid) ? ~substep : substep;
 
     always @(*) begin
         A_buffer_n = A_buffer;
@@ -260,13 +260,13 @@ module VX_tensor_octet #(
     wire stall = result_valid && ~result_ready;
     assign operands_ready = ~stall;
 
-    logic [3:0][1:0][31:0] A_tile = {
+    wire [3:0][1:0][31:0] A_tile = {
         { A_buffer[0], A_half[0] },
         { A_buffer[1], A_half[1] },
         { A_buffer[2], A_half[2] },
         { A_buffer[3], A_half[3] }
     };
-    logic [1:0][3:0][31:0] B_tile = {
+    wire [1:0][3:0][31:0] B_tile = {
         B_buffer, B_half
     };
     logic [3:0][3:0][31:0] C_tile;

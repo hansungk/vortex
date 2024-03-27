@@ -36,7 +36,7 @@ module VX_ibuffer import VX_gpu_pkg::*; #(
     
     assign decode_if.ready = ibuf_ready_in[decode_isw];
 
-    VX_ibuffer_if uop_sequencer_if [`ISSUE_WIDTH];
+    VX_ibuffer_if uop_sequencer_if [`ISSUE_WIDTH]();
 
     for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin
         VX_elastic_buffer #(

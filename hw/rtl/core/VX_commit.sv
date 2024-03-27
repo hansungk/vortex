@@ -52,6 +52,7 @@ module VX_commit import VX_gpu_pkg::*; #(
     wire [`ISSUE_WIDTH-1:0][`NW_WIDTH-1:0] commit_wid;
     wire [`ISSUE_WIDTH-1:0][`NUM_THREADS-1:0] commit_tmask;
     wire [`ISSUE_WIDTH-1:0] commit_eop;
+    wire [`ISSUE_WIDTH-1:0][`EX_BITS-1:0] commit_sel;
 
     for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin
 
@@ -101,7 +102,7 @@ module VX_commit import VX_gpu_pkg::*; #(
             .data_out  (commit_if[i].data),
             .valid_out (commit_if[i].valid),
             .ready_out (commit_if[i].ready),
-            `UNUSED_PIN (sel_out)
+            .sel_out   (commit_sel[i])
         );
 
         assign commit_fire[i] = commit_if[i].valid && commit_if[i].ready;        
@@ -171,10 +172,24 @@ module VX_commit import VX_gpu_pkg::*; #(
     // Committed instructions
 
     // temporary hack to not underflow the pending instructions buffer
+    // relies on 1 cycle delay of arbiter and continuous issuing of tensor instructions, 
+    // so probably want to change this at some point 
+    // (i.e. pass a "don't count this towards pending instructions" signal down the pipeline)
+    logic [`ISSUE_WIDTH-1:0][4:0] hmma_ctr, hmma_ctr_n;
     wire [`ISSUE_WIDTH-1:0] final_hmma;
 `ifdef EXT_T_ENABLE
     for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin
-        assign final_hmma[i] = ~(tensor_commit_if[i].ready && tensor_commit_if[i].valid) || (tensor_commit_if[i].data.rd == `NR_BITS'(32 + 23)); 
+        assign hmma_ctr_n[i] = (tensor_commit_if[i].valid && tensor_commit_if[i].ready) ? hmma_ctr[i] + 5'b1 : hmma_ctr[i];
+        assign final_hmma[i] = (commit_sel[i] != `EX_BITS'(2) || hmma_ctr == '0); 
+    end
+
+    always @(posedge clk) begin
+        if (reset) begin
+            hmma_ctr <= '0;
+        end
+        else begin
+            hmma_ctr <= hmma_ctr_n;
+        end 
     end
 `else
     assign final_hmma = '1;
