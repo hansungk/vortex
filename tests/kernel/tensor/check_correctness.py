@@ -86,8 +86,9 @@ expected_A = expected['A_array']
 expected_B = expected['B_array']
 expected_C = expected['C_array']
 expected_C = expected_C + expected_A @ expected_B
-
-print(expected_C - C_array)
+print(expected_C[0:8, 0:8])
+print(C_array[0:8, 0:8])
+print((expected_C - C_array)[0:8, 0:8])
 
 assert np.allclose(expected_A, A_array)
 assert np.allclose(expected_B, B_array)

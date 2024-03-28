@@ -35,7 +35,7 @@ SRCS += $(DPI_DIR)/float_dpi.cpp
 SRCS += $(SIM_DIR)/common/rvfloats.cpp
 SRCS += ./main.cpp
 
-RTL_SRCS += $(RTL_DIR)/fpu/VX_tensor_core.sv
+RTL_SRCS += $(RTL_DIR)/fpu/VX_tensor_dpu.sv
 RTL_SRCS += $(RTL_DIR)/fpu/VX_tensor_tb.sv
 
 TOP = VX_tensor_tb
