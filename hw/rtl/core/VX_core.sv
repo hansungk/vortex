@@ -429,6 +429,9 @@ module VX_core import VX_gpu_pkg::*; #(
             //             this will be a subset of scb_stalls
             $display("issue scoreboard: fires total:\t%d across ISSUE_WIDTH=%d",
                      pipeline_perf_if.scb_fires, `ISSUE_WIDTH);
+            $display("issue scoreboard: cycles fired:\t%d (%.2f%%)",
+                     pipeline_perf_if.scb_any_fire_cycles,
+                     $itor(pipeline_perf_if.scb_any_fire_cycles) / $itor(cycles) * 100.0);
             $display("issue scoreboard: stalls total:\t%d across ISSUE_WIDTH=%d",
                      pipeline_perf_if.scb_stalls, `ISSUE_WIDTH);
             $display("issue scoreboard: stalls by operand hazard: alu %d (%2.2f cycles per issue)",
@@ -468,7 +471,7 @@ module VX_core import VX_gpu_pkg::*; #(
                      pipeline_perf_if.dispatch_fires[`EX_LSU]);
             $display("issue dispatch: fires: sfu %d",
                      pipeline_perf_if.dispatch_fires[`EX_SFU]);
-            $display("issue dispatch: cycles issued: %d (%.2f%%)",
+            $display("issue dispatch: cycles fired: %d (%.2f%%)",
                      pipeline_perf_if.dispatch_any_fire_cycles,
                      $itor(pipeline_perf_if.dispatch_any_fire_cycles) / $itor(cycles) * 100.0);
             $display("ifetches: %d", perf_ifetches);

@@ -20,6 +20,7 @@ interface VX_pipeline_perf_if ();
     wire [`PERF_CTR_BITS-1:0] ibf_stalls;
     wire [`PERF_CTR_BITS-1:0] scb_stalls;
     wire [`PERF_CTR_BITS-1:0] scb_fires;
+    wire [`PERF_CTR_BITS-1:0] scb_any_fire_cycles;
     wire [`PERF_CTR_BITS-1:0] units_uses [`NUM_EX_UNITS];
     wire [`PERF_CTR_BITS-1:0] sfu_uses [`NUM_SFU_UNITS];
     wire [`PERF_CTR_BITS-1:0] dispatch_stalls [`NUM_EX_UNITS];
@@ -43,6 +44,7 @@ interface VX_pipeline_perf_if ();
         output ibf_stalls,
         output scb_stalls,
         output scb_fires,
+        output scb_any_fire_cycles,
         output units_uses,
         output sfu_uses,
         output dispatch_stalls,
@@ -58,6 +60,7 @@ interface VX_pipeline_perf_if ();
         input ibf_stalls,
         input scb_stalls,
         input scb_fires,
+        input scb_any_fire_cycles,
         input units_uses,
         input sfu_uses,
         input dispatch_stalls,

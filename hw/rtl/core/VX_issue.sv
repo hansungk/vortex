@@ -62,6 +62,7 @@ module VX_issue #(
     `ifdef PERF_ENABLE
         .perf_scb_stalls(perf_issue_if.scb_stalls),
         .perf_scb_fires (perf_issue_if.scb_fires),
+        .perf_scb_any_fire_cycles (perf_issue_if.scb_any_fire_cycles),
         .perf_units_uses(perf_issue_if.units_uses),
         .perf_sfu_uses  (perf_issue_if.sfu_uses),
     `endif

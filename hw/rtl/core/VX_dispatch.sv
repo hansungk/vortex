@@ -236,12 +236,12 @@ module VX_dispatch import VX_gpu_pkg::*; #(
     `BUFFER(perf_unit_valids_per_cycle_r, perf_unit_valids_per_cycle);
     `BUFFER(perf_unit_fires_per_cycle_r, perf_unit_fires_per_cycle);
 
-    reg perf_any_fire;
+    reg perf_any_fire_per_cycle;
     always @(*) begin
-        perf_any_fire = 1'b0;
+        perf_any_fire_per_cycle = 1'b0;
         for (integer i = 0; i < `NUM_EX_UNITS; ++i) begin
             if (perf_unit_fires_per_cycle_r[i] != '0) begin
-                perf_any_fire = 1'b1;
+                perf_any_fire_per_cycle = 1'b1;
             end
         end
     end
@@ -257,7 +257,7 @@ module VX_dispatch import VX_gpu_pkg::*; #(
                 perf_stalls_r[i] <= perf_stalls_r[i] + `PERF_CTR_BITS'(perf_unit_stalls_per_cycle_r[i]);
                 perf_valids_r[i] <= perf_valids_r[i] + `PERF_CTR_BITS'(perf_unit_valids_per_cycle_r[i]);
                 perf_fires_r[i] <= perf_fires_r[i] + `PERF_CTR_BITS'(perf_unit_fires_per_cycle_r[i]);
-                perf_any_fire_cycles_r <= perf_any_fire_cycles_r + `PERF_CTR_BITS'(perf_any_fire);
+                perf_any_fire_cycles_r <= perf_any_fire_cycles_r + `PERF_CTR_BITS'(perf_any_fire_per_cycle);
             end
         end
     end

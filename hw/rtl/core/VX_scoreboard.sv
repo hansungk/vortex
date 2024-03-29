@@ -22,6 +22,7 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
 `ifdef PERF_ENABLE
     output reg [`PERF_CTR_BITS-1:0] perf_scb_stalls,
     output reg [`PERF_CTR_BITS-1:0] perf_scb_fires,
+    output reg [`PERF_CTR_BITS-1:0] perf_scb_any_fire_cycles,
     output reg [`PERF_CTR_BITS-1:0] perf_units_uses [`NUM_EX_UNITS],
     output reg [`PERF_CTR_BITS-1:0] perf_sfu_uses [`NUM_SFU_UNITS],
 `endif
@@ -47,9 +48,13 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
 
     wire [`ISSUE_WIDTH-1:0] perf_issue_fires_per_cycle;
     wire [`CLOG2(`ISSUE_WIDTH+1)-1:0] perf_fires_per_cycle, perf_fires_per_cycle_r;    
+    wire perf_any_fire_per_cycle, perf_any_fire_per_cycle_r;
+
+    reg [`PERF_CTR_BITS-1:0] perf_scb_empty;
 
     `POP_COUNT(perf_stalls_per_cycle, perf_issue_stalls_per_cycle);    
-    `POP_COUNT(perf_fires_per_cycle, perf_issue_fires_per_cycle);    
+    `POP_COUNT(perf_fires_per_cycle, perf_issue_fires_per_cycle);
+    assign perf_any_fire_per_cycle = |perf_issue_fires_per_cycle;
 
     for (genvar i=0; i < `NUM_EX_UNITS; ++i) begin
         always @(*) begin
@@ -91,16 +96,19 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
 
     `BUFFER(perf_stalls_per_cycle_r, perf_stalls_per_cycle);
     `BUFFER(perf_fires_per_cycle_r, perf_fires_per_cycle);
+    `BUFFER(perf_any_fire_per_cycle_r, perf_any_fire_per_cycle);
     `BUFFER(perf_units_per_cycle_r, perf_units_per_cycle);
     `BUFFER(perf_sfu_per_cycle_r, perf_sfu_per_cycle);
 
     always @(posedge clk) begin
         if (reset) begin
             perf_scb_stalls <= '0;            
-            perf_scb_fires <= '0;            
+            perf_scb_fires <= '0;
+            perf_scb_any_fire_cycles <= '0;
         end else begin
             perf_scb_stalls <= perf_scb_stalls + `PERF_CTR_BITS'(perf_stalls_per_cycle_r);
             perf_scb_fires <= perf_scb_fires + `PERF_CTR_BITS'(perf_fires_per_cycle_r);
+            perf_scb_any_fire_cycles <= perf_scb_any_fire_cycles + `PERF_CTR_BITS'(perf_any_fire_per_cycle_r);
         end
     end
 
@@ -256,5 +264,20 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
     `endif
     
     end
+
+`ifdef PERF_ENABLE
+    wire [`ISSUE_WIDTH-1:0] ibuffer_valids;
+    for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin
+        assign ibuffer_valids[i] = ibuffer_if[i].valid;
+    end
+
+    always @(posedge clk) begin
+        if (reset) begin
+            perf_scb_empty <= '0;
+        end else begin
+            perf_scb_empty <= perf_scb_empty + `PERF_CTR_BITS'(~|ibuffer_valids);
+        end
+    end
+`endif
 
 endmodule
