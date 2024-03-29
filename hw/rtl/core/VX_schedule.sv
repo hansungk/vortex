@@ -413,28 +413,28 @@ module VX_schedule import VX_gpu_pkg::*; #(
 `ifdef PERF_ENABLE    
     reg [`PERF_CTR_BITS-1:0] perf_sched_idles;
     reg [`PERF_CTR_BITS-1:0] perf_sched_stalls;
-    reg [`PERF_CTR_BITS-1:0] perf_sched_barrier_stalls;
+    reg [`PERF_CTR_BITS-1:0] perf_sched_barrier_idles;
 
     wire schedule_idle = ~schedule_valid;
     wire schedule_stall = schedule_if.valid && ~schedule_if.ready;
-    wire [`CLOG2(`NUM_WARPS+1)-1:0] schedule_barrier_stall;
-    `POP_COUNT(schedule_barrier_stall, barrier_stalls);
+    wire [`CLOG2(`NUM_WARPS+1)-1:0] schedule_barrier_idle;
+    `POP_COUNT(schedule_barrier_idle, barrier_stalls);
 
     always @(posedge clk) begin
         if (reset) begin
             perf_sched_idles  <= '0;
+            perf_sched_barrier_idles <= '0;            
             perf_sched_stalls <= '0;            
-            perf_sched_barrier_stalls <= '0;            
         end else begin
             perf_sched_idles  <= perf_sched_idles + `PERF_CTR_BITS'(schedule_idle);
+            perf_sched_barrier_idles <= perf_sched_barrier_idles + `PERF_CTR_BITS'(schedule_barrier_idle);
             perf_sched_stalls <= perf_sched_stalls + `PERF_CTR_BITS'(schedule_stall);
-            perf_sched_barrier_stalls <= perf_sched_barrier_stalls + `PERF_CTR_BITS'(schedule_barrier_stall);
         end
     end
 
     assign perf_schedule_if.sched_idles = perf_sched_idles;
+    assign perf_schedule_if.sched_barrier_idles = perf_sched_barrier_idles;
     assign perf_schedule_if.sched_stalls = perf_sched_stalls;    
-    assign perf_schedule_if.sched_barrier_stalls = perf_sched_barrier_stalls;
 `endif
 
 endmodule

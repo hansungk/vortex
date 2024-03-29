@@ -415,13 +415,13 @@ module VX_core import VX_gpu_pkg::*; #(
                      $itor(instrs) / $itor(cycles));
             $display("scheduler idle: %d cycles (%.2f%%)", pipeline_perf_if.sched_idles,
                      $itor(pipeline_perf_if.sched_idles) / $itor(cycles) * 100.0);
+            $display("scheduler barrier idle: %d count across NUM_WARPS=%d",
+                     pipeline_perf_if.sched_barrier_idles, `NUM_WARPS);
+            // sched_stalls can happen when the later issue stage stalls,
+            // causing the ibuffer to clog.
             $display("scheduler stalls: %d cycles (%.2f%%)", pipeline_perf_if.sched_stalls,
                      $itor(pipeline_perf_if.sched_stalls) / $itor(cycles) * 100.0);
-            $display("scheduler barrier stalls: %d count across NUM_WARPS=%d (%.2f%%)",
-                     pipeline_perf_if.sched_barrier_stalls,
-                     `NUM_WARPS,
-                     $itor(pipeline_perf_if.sched_barrier_stalls) / $itor(cycles) * 100.0);
-            $display("decode stalls: %d cycles (%.2f%%)",pipeline_perf_if.ibf_stalls,
+            $display("decode stalls (ibuffer not ready): %d cycles (%.2f%%)",pipeline_perf_if.ibf_stalls,
                      $itor(pipeline_perf_if.ibf_stalls) / $itor(cycles) * 100.0);
             // see VX_scoreboard.sv
             // scb_stalls: valid & ~ready (ready = stg_ready_in && operands_ready)
@@ -472,12 +472,12 @@ module VX_core import VX_gpu_pkg::*; #(
                      pipeline_perf_if.dispatch_any_fire_cycles,
                      $itor(pipeline_perf_if.dispatch_any_fire_cycles) / $itor(cycles) * 100.0);
             $display("ifetches: %d", perf_ifetches);
-            $display("ifetch latency: %f Cycles",
+            $display("ifetch latency: %f cycles",
                      $itor(icache_lat) / $itor(ifetches));
-            $display("loads: %d", perf_loads);
-            $display("load latency: %f Cycles",
+            $display("dcache loads: %d", perf_loads);
+            $display("dcache load latency: %f cycles",
                      $itor(dcache_lat) / $itor(loads));
-            $display("stores: %d", perf_stores);
+            $display("dcache stores: %d", perf_stores);
         end
     end
 
