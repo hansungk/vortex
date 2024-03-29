@@ -132,7 +132,7 @@ void kernel_body(int task_id, kernel_arg_t* __UNIFORM__ arg) {
   const uint32_t threads_per_threadblock = (BM * BN) / (TM * TN);
 #ifdef RADIANCE
   const uint32_t threadblocks_per_core =
-      vx_num_threads() * vx_num_warps() / (threads_per_threadblock / CORES_PER_CLUSTER);
+      vx_num_threads() * vx_num_warps() / threads_per_threadblock * CORES_PER_CLUSTER;
 #else
   const uint32_t threadblocks_per_core =
       vx_num_threads() * vx_num_warps() / threads_per_threadblock;
@@ -149,13 +149,13 @@ void kernel_body(int task_id, kernel_arg_t* __UNIFORM__ arg) {
   const int threadblock_id_x = threadblock_id % dim_n_in_blocks;
   const int threadblock_id_y = threadblock_id / dim_n_in_blocks;
 
+  // "static" shared memory allocation.  This would determine threadblock
+  // occupancy of a single cluster
   float *sharedmem_per_threadblock =
-      (float *)DEV_SMEM_START_ADDR +
-      (2 * BM * BK) * threadblock_id_in_core;
-  thread_block_gemm(arg, tid_in_threadblock,
-                    threadblock_dim_x, threadblock_dim_y, threadblock_id_x,
-                    threadblock_id_y, threadblock_id_in_core,
-                    sharedmem_per_threadblock);
+      (float *)DEV_SMEM_START_ADDR + (2 * BM * BK) * threadblock_id_in_core;
+  thread_block_gemm(arg, tid_in_threadblock, threadblock_dim_x,
+                    threadblock_dim_y, threadblock_id_x, threadblock_id_y,
+                    threadblock_id_in_core, sharedmem_per_threadblock);
 }
 
 int main() {
