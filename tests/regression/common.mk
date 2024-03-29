@@ -121,7 +121,7 @@ clean:
 	rm -rf $(PROJECT) *.o .depend
 
 clean-all: clean
-	rm -rf *.elf *.dump
+	rm -rf kernel.elf kernel.radiance.elf *.dump
 
 ifneq ($(MAKECMDGOALS),clean)
     -include .depend
