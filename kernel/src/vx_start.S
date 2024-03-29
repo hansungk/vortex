@@ -102,6 +102,8 @@ init_regs:
 #endif
   csrr  t0, VX_CSR_MHARTID
   sll   t1, t0, STACK_LOG2_SIZE
+  sll   t2, t0, 2
+  add   t1, t1, t2
   sub   sp, sp, t1
 
   # set thread pointer register
