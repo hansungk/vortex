@@ -197,6 +197,9 @@ module VX_operands import VX_gpu_pkg::*; #(
         assign stg_valid_in = scoreboard_if[i].valid && data_ready;
         assign scoreboard_if[i].ready = stg_ready_in && data_ready;        
 
+        // NOTE(hansung): toggle_buffer is 1-reg pipe without flow, halving
+        // throughput.  Wouldn't this cap overall IPC?  Or OK as long as
+        // ISSUE_WIDTH > 1?
         VX_toggle_buffer #(
             .DATAW (DATAW)
         ) staging_buffer (

@@ -436,31 +436,31 @@ module VX_core import VX_gpu_pkg::*; #(
                      pipeline_perf_if.scb_stalls, `ISSUE_WIDTH);
             $display("issue scoreboard: stalls by operand hazard: alu %d (%2.2f cycles per issue)",
                      scrb_alu_per_core,
-                     $itor(scrb_alu_per_core) / $itor(dispatch_fires_total));
+                     $itor(scrb_alu_per_core) / $itor(pipeline_perf_if.dispatch_fires[`EX_ALU]));
             $display("issue scoreboard: stalls by operand hazard: fpu %d (%2.2f cycles per issue)",
                      scrb_fpu_per_core,
-                     $itor(scrb_fpu_per_core) / $itor(dispatch_fires_total));
+                     $itor(scrb_fpu_per_core) / $itor(pipeline_perf_if.dispatch_fires[`EX_FPU]));
             $display("issue scoreboard: stalls by operand hazard: lsu %d (%2.2f cycles per issue)",
                      scrb_lsu_per_core,
-                     $itor(scrb_lsu_per_core) / $itor(dispatch_fires_total));
+                     $itor(scrb_lsu_per_core) / $itor(pipeline_perf_if.dispatch_fires[`EX_LSU]));
             $display("issue scoreboard: stalls by operand hazard: sfu %d (%2.2f cycles per issue)",
                      scrb_sfu_per_core,
-                     $itor(scrb_sfu_per_core) / $itor(dispatch_fires_total));
+                     $itor(scrb_sfu_per_core) / $itor(pipeline_perf_if.dispatch_fires[`EX_SFU]));
             $display("issue scoreboard: sfu stalls: %d (scrs=%f, wctl=%f)",pipeline_perf_if.units_uses[`EX_SFU],
                      $itor(scrb_csrs_per_core) / $itor(sfu_tot) * 100.0,
                      $itor(scrb_wctl_per_core) / $itor(sfu_tot) * 100.0);
             $display("issue dispatch: stalls by FU busy: alu %d (%2.2f cycles per issue)",
                      pipeline_perf_if.dispatch_stalls[`EX_ALU],
-                     $itor(pipeline_perf_if.dispatch_stalls[`EX_ALU]) / $itor(dispatch_fires_total));
+                     $itor(pipeline_perf_if.dispatch_stalls[`EX_ALU]) / $itor(pipeline_perf_if.dispatch_fires[`EX_ALU]));
             $display("issue dispatch: stalls by FU busy: fpu %d (%2.2f cycles per issue)",
                      pipeline_perf_if.dispatch_stalls[`EX_FPU],
-                     $itor(pipeline_perf_if.dispatch_stalls[`EX_FPU]) / $itor(dispatch_fires_total));
+                     $itor(pipeline_perf_if.dispatch_stalls[`EX_FPU]) / $itor(pipeline_perf_if.dispatch_fires[`EX_FPU]));
             $display("issue dispatch: stalls by FU busy: lsu %d (%2.2f cycles per issue)",
                      pipeline_perf_if.dispatch_stalls[`EX_LSU],
-                     $itor(pipeline_perf_if.dispatch_stalls[`EX_LSU]) / $itor(dispatch_fires_total));
+                     $itor(pipeline_perf_if.dispatch_stalls[`EX_LSU]) / $itor(pipeline_perf_if.dispatch_fires[`EX_LSU]));
             $display("issue dispatch: stalls by FU busy: sfu %d (%2.2f cycles per issue)",
                      pipeline_perf_if.dispatch_stalls[`EX_SFU],
-                     $itor(pipeline_perf_if.dispatch_stalls[`EX_SFU]) / $itor(dispatch_fires_total));
+                     $itor(pipeline_perf_if.dispatch_stalls[`EX_SFU]) / $itor(pipeline_perf_if.dispatch_fires[`EX_SFU]));
             $display("issue dispatch: fires: total %d",
                      dispatch_fires_total);
             $display("issue dispatch: fires: alu %d",
