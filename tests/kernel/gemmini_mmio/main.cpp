@@ -105,20 +105,17 @@ int main() {
   //   if (i == 2) i = K * DIM - 3;
   // }
 
-  // gemmini_extended_preload(spad_B, acc_C, DIM, DIM, DIM, DIM);
-  // gemmini_extended_compute_preloaded(spad_A, GARBAGE_ADDR, DIM, DIM, DIM, DIM);
-  // gemmini_extended_mvout(0xc0000000, 0xff000000, DIM, DIM);
-  // gemmini_extended_mvout_spad(spad_C, 1, acc_C, DIM, DIM);
-
-  asm volatile ("csrr %0, mcycle" : "=r" (start_cycles));
+  uint32_t fence_cycles;
+  rd_cycles(start_cycles);
   sp_tiled_matmul_full_spad_ws(spad_A, spad_B, /*spad_D=*/0, spad_C,
       /*I=*/I, /*J=*/J, /*K=*/K, /*pad_I=*/0, /*pad_J=*/0, /*pad_K=*/0,
       /*a_transpose=*/0, /*b_transpose=*/0, /*full_C=*/0, /*low_D=*/0,
       /*no_bias=*/1, /*repeating_bias=*/0, /*act=*/NO_ACTIVATION);
 
+  rd_cycles(fence_cycles);
   fence();
-  asm volatile ("csrr %0, mcycle" : "=r" (end_cycles));
-  sprintf(print_buf, "gemmini cycles taken: %d\n", end_cycles - start_cycles);
+  rd_cycles(end_cycles);
+  sprintf(print_buf, "gemmini cycles taken: %d, fence cycles: %d\n", end_cycles - start_cycles, end_cycles - fence_cycles);
 
   // check results
   for (int i = 0; i < I * DIM; i++) {
