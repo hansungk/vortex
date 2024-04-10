@@ -79,15 +79,15 @@
 `endif
 
 `ifndef NUM_CORES
-`define NUM_CORES 1
+`define NUM_CORES 2
 `endif
 
 `ifndef NUM_WARPS
-`define NUM_WARPS 4
+`define NUM_WARPS 8
 `endif
 
 `ifndef NUM_THREADS
-`define NUM_THREADS 4
+`define NUM_THREADS 8
 `endif
 
 `ifndef NUM_BARRIERS
@@ -175,7 +175,7 @@
 `endif
 
 `ifndef SMEM_LOG_SIZE
-`define SMEM_LOG_SIZE   14
+`define SMEM_LOG_SIZE   15
 `endif
 
 `ifndef IO_BASE_ADDR
@@ -238,7 +238,7 @@
 
 // Issue width
 `ifndef ISSUE_WIDTH
-`define ISSUE_WIDTH     `MIN(`NUM_WARPS, 4)
+`define ISSUE_WIDTH     `MIN(`NUM_WARPS, 8)
 `endif
 
 // Number of ALU units
@@ -259,12 +259,12 @@
 
 // Number of LSU units
 `ifndef NUM_LSU_LANES
-`define NUM_LSU_LANES   `MIN(`NUM_THREADS, 4)
+`define NUM_LSU_LANES   `NUM_THREADS
 `endif
 
 // Number of SFU units
 `ifndef NUM_SFU_LANES
-`define NUM_SFU_LANES   `MIN(`NUM_THREADS, 4)
+`define NUM_SFU_LANES   `NUM_THREADS
 `endif
 
 // Size of Instruction Buffer
@@ -459,7 +459,7 @@
 
 // Number of Banks
 `ifndef DCACHE_NUM_BANKS
-`define DCACHE_NUM_BANKS `MIN(`NUM_LSU_LANES, 4)
+`define DCACHE_NUM_BANKS `NUM_LSU_LANES
 `endif
 
 // Core Response Queue Size

@@ -222,195 +222,63 @@ module Vortex import VX_gpu_pkg::*; #(
     // dmem -------------------------------------------------------------------
 
     // Vortex core does not accept write acks; filter them out here
-    assign dcache_bus_if[0].rsp_valid = 
-        (dmem_d_valid[0] && (dmem_d_bits_opcode[0 * 3 +: 3] !== 3'd0 /*AccessAck*/));
-    assign dcache_bus_if[1].rsp_valid = 
-        (dmem_d_valid[1] && (dmem_d_bits_opcode[1 * 3 +: 3] !== 3'd0 /*AccessAck*/));
-    assign dcache_bus_if[2].rsp_valid = 
-        (dmem_d_valid[2] && (dmem_d_bits_opcode[2 * 3 +: 3] !== 3'd0 /*AccessAck*/));
-    assign dcache_bus_if[3].rsp_valid = 
-        (dmem_d_valid[3] && (dmem_d_bits_opcode[3 * 3 +: 3] !== 3'd0 /*AccessAck*/));
+    generate
+        for (genvar i = 0; i < DCACHE_NUM_REQS; i++) begin
+            assign dcache_bus_if[i].rsp_valid =
+                (dmem_d_valid[i] && (dmem_d_bits_opcode[i * 3 +: 3] !== 3'd0 /*AccessAck*/));
+            // Data and tag assignment for dcache
+            assign dcache_bus_if[i].rsp_data.data = dmem_d_bits_data[i * 32 +: 32];
+            assign dcache_bus_if[i].rsp_data.tag = dmem_d_bits_source[i * DCACHE_NOSM_TAG_WIDTH +: DCACHE_NOSM_TAG_WIDTH];
 
-    assign dcache_bus_if[0].rsp_data.data = dmem_d_bits_data[0 * 32 +: 32];
-    assign dcache_bus_if[1].rsp_data.data = dmem_d_bits_data[1 * 32 +: 32];
-    assign dcache_bus_if[2].rsp_data.data = dmem_d_bits_data[2 * 32 +: 32];
-    assign dcache_bus_if[3].rsp_data.data = dmem_d_bits_data[3 * 32 +: 32];
+            // Handling write ACKs, setting ready bit for dcache
+            assign dmem_d_ready[i] = dcache_bus_if[i].rsp_ready ||
+                                    (dmem_d_valid[i] && (dmem_d_bits_opcode[i * 3 +: 3] == 3'd0 /*AccessAck*/));
 
-    assign dcache_bus_if[0].rsp_data.tag = dmem_d_bits_source[0 * DCACHE_NOSM_TAG_WIDTH +: DCACHE_NOSM_TAG_WIDTH];
-    assign dcache_bus_if[1].rsp_data.tag = dmem_d_bits_source[1 * DCACHE_NOSM_TAG_WIDTH +: DCACHE_NOSM_TAG_WIDTH];
-    assign dcache_bus_if[2].rsp_data.tag = dmem_d_bits_source[2 * DCACHE_NOSM_TAG_WIDTH +: DCACHE_NOSM_TAG_WIDTH];
-    assign dcache_bus_if[3].rsp_data.tag = dmem_d_bits_source[3 * DCACHE_NOSM_TAG_WIDTH +: DCACHE_NOSM_TAG_WIDTH];
+            // Request validity and address/data/source assignment for dcache
+            assign dmem_a_valid[i] = dcache_bus_if[i].req_valid;
+            assign dmem_a_bits_address[i * 32 +: 32] = {dcache_bus_if[i].req_data.addr, 2'b0};
+            assign dmem_a_bits_data[i * 32 +: 32] = dcache_bus_if[i].req_data.data;
+            assign dmem_a_bits_source[i * DCACHE_NOSM_TAG_WIDTH +: DCACHE_NOSM_TAG_WIDTH] = dcache_bus_if[i].req_data.tag;
 
-    // When there's a write ACK coming back, ready bit should always be 1 to
-    // accept them because core does not accept them on their own
-    assign dmem_d_ready[0] = dcache_bus_if[0].rsp_ready ||
-                            (dmem_d_valid[0] && (dmem_d_bits_opcode[0 * 3 +: 3] == 3'd0 /*AccessAck*/));
-    assign dmem_d_ready[1] = dcache_bus_if[1].rsp_ready ||
-                            (dmem_d_valid[1] && (dmem_d_bits_opcode[1 * 3 +: 3] == 3'd0 /*AccessAck*/));
-    assign dmem_d_ready[2] = dcache_bus_if[2].rsp_ready ||
-                            (dmem_d_valid[2] && (dmem_d_bits_opcode[2 * 3 +: 3] == 3'd0 /*AccessAck*/));
-    assign dmem_d_ready[3] = dcache_bus_if[3].rsp_ready ||
-                            (dmem_d_valid[3] && (dmem_d_bits_opcode[3 * 3 +: 3] == 3'd0 /*AccessAck*/));
+            // Opcode, size, and mask assignment for dcache
+            assign dmem_a_bits_opcode[i * 3 +: 3] =
+                dcache_bus_if[i].req_data.rw ?
+                (&dcache_bus_if[i].req_data.byteen ? 3'd0 /*PutFull*/ : 3'd1 /*PutPartial*/)
+                : 3'd4 /*Get*/;
+            assign dmem_a_bits_size[i * 4 +: 4] = 4'd2; // Fixed size
+            assign dmem_a_bits_mask[i * 4 +: 4] = dcache_bus_if[i].req_data.byteen;
 
-    assign dmem_a_valid[0] = dcache_bus_if[0].req_valid;
-    assign dmem_a_valid[1] = dcache_bus_if[1].req_valid;
-    assign dmem_a_valid[2] = dcache_bus_if[2].req_valid;
-    assign dmem_a_valid[3] = dcache_bus_if[3].req_valid;
+            // Setting request ready signal for dcache
+            assign dcache_bus_if[i].req_ready = dmem_a_ready[i];
 
-    assign dmem_a_bits_address[0 * 32 +: 32] = {dcache_bus_if[0].req_data.addr, 2'b0};
-    assign dmem_a_bits_address[1 * 32 +: 32] = {dcache_bus_if[1].req_data.addr, 2'b0};
-    assign dmem_a_bits_address[2 * 32 +: 32] = {dcache_bus_if[2].req_data.addr, 2'b0};
-    assign dmem_a_bits_address[3 * 32 +: 32] = {dcache_bus_if[3].req_data.addr, 2'b0};
+            // Data and tag assignment for smem
+            assign smem_bus_if[i].rsp_valid =
+                (smem_d_valid[i] && (smem_d_bits_opcode[i * 3 +: 3] !== 3'd0 /*AccessAck*/));
+            assign smem_bus_if[i].rsp_data.data = smem_d_bits_data[i * 32 +: 32];
+            assign smem_bus_if[i].rsp_data.tag = smem_d_bits_source[i * DCACHE_NOSM_TAG_WIDTH +: DCACHE_NOSM_TAG_WIDTH];
 
-    assign dmem_a_bits_data[0 * 32 +: 32] = dcache_bus_if[0].req_data.data;
-    assign dmem_a_bits_data[1 * 32 +: 32] = dcache_bus_if[1].req_data.data;
-    assign dmem_a_bits_data[2 * 32 +: 32] = dcache_bus_if[2].req_data.data;
-    assign dmem_a_bits_data[3 * 32 +: 32] = dcache_bus_if[3].req_data.data;
+            // Handling write ACKs, setting ready bit for smem
+            assign smem_d_ready[i] = smem_bus_if[i].rsp_ready ||
+                                    (smem_d_valid[i] && (smem_d_bits_opcode[i * 3 +: 3] == 3'd0 /*AccessAck*/));
 
-    assign dmem_a_bits_source[0 * DCACHE_NOSM_TAG_WIDTH +: DCACHE_NOSM_TAG_WIDTH] = dcache_bus_if[0].req_data.tag;
-    assign dmem_a_bits_source[1 * DCACHE_NOSM_TAG_WIDTH +: DCACHE_NOSM_TAG_WIDTH] = dcache_bus_if[1].req_data.tag;
-    assign dmem_a_bits_source[2 * DCACHE_NOSM_TAG_WIDTH +: DCACHE_NOSM_TAG_WIDTH] = dcache_bus_if[2].req_data.tag;
-    assign dmem_a_bits_source[3 * DCACHE_NOSM_TAG_WIDTH +: DCACHE_NOSM_TAG_WIDTH] = dcache_bus_if[3].req_data.tag;
+            // Request validity and address/data/source assignment for smem
+            assign smem_a_valid[i] = smem_bus_if[i].req_valid;
+            assign smem_a_bits_address[i * 32 +: 32] = {smem_bus_if[i].req_data.addr, 2'b0};
+            assign smem_a_bits_data[i * 32 +: 32] = smem_bus_if[i].req_data.data;
+            assign smem_a_bits_source[i * DCACHE_NOSM_TAG_WIDTH +: DCACHE_NOSM_TAG_WIDTH] = smem_bus_if[i].req_data.tag;
 
-    // we assume all lanes always have the same tag; otherwise the sourceId
-    // logic in the Chisel tile breaks
-    // NOTE: not working at the moment but this doesn't seem to be a problem
-    // always @(*) begin
-    //   for (i = 0; i < 4; i++) begin
-    //     assert(dcache_req_if.tag[0] == dcache_req_if.tag[i])
-    //   end
-    // end
+            // Opcode, size, and mask assignment for smem
+            assign smem_a_bits_opcode[i * 3 +: 3] =
+                smem_bus_if[i].req_data.rw ?
+                (&smem_bus_if[i].req_data.byteen ? 3'd0 /*PutFull*/ : 3'd1 /*PutPartial*/)
+                : 3'd4 /*Get*/;
+            assign smem_a_bits_size[i * 4 +: 4] = 4'd2; // Fixed size
+            assign smem_a_bits_mask[i * 4 +: 4] = smem_bus_if[i].req_data.byteen;
 
-    // Translate Vortex rw/byteen to TileLink opcode
-    assign dmem_a_bits_opcode[0 * 3 +: 3] = 
-        dcache_bus_if[0].req_data.rw ?
-        (&dcache_bus_if[0].req_data.byteen ? 3'd0 /*PutFull*/ : 3'd1 /*PutPartial*/)
-        : 3'd4 /*Get*/;
-    assign dmem_a_bits_opcode[1 * 3 +: 3] = 
-        dcache_bus_if[1].req_data.rw ?
-        (&dcache_bus_if[1].req_data.byteen ? 3'd0 /*PutFull*/ : 3'd1 /*PutPartial*/)
-        : 3'd4 /*Get*/;
-    assign dmem_a_bits_opcode[2 * 3 +: 3] = 
-        dcache_bus_if[2].req_data.rw ?
-        (&dcache_bus_if[2].req_data.byteen ? 3'd0 /*PutFull*/ : 3'd1 /*PutPartial*/)
-        : 3'd4 /*Get*/;
-    assign dmem_a_bits_opcode[3 * 3 +: 3] = 
-        dcache_bus_if[3].req_data.rw ?
-        (&dcache_bus_if[3].req_data.byteen ? 3'd0 /*PutFull*/ : 3'd1 /*PutPartial*/)
-        : 3'd4 /*Get*/;
-
-    // Vortex cache requests are single-fixed-size
-    // NOTE: MAKE SURE TO CHANGE CONSTANT WIDTH FOR SIZE!
-    assign dmem_a_bits_size[0 * 4 +: 4] = 4'd2;
-    assign dmem_a_bits_size[1 * 4 +: 4] = 4'd2;
-    assign dmem_a_bits_size[2 * 4 +: 4] = 4'd2;
-    assign dmem_a_bits_size[3 * 4 +: 4] = 4'd2;
-    /* $countones(dcache_req_if.byteen[0]) === 'd4 ? 2'd2 :
-        ($countones(dcache_req_if.byteen[0]) === 'd2 ? 2'd1 : 2'd0); */
-
-    // byteen can be directly used as TL mask
-    assign dmem_a_bits_mask[0 * 4 +: 4] = dcache_bus_if[0].req_data.byteen;
-    assign dmem_a_bits_mask[1 * 4 +: 4] = dcache_bus_if[1].req_data.byteen;
-    assign dmem_a_bits_mask[2 * 4 +: 4] = dcache_bus_if[2].req_data.byteen;
-    assign dmem_a_bits_mask[3 * 4 +: 4] = dcache_bus_if[3].req_data.byteen;
-
-    assign dcache_bus_if[0].req_ready = dmem_a_ready[0];
-    assign dcache_bus_if[1].req_ready = dmem_a_ready[1];
-    assign dcache_bus_if[2].req_ready = dmem_a_ready[2];
-    assign dcache_bus_if[3].req_ready = dmem_a_ready[3];
-
-    // smem -------------------------------------------------------------------
-
-    // FIXME: giant @copypaste from dmem
-
-    // Vortex core does not accept write acks; filter them out here
-    assign smem_bus_if[0].rsp_valid = 
-        (smem_d_valid[0] && (smem_d_bits_opcode[0 * 3 +: 3] !== 3'd0 /*AccessAck*/));
-    assign smem_bus_if[1].rsp_valid = 
-        (smem_d_valid[1] && (smem_d_bits_opcode[1 * 3 +: 3] !== 3'd0 /*AccessAck*/));
-    assign smem_bus_if[2].rsp_valid = 
-        (smem_d_valid[2] && (smem_d_bits_opcode[2 * 3 +: 3] !== 3'd0 /*AccessAck*/));
-    assign smem_bus_if[3].rsp_valid = 
-        (smem_d_valid[3] && (smem_d_bits_opcode[3 * 3 +: 3] !== 3'd0 /*AccessAck*/));
-
-    assign smem_bus_if[0].rsp_data.data = smem_d_bits_data[0 * 32 +: 32];
-    assign smem_bus_if[1].rsp_data.data = smem_d_bits_data[1 * 32 +: 32];
-    assign smem_bus_if[2].rsp_data.data = smem_d_bits_data[2 * 32 +: 32];
-    assign smem_bus_if[3].rsp_data.data = smem_d_bits_data[3 * 32 +: 32];
-
-    assign smem_bus_if[0].rsp_data.tag = smem_d_bits_source[0 * DCACHE_NOSM_TAG_WIDTH +: DCACHE_NOSM_TAG_WIDTH];
-    assign smem_bus_if[1].rsp_data.tag = smem_d_bits_source[1 * DCACHE_NOSM_TAG_WIDTH +: DCACHE_NOSM_TAG_WIDTH];
-    assign smem_bus_if[2].rsp_data.tag = smem_d_bits_source[2 * DCACHE_NOSM_TAG_WIDTH +: DCACHE_NOSM_TAG_WIDTH];
-    assign smem_bus_if[3].rsp_data.tag = smem_d_bits_source[3 * DCACHE_NOSM_TAG_WIDTH +: DCACHE_NOSM_TAG_WIDTH];
-
-    // When there's a write ACK coming back, ready bit should always be 1 to
-    // accept them because core does not accept them on their own
-    assign smem_d_ready[0] = smem_bus_if[0].rsp_ready ||
-                            (smem_d_valid[0] && (smem_d_bits_opcode[0 * 3 +: 3] == 3'd0 /*AccessAck*/));
-    assign smem_d_ready[1] = smem_bus_if[1].rsp_ready ||
-                            (smem_d_valid[1] && (smem_d_bits_opcode[1 * 3 +: 3] == 3'd0 /*AccessAck*/));
-    assign smem_d_ready[2] = smem_bus_if[2].rsp_ready ||
-                            (smem_d_valid[2] && (smem_d_bits_opcode[2 * 3 +: 3] == 3'd0 /*AccessAck*/));
-    assign smem_d_ready[3] = smem_bus_if[3].rsp_ready ||
-                            (smem_d_valid[3] && (smem_d_bits_opcode[3 * 3 +: 3] == 3'd0 /*AccessAck*/));
-
-    assign smem_a_valid[0] = smem_bus_if[0].req_valid;
-    assign smem_a_valid[1] = smem_bus_if[1].req_valid;
-    assign smem_a_valid[2] = smem_bus_if[2].req_valid;
-    assign smem_a_valid[3] = smem_bus_if[3].req_valid;
-
-    assign smem_a_bits_address[0 * 32 +: 32] = {smem_bus_if[0].req_data.addr, 2'b0};
-    assign smem_a_bits_address[1 * 32 +: 32] = {smem_bus_if[1].req_data.addr, 2'b0};
-    assign smem_a_bits_address[2 * 32 +: 32] = {smem_bus_if[2].req_data.addr, 2'b0};
-    assign smem_a_bits_address[3 * 32 +: 32] = {smem_bus_if[3].req_data.addr, 2'b0};
-
-    assign smem_a_bits_data[0 * 32 +: 32] = smem_bus_if[0].req_data.data;
-    assign smem_a_bits_data[1 * 32 +: 32] = smem_bus_if[1].req_data.data;
-    assign smem_a_bits_data[2 * 32 +: 32] = smem_bus_if[2].req_data.data;
-    assign smem_a_bits_data[3 * 32 +: 32] = smem_bus_if[3].req_data.data;
-
-    assign smem_a_bits_source[0 * DCACHE_NOSM_TAG_WIDTH +: DCACHE_NOSM_TAG_WIDTH] = smem_bus_if[0].req_data.tag;
-    assign smem_a_bits_source[1 * DCACHE_NOSM_TAG_WIDTH +: DCACHE_NOSM_TAG_WIDTH] = smem_bus_if[1].req_data.tag;
-    assign smem_a_bits_source[2 * DCACHE_NOSM_TAG_WIDTH +: DCACHE_NOSM_TAG_WIDTH] = smem_bus_if[2].req_data.tag;
-    assign smem_a_bits_source[3 * DCACHE_NOSM_TAG_WIDTH +: DCACHE_NOSM_TAG_WIDTH] = smem_bus_if[3].req_data.tag;
-
-    // Translate Vortex rw/byteen to TileLink opcode
-    assign smem_a_bits_opcode[0 * 3 +: 3] = 
-        smem_bus_if[0].req_data.rw ?
-        (&smem_bus_if[0].req_data.byteen ? 3'd0 /*PutFull*/ : 3'd1 /*PutPartial*/)
-        : 3'd4 /*Get*/;
-    assign smem_a_bits_opcode[1 * 3 +: 3] = 
-        smem_bus_if[1].req_data.rw ?
-        (&smem_bus_if[1].req_data.byteen ? 3'd0 /*PutFull*/ : 3'd1 /*PutPartial*/)
-        : 3'd4 /*Get*/;
-    assign smem_a_bits_opcode[2 * 3 +: 3] = 
-        smem_bus_if[2].req_data.rw ?
-        (&smem_bus_if[2].req_data.byteen ? 3'd0 /*PutFull*/ : 3'd1 /*PutPartial*/)
-        : 3'd4 /*Get*/;
-    assign smem_a_bits_opcode[3 * 3 +: 3] = 
-        smem_bus_if[3].req_data.rw ?
-        (&smem_bus_if[3].req_data.byteen ? 3'd0 /*PutFull*/ : 3'd1 /*PutPartial*/)
-        : 3'd4 /*Get*/;
-
-    // Vortex cache requests are single-fixed-size
-    // NOTE: MAKE SURE TO CHANGE CONSTANT WIDTH FOR SIZE!
-    assign smem_a_bits_size[0 * 4 +: 4] = 4'd2;
-    assign smem_a_bits_size[1 * 4 +: 4] = 4'd2;
-    assign smem_a_bits_size[2 * 4 +: 4] = 4'd2;
-    assign smem_a_bits_size[3 * 4 +: 4] = 4'd2;
-    /* $countones(dcache_req_if.byteen[0]) === 'd4 ? 2'd2 :
-        ($countones(dcache_req_if.byteen[0]) === 'd2 ? 2'd1 : 2'd0); */
-
-    // byteen can be directly used as TL mask
-    assign smem_a_bits_mask[0 * 4 +: 4] = smem_bus_if[0].req_data.byteen;
-    assign smem_a_bits_mask[1 * 4 +: 4] = smem_bus_if[1].req_data.byteen;
-    assign smem_a_bits_mask[2 * 4 +: 4] = smem_bus_if[2].req_data.byteen;
-    assign smem_a_bits_mask[3 * 4 +: 4] = smem_bus_if[3].req_data.byteen;
-
-    assign smem_bus_if[0].req_ready = smem_a_ready[0];
-    assign smem_bus_if[1].req_ready = smem_a_ready[1];
-    assign smem_bus_if[2].req_ready = smem_a_ready[2];
-    assign smem_bus_if[3].req_ready = smem_a_ready[3];
+            // Setting request ready signal for smem
+            assign smem_bus_if[i].req_ready = smem_a_ready[i];
+        end
+    endgenerate
 
     // gbar -------------------------------------------------------------------
 `ifdef GBAR_ENABLE
