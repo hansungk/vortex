@@ -21,6 +21,8 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
 
 `ifdef PERF_ENABLE
     output reg [`PERF_CTR_BITS-1:0] perf_scb_stalls,
+    output reg [`PERF_CTR_BITS-1:0] perf_scb_fires,
+    output reg [`PERF_CTR_BITS-1:0] perf_scb_any_fire_cycles,
     output reg [`PERF_CTR_BITS-1:0] perf_units_uses [`NUM_EX_UNITS],
     output reg [`PERF_CTR_BITS-1:0] perf_sfu_uses [`NUM_SFU_UNITS],
 `endif
@@ -34,46 +36,79 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
 
 `ifdef PERF_ENABLE
     reg [`ISSUE_WIDTH-1:0][`NUM_EX_UNITS-1:0] perf_issue_units_per_cycle;
-    wire [`NUM_EX_UNITS-1:0] perf_units_per_cycle, perf_units_per_cycle_r;
+    wire [`NUM_EX_UNITS-1:0][`PERF_CTR_BITS-1:0] perf_units_per_cycle_r;
+    reg [`NUM_EX_UNITS-1:0][`PERF_CTR_BITS-1:0] perf_units_per_cycle;
 
     reg [`ISSUE_WIDTH-1:0][`NUM_SFU_UNITS-1:0] perf_issue_sfu_per_cycle;    
-    wire [`NUM_SFU_UNITS-1:0] perf_sfu_per_cycle, perf_sfu_per_cycle_r;
+    wire [`NUM_SFU_UNITS-1:0][`PERF_CTR_BITS-1:0] perf_sfu_per_cycle_r;
+    reg [`NUM_SFU_UNITS-1:0][`PERF_CTR_BITS-1:0] perf_sfu_per_cycle;
 
     wire [`ISSUE_WIDTH-1:0] perf_issue_stalls_per_cycle;
     wire [`CLOG2(`ISSUE_WIDTH+1)-1:0] perf_stalls_per_cycle, perf_stalls_per_cycle_r;    
 
+    wire [`ISSUE_WIDTH-1:0] perf_issue_fires_per_cycle;
+    wire [`CLOG2(`ISSUE_WIDTH+1)-1:0] perf_fires_per_cycle, perf_fires_per_cycle_r;    
+    wire perf_any_fire_per_cycle, perf_any_fire_per_cycle_r;
+
+    reg [`PERF_CTR_BITS-1:0] perf_scb_empty;
+
     `POP_COUNT(perf_stalls_per_cycle, perf_issue_stalls_per_cycle);    
+    `POP_COUNT(perf_fires_per_cycle, perf_issue_fires_per_cycle);
+    assign perf_any_fire_per_cycle = |perf_issue_fires_per_cycle;
+
+    for (genvar i=0; i < `NUM_EX_UNITS; ++i) begin
+        always @(*) begin
+            perf_units_per_cycle[i] = '0;
+            for (integer isw = 0; isw < `ISSUE_WIDTH; ++isw) begin
+                perf_units_per_cycle[i] = perf_units_per_cycle[i] + perf_issue_units_per_cycle[isw][i];
+            end
+        end
+    end
+    for (genvar i=0; i < `NUM_SFU_UNITS; ++i) begin
+        always @(*) begin
+            perf_sfu_per_cycle[i] = '0;
+            for (integer isw = 0; isw < `ISSUE_WIDTH; ++isw) begin
+                perf_sfu_per_cycle[i] = perf_sfu_per_cycle[i] + perf_issue_sfu_per_cycle[isw][i];
+            end
+        end
+    end
 
     // NOTE(hansung): Because of OR-reduce, things are counted as once even when
     // multiple warps were using the same execution unit type at a given cycle.
     // This might result in an overall undercount
-    VX_reduce #(
-        .DATAW_IN (`NUM_EX_UNITS),
-        .N  (`ISSUE_WIDTH),
-        .OP ("|")
-    ) perf_units_reduce (
-        .data_in  (perf_issue_units_per_cycle),
-        .data_out (perf_units_per_cycle)
-    );    
+    // VX_reduce #(
+    //     .DATAW_IN (`NUM_EX_UNITS),
+    //     .N  (`ISSUE_WIDTH),
+    //     .OP ("|")
+    // ) perf_units_reduce (
+    //     .data_in  (perf_issue_units_per_cycle),
+    //     .data_out (perf_units_per_cycle)
+    // );    
 
-    VX_reduce #(
-        .DATAW_IN (`NUM_SFU_UNITS),
-        .N  (`ISSUE_WIDTH),
-        .OP ("|")
-    ) perf_sfu_reduce (
-        .data_in  (perf_issue_sfu_per_cycle),
-        .data_out (perf_sfu_per_cycle)
-    );
+    // VX_reduce #(
+    //     .DATAW_IN (`NUM_SFU_UNITS),
+    //     .N  (`ISSUE_WIDTH),
+    //     .OP ("|")
+    // ) perf_sfu_reduce (
+    //     .data_in  (perf_issue_sfu_per_cycle),
+    //     .data_out (perf_sfu_per_cycle)
+    // );
 
     `BUFFER(perf_stalls_per_cycle_r, perf_stalls_per_cycle);
+    `BUFFER(perf_fires_per_cycle_r, perf_fires_per_cycle);
+    `BUFFER(perf_any_fire_per_cycle_r, perf_any_fire_per_cycle);
     `BUFFER(perf_units_per_cycle_r, perf_units_per_cycle);
     `BUFFER(perf_sfu_per_cycle_r, perf_sfu_per_cycle);
 
     always @(posedge clk) begin
         if (reset) begin
             perf_scb_stalls <= '0;            
+            perf_scb_fires <= '0;
+            perf_scb_any_fire_cycles <= '0;
         end else begin
             perf_scb_stalls <= perf_scb_stalls + `PERF_CTR_BITS'(perf_stalls_per_cycle_r);
+            perf_scb_fires <= perf_scb_fires + `PERF_CTR_BITS'(perf_fires_per_cycle_r);
+            perf_scb_any_fire_cycles <= perf_scb_any_fire_cycles + `PERF_CTR_BITS'(perf_any_fire_per_cycle_r);
         end
     end
 
@@ -153,6 +188,7 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
             end
         end
         assign perf_issue_stalls_per_cycle[i] = ibuffer_if[i].valid && ~ibuffer_if[i].ready;
+        assign perf_issue_fires_per_cycle[i] = ibuffer_if[i].valid && ibuffer_if[i].ready;
     `endif
 
         // NOTE(hansung): why is inuse_rd checked? to prevent WAW?
@@ -228,5 +264,20 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
     `endif
     
     end
+
+`ifdef PERF_ENABLE
+    wire [`ISSUE_WIDTH-1:0] ibuffer_valids;
+    for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin
+        assign ibuffer_valids[i] = ibuffer_if[i].valid;
+    end
+
+    always @(posedge clk) begin
+        if (reset) begin
+            perf_scb_empty <= '0;
+        end else begin
+            perf_scb_empty <= perf_scb_empty + `PERF_CTR_BITS'(~|ibuffer_valids);
+        end
+    end
+`endif
 
 endmodule

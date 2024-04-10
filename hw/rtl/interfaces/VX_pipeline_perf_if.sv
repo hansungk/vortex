@@ -16,11 +16,17 @@
 interface VX_pipeline_perf_if ();
     wire [`PERF_CTR_BITS-1:0] sched_idles;
     wire [`PERF_CTR_BITS-1:0] sched_stalls;
-    wire [`PERF_CTR_BITS-1:0] sched_barrier_stalls;
+    wire [`PERF_CTR_BITS-1:0] sched_barrier_idles;
     wire [`PERF_CTR_BITS-1:0] ibf_stalls;
     wire [`PERF_CTR_BITS-1:0] scb_stalls;
+    wire [`PERF_CTR_BITS-1:0] scb_fires;
+    wire [`PERF_CTR_BITS-1:0] scb_any_fire_cycles;
     wire [`PERF_CTR_BITS-1:0] units_uses [`NUM_EX_UNITS];
     wire [`PERF_CTR_BITS-1:0] sfu_uses [`NUM_SFU_UNITS];
+    wire [`PERF_CTR_BITS-1:0] dispatch_stalls [`NUM_EX_UNITS];
+    wire [`PERF_CTR_BITS-1:0] dispatch_valids [`NUM_EX_UNITS];
+    wire [`PERF_CTR_BITS-1:0] dispatch_fires [`NUM_EX_UNITS];
+    wire [`PERF_CTR_BITS-1:0] dispatch_any_fire_cycles;
 
     wire [`PERF_CTR_BITS-1:0] ifetches;
     wire [`PERF_CTR_BITS-1:0] loads;
@@ -30,25 +36,37 @@ interface VX_pipeline_perf_if ();
 
     modport schedule (
         output sched_idles,
-        output sched_barrier_stalls,
+        output sched_barrier_idles,
         output sched_stalls        
     );
 
     modport issue (
         output ibf_stalls,
         output scb_stalls,
+        output scb_fires,
+        output scb_any_fire_cycles,
         output units_uses,
-        output sfu_uses
+        output sfu_uses,
+        output dispatch_stalls,
+        output dispatch_valids,
+        output dispatch_fires,
+        output dispatch_any_fire_cycles
     );
 
     modport slave (
         input sched_idles,
-        input sched_barrier_stalls,
+        input sched_barrier_idles,
         input sched_stalls,
         input ibf_stalls,
         input scb_stalls,
+        input scb_fires,
+        input scb_any_fire_cycles,
         input units_uses,
         input sfu_uses,
+        input dispatch_stalls,
+        input dispatch_valids,
+        input dispatch_fires,
+        input dispatch_any_fire_cycles,
         input ifetches,
         input loads,
         input stores,

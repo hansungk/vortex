@@ -61,6 +61,8 @@ module VX_issue #(
         .reset          (scoreboard_reset),
     `ifdef PERF_ENABLE
         .perf_scb_stalls(perf_issue_if.scb_stalls),
+        .perf_scb_fires (perf_issue_if.scb_fires),
+        .perf_scb_any_fire_cycles (perf_issue_if.scb_any_fire_cycles),
         .perf_units_uses(perf_issue_if.units_uses),
         .perf_sfu_uses  (perf_issue_if.sfu_uses),
     `endif
@@ -86,6 +88,10 @@ module VX_issue #(
         .reset          (dispatch_reset),
     `ifdef PERF_ENABLE
         `UNUSED_PIN     (perf_stalls),
+        .perf_stalls    (perf_issue_if.dispatch_stalls),
+        .perf_valids    (perf_issue_if.dispatch_valids),
+        .perf_fires     (perf_issue_if.dispatch_fires),
+        .perf_any_fire_cycles (perf_issue_if.dispatch_any_fire_cycles),
     `endif
         .operands_if    (operands_if),
         .alu_dispatch_if(alu_dispatch_if),
