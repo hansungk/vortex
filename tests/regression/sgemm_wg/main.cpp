@@ -108,6 +108,17 @@ int run_test(const kernel_arg_t& kernel_arg,
   std::cout << "download destination buffer" << std::endl;
   RT_CHECK(vx_copy_from_dev(device, staging_buf.data(), kernel_arg.addr_c, buf_size));
 
+  std::cout << "downloading result C matrix from device, device mem address="
+            << std::hex << kernel_arg.addr_c << ", size=" << std::dec
+            << buf_size << " bytes\n";
+  std::ofstream file("output.c.bin", std::ios::binary | std::ios::out);
+  if (!file) {
+    std::cerr << "error: failed to open output.c.bin for writing\n";
+    exit(EXIT_FAILURE);
+  }
+  file.write(reinterpret_cast<char *>(staging_buf.data()), buf_size);
+  file.close();
+
   // verify result
   std::cout << "verify result" << std::endl;
   {
@@ -225,7 +236,7 @@ int main(int argc, char *argv[]) {
                   << src_a_buf_size << " bytes\n";
         std::ofstream file("input.a.bin", std::ios::binary | std::ios::out);
         if (!file) {
-        std::cerr << "error: failed to open args.bin for writing\n";
+        std::cerr << "error: failed to open input.a.bin for writing\n";
         exit(EXIT_FAILURE);
         }
         file.write(reinterpret_cast<char *>(buf_ptr), src_a_buf_size);
@@ -242,7 +253,7 @@ int main(int argc, char *argv[]) {
                   << src_b_buf_size << " bytes\n";
         std::ofstream file("input.b.bin", std::ios::binary | std::ios::out);
         if (!file) {
-        std::cerr << "error: failed to open args.bin for writing\n";
+        std::cerr << "error: failed to open input.b.bin for writing\n";
         exit(EXIT_FAILURE);
         }
         file.write(reinterpret_cast<char *>(buf_ptr), src_b_buf_size);
