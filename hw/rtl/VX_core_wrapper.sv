@@ -18,7 +18,7 @@ module Vortex import VX_gpu_pkg::*; #(
     input         interrupts_mtip,
     input         interrupts_msip,
     input         interrupts_meip,
-    input         interrupts_seip,
+    // input         interrupts_seip,
 
     // imem ------------------------------------------------
 
