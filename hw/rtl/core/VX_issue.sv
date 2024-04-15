@@ -72,8 +72,13 @@ module VX_issue #(
         .scoreboard_if  (scoreboard_if)
     );
 
+`ifdef GPR_DUPLICATED
+    VX_operands_dup #(
+`else
     VX_operands #(
-        .CORE_ID (CORE_ID)
+`endif
+        .CORE_ID (CORE_ID),
+        .CACHE_ENABLE (0)
     ) operands (
         .clk            (clk), 
         .reset          (operands_reset), 
