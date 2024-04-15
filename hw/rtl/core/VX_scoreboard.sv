@@ -21,6 +21,7 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
 
 `ifdef PERF_ENABLE
     output reg [`PERF_CTR_BITS-1:0] perf_scb_stalls,
+    output reg [`PERF_CTR_BITS-1:0] perf_scb_any_unit_uses,
     output reg [`PERF_CTR_BITS-1:0] perf_scb_fires,
     output reg [`PERF_CTR_BITS-1:0] perf_scb_any_fire_cycles,
     output reg [`PERF_CTR_BITS-1:0] perf_units_uses [`NUM_EX_UNITS],
@@ -45,6 +46,8 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
 
     wire [`ISSUE_WIDTH-1:0] perf_issue_stalls_per_cycle;
     wire [`CLOG2(`ISSUE_WIDTH+1)-1:0] perf_stalls_per_cycle, perf_stalls_per_cycle_r;    
+    reg [`ISSUE_WIDTH-1:0] perf_issue_any_unit_per_cycle;
+    wire [`CLOG2(`ISSUE_WIDTH+1)-1:0] perf_any_unit_per_cycle, perf_any_unit_per_cycle_r;    
 
     wire [`ISSUE_WIDTH-1:0] perf_issue_fires_per_cycle;
     wire [`CLOG2(`ISSUE_WIDTH+1)-1:0] perf_fires_per_cycle, perf_fires_per_cycle_r;    
@@ -53,6 +56,7 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
     reg [`PERF_CTR_BITS-1:0] perf_scb_empty;
 
     `POP_COUNT(perf_stalls_per_cycle, perf_issue_stalls_per_cycle);    
+    `POP_COUNT(perf_any_unit_per_cycle, perf_issue_any_unit_per_cycle);
     `POP_COUNT(perf_fires_per_cycle, perf_issue_fires_per_cycle);
     assign perf_any_fire_per_cycle = |perf_issue_fires_per_cycle;
 
@@ -95,6 +99,7 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
     // );
 
     `BUFFER(perf_stalls_per_cycle_r, perf_stalls_per_cycle);
+    `BUFFER(perf_any_unit_per_cycle_r, perf_any_unit_per_cycle);
     `BUFFER(perf_fires_per_cycle_r, perf_fires_per_cycle);
     `BUFFER(perf_any_fire_per_cycle_r, perf_any_fire_per_cycle);
     `BUFFER(perf_units_per_cycle_r, perf_units_per_cycle);
@@ -103,10 +108,12 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
     always @(posedge clk) begin
         if (reset) begin
             perf_scb_stalls <= '0;            
+            perf_scb_any_unit_uses <= '0;
             perf_scb_fires <= '0;
             perf_scb_any_fire_cycles <= '0;
         end else begin
             perf_scb_stalls <= perf_scb_stalls + `PERF_CTR_BITS'(perf_stalls_per_cycle_r);
+            perf_scb_any_unit_uses <= perf_scb_any_unit_uses + `PERF_CTR_BITS'(perf_any_unit_per_cycle_r);
             perf_scb_fires <= perf_scb_fires + `PERF_CTR_BITS'(perf_fires_per_cycle_r);
             perf_scb_any_fire_cycles <= perf_scb_any_fire_cycles + `PERF_CTR_BITS'(perf_any_fire_per_cycle_r);
         end
@@ -159,27 +166,32 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
 
         always @(*) begin
             perf_issue_units_per_cycle[i] = '0;
+            perf_issue_any_unit_per_cycle[i] = '0;
             perf_issue_sfu_per_cycle[i] = '0;
             if (ibuffer_if[i].valid) begin
                 if (inuse_rd) begin
+                    perf_issue_any_unit_per_cycle[i] = '1;
                     perf_issue_units_per_cycle[i][inuse_units[ibuffer_if[i].data.wis][ibuffer_if[i].data.rd]] = 1;
                     if (inuse_units[ibuffer_if[i].data.wis][ibuffer_if[i].data.rd] == `EX_SFU) begin
                         perf_issue_sfu_per_cycle[i][inuse_sfu[ibuffer_if[i].data.wis][ibuffer_if[i].data.rd]] = 1;
                     end
                 end
                 if (inuse_rs1) begin
+                    perf_issue_any_unit_per_cycle[i] = '1;
                     perf_issue_units_per_cycle[i][inuse_units[ibuffer_if[i].data.wis][ibuffer_if[i].data.rs1]] = 1;
                     if (inuse_units[ibuffer_if[i].data.wis][ibuffer_if[i].data.rs1] == `EX_SFU) begin
                         perf_issue_sfu_per_cycle[i][inuse_sfu[ibuffer_if[i].data.wis][ibuffer_if[i].data.rs1]] = 1;
                     end
                 end
                 if (inuse_rs2) begin
+                    perf_issue_any_unit_per_cycle[i] = '1;
                     perf_issue_units_per_cycle[i][inuse_units[ibuffer_if[i].data.wis][ibuffer_if[i].data.rs2]] = 1;
                     if (inuse_units[ibuffer_if[i].data.wis][ibuffer_if[i].data.rs2] == `EX_SFU) begin
                         perf_issue_sfu_per_cycle[i][inuse_sfu[ibuffer_if[i].data.wis][ibuffer_if[i].data.rs2]] = 1;
                     end
                 end
                 if (inuse_rs3) begin
+                    perf_issue_any_unit_per_cycle[i] = '1;
                     perf_issue_units_per_cycle[i][inuse_units[ibuffer_if[i].data.wis][ibuffer_if[i].data.rs3]] = 1;
                     if (inuse_units[ibuffer_if[i].data.wis][ibuffer_if[i].data.rs3] == `EX_SFU) begin
                         perf_issue_sfu_per_cycle[i][inuse_sfu[ibuffer_if[i].data.wis][ibuffer_if[i].data.rs3]] = 1;

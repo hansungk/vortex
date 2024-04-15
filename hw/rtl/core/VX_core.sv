@@ -434,6 +434,8 @@ module VX_core import VX_gpu_pkg::*; #(
                      $itor(pipeline_perf_if.scb_any_fire_cycles) / $itor(cycles) * 100.0);
             $display("issue scoreboard: stalls total:\t%d across ISSUE_WIDTH=%d",
                      pipeline_perf_if.scb_stalls, `ISSUE_WIDTH);
+            $display("issue scoreboard: stalls by operand hazard: total %d across ISSUE_WIDTH=%d",
+                     pipeline_perf_if.scb_any_unit_uses, `ISSUE_WIDTH);
             $display("issue scoreboard: stalls by operand hazard: alu %d (%2.2f cycles per issue)",
                      scrb_alu_per_core,
                      $itor(scrb_alu_per_core) / $itor(pipeline_perf_if.dispatch_fires[`EX_ALU]));

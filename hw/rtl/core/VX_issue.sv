@@ -61,6 +61,7 @@ module VX_issue #(
         .reset          (scoreboard_reset),
     `ifdef PERF_ENABLE
         .perf_scb_stalls(perf_issue_if.scb_stalls),
+        .perf_scb_any_unit_uses(perf_issue_if.scb_any_unit_uses),
         .perf_scb_fires (perf_issue_if.scb_fires),
         .perf_scb_any_fire_cycles (perf_issue_if.scb_any_fire_cycles),
         .perf_units_uses(perf_issue_if.units_uses),
