@@ -14,7 +14,7 @@
 #define SPAD_NUM_ROWS (SMEM_SIZE / SPAD_ROW_SIZE)
 #define SPAD_MASK (SPAD_NUM_ROWS - 1)
 
-#define PRINT_BUF SMEM_ADDR_END
+#define PRINT_BUF ((char *) (SMEM_ADDR_END))
 #define GEMMINI_RS1_ADDR 0xff007010
 #define GEMMINI_RS2_ADDR 0xff007018
 #define GEMMINI_INST_ADDR 0xff007000
@@ -32,7 +32,8 @@
     (((i) / DIM * (J) / DIM + (j) / DIM) * DIM * DIM + ((i) % DIM) * DIM + ((j) % DIM))
 
 // #define fence() { for (int i = 0; i < 10; i++) *((volatile uint32_t *) (0xFFFF0000)) = 0xdeadbeef; }
-#define fence() { while (*((volatile uint32_t *) GEMMINI_BUSY_ADDR)) asm volatile ("nop"); }
+#undef gemmini_fence
+#define gemmini_fence() { while (*((volatile uint32_t *) GEMMINI_BUSY_ADDR)) asm volatile ("nop"); }
 
 #undef ROCC_INSTRUCTION_RS1_RS2
 #define ROCC_INSTRUCTION_RS1_RS2(x, rs1, rs2, funct) { \
@@ -60,6 +61,7 @@ static void sp_tiled_matmul_full_spad_ws(const uint32_t A_sp_addr_start, const u
     a_transpose, b_transpose,
     full_C, low_D, false,
     act, 0, 0, false);
+  /*
   return;
 
 
@@ -72,7 +74,7 @@ static void sp_tiled_matmul_full_spad_ws(const uint32_t A_sp_addr_start, const u
   const int C_blocks = 1; //full_C ? 1 : (J <= MAX_BLOCK_LEN ? J : MAX_BLOCK_LEN);
   // const size_t sizeof_D = low_D ? sizeof(elem_t) : sizeof(acc_t);
   const size_t sizeof_C = full_C ? sizeof(acc_t) : sizeof(elem_t);
-  fence();
+  gemmini_fence();
 
   if (a_transpose || b_transpose || (I < 4)) {
     for (size_t k = 0; k < K; k++) {
@@ -140,7 +142,7 @@ static void sp_tiled_matmul_full_spad_ws(const uint32_t A_sp_addr_start, const u
             gemmini_extended_compute_accumulated(A_sp_addr + 3 * K * DIM, GARBAGE_ADDR, DIM, DIM, DIM, DIM);
           }
           if (k == K - 1) {
-            for (int x = 0; x < 3; x++) fence();
+            for (int x = 0; x < 3; x++) gemmini_fence();
             gemmini_extended_mvout_spad((uint32_t) C_dst_sp_addr_start + (i * J + j) * DIM, 1, C_sp_addr, DIM, DIM);
             gemmini_extended_mvout_spad((uint32_t) C_dst_sp_addr_start + ((i + 1) * J + j) * DIM, 1, C_sp_addr + J * DIM, DIM, DIM);
             gemmini_extended_mvout_spad((uint32_t) C_dst_sp_addr_start + ((i + 2) * J + j) * DIM, 1, C_sp_addr + 2 * J * DIM, DIM, DIM);
@@ -152,7 +154,8 @@ static void sp_tiled_matmul_full_spad_ws(const uint32_t A_sp_addr_start, const u
       }
     }
   }
-  fence();
+  gemmini_fence();
+  */
 }
 
 

@@ -3,7 +3,7 @@
 #include <vx_intrinsics.h>
 #include <vx_print.h>
 #include <vx_spawn.h>
-#include <include/gemmini.h>
+#include "include/gemmini.h"
 #include "gemmini_mmio.h"
 
 #define rd_cycles(x) asm volatile ("csrr %0, mcycle" : "=r" (x))
@@ -12,7 +12,7 @@ int main() {
 
   int cid;
   asm volatile ("csrr %0, 0xcc2" : "=r" (cid));
-  if (cid > 0) return 0;
+  if (cid > 0) vx_tmc(0);
 
   vx_tmc(0xff);
 
@@ -40,7 +40,11 @@ int main() {
   vx_tmc_one();
   gemmini_config_ld(0);
   gemmini_extended_config_ex(WEIGHT_STATIONARY, 0, 0, 1, 0, 0);
-  gemmini_config_st(DIM * 4 * J);
+  gemmini_config_st(0);
+  /* sprintf(print_buf, "A spad: 0x%x-0x%x, smem: 0x%x-%x\n", spad_A, spad_A + I * K * DIM, (uint32_t) smem_A, (uint32_t) smem_A + sizeof(float) * I * K * DIM * DIM);
+  sprintf(print_buf, "B spad: 0x%x-0x%x, smem: 0x%x-%x\n", spad_B, spad_B + K * J * DIM, (uint32_t) smem_B, (uint32_t) smem_B + sizeof(float) * K * J * DIM * DIM);
+  sprintf(print_buf, "C spad: 0x%x-0x%x, smem: 0x%x-%x\n", spad_C, spad_C + I * J * DIM, (uint32_t) smem_C, (uint32_t) smem_C + sizeof(float) * I * J * DIM * DIM); */
+
   sprintf(print_buf, "DIM %d\n", DIM);
   sprintf(print_buf, "num cores %d\n", nc);
   sprintf(print_buf, "num threads %d\n", nt);
@@ -49,9 +53,6 @@ int main() {
   sprintf(print_buf, "%d", tid);
 
   uint32_t start_cycles, end_cycles;
-  /* sprintf(print_buf, "A spad: 0x%x-0x%x, smem: 0x%x-%x\n", spad_A, spad_A + I * K * DIM, (uint32_t) smem_A, (uint32_t) smem_A + sizeof(float) * I * K * DIM * DIM);
-  sprintf(print_buf, "B spad: 0x%x-0x%x, smem: 0x%x-%x\n", spad_B, spad_B + K * J * DIM, (uint32_t) smem_B, (uint32_t) smem_B + sizeof(float) * K * J * DIM * DIM);
-  sprintf(print_buf, "C spad: 0x%x-0x%x, smem: 0x%x-%x\n", spad_C, spad_C + I * J * DIM, (uint32_t) smem_C, (uint32_t) smem_C + sizeof(float) * I * J * DIM * DIM); */
 
   rd_cycles(start_cycles);
   // load A with 128->1 in row-major order
@@ -87,7 +88,7 @@ int main() {
   vx_tmc_one();
   sprintf(print_buf, "\ndata loading took %d cycles for %d floats\n", end_cycles - start_cycles, DIM * DIM * (I * K + J * K));
 
-  fence();
+  gemmini_fence();
 
   // sprintf(print_buf, "\nA in\n");
   // for (int i = 0; i < I * DIM; i++) {
@@ -113,7 +114,7 @@ int main() {
       /*no_bias=*/1, /*repeating_bias=*/0, /*act=*/NO_ACTIVATION);
 
   rd_cycles(fence_cycles);
-  fence();
+  gemmini_fence();
   rd_cycles(end_cycles);
   sprintf(print_buf, "gemmini cycles taken: %d, fence cycles: %d\n", end_cycles - start_cycles, end_cycles - fence_cycles);
 
@@ -138,5 +139,6 @@ int main() {
   }
   sprintf(print_buf, "TEST PASSED\n");
 
+  vx_tmc(0);
   return 0;
 }
