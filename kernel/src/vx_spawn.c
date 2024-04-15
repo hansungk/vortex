@@ -258,7 +258,6 @@ void vx_spawn_tasks_cluster(int num_tasks, vx_spawn_tasks_cb callback, void *arg
   // threads, handle this in the last wave amongst other full warps.
   if (rem_threads_in_last_warp != 0 && core_id_in_cluster == 0) {
     // adjust offset
-    // FIXME: consider cluster_id here
     // FIXME: use rem_threads_in_last_warp_this_core
     wspawn_args.offset += (num_tasks_this_cluster - rem_threads_in_last_warp);
 

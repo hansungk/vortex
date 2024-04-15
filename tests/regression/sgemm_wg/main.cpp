@@ -119,6 +119,14 @@ int run_test(const kernel_arg_t& kernel_arg,
   file.write(reinterpret_cast<char *>(staging_buf.data()), buf_size);
   file.close();
 
+  std::ofstream ref_file("reference.c.bin", std::ios::binary | std::ios::out);
+  if (!ref_file) {
+    std::cerr << "error: failed to open reference.c.bin for writing\n";
+    exit(EXIT_FAILURE);
+  }
+  ref_file.write(reinterpret_cast<char *>(ref_data.data()), buf_size);
+  ref_file.close();
+
   // verify result
   std::cout << "verify result" << std::endl;
   {
