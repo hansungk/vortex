@@ -13,6 +13,8 @@
 
 `include "VX_define.vh"
 
+`ifdef GPR_DUPLICATED
+
 module VX_operands_dup import VX_gpu_pkg::*; #(
     parameter CORE_ID = 0,
     parameter CACHE_ENABLE = 0
@@ -224,3 +226,5 @@ module VX_operands_dup import VX_gpu_pkg::*; #(
     end
 
 endmodule
+
+`endif
