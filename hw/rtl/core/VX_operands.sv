@@ -13,6 +13,8 @@
 
 `include "VX_define.vh"
 
+`ifndef GPR_DUPLICATED
+
 module VX_operands import VX_gpu_pkg::*; #(
     parameter CORE_ID = 0,
     parameter CACHE_ENABLE = 0
@@ -197,9 +199,10 @@ module VX_operands import VX_gpu_pkg::*; #(
         assign stg_valid_in = scoreboard_if[i].valid && data_ready;
         assign scoreboard_if[i].ready = stg_ready_in && data_ready;        
 
-        // NOTE(hansung): toggle_buffer is 1-reg pipe without flow, halving
-        // throughput.  Wouldn't this cap overall IPC?  Or OK as long as
-        // ISSUE_WIDTH > 1?
+        // NOTE(hansung): Cannot use stream_buffer here for full throughput
+        // because data registers (rs1_data, ...) are single-buffered.  This
+        // will probably cap IPC at 50% (notwithstanding the 1-operand-per-cycle
+        // limit.)
         VX_toggle_buffer #(
             .DATAW (DATAW)
         ) staging_buffer (
@@ -295,3 +298,5 @@ module VX_operands import VX_gpu_pkg::*; #(
     end
 
 endmodule
+
+`endif

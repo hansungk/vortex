@@ -19,6 +19,7 @@ interface VX_pipeline_perf_if ();
     wire [`PERF_CTR_BITS-1:0] sched_barrier_idles;
     wire [`PERF_CTR_BITS-1:0] ibf_stalls;
     wire [`PERF_CTR_BITS-1:0] scb_stalls;
+    wire [`PERF_CTR_BITS-1:0] scb_any_unit_uses;
     wire [`PERF_CTR_BITS-1:0] scb_fires;
     wire [`PERF_CTR_BITS-1:0] scb_any_fire_cycles;
     wire [`PERF_CTR_BITS-1:0] units_uses [`NUM_EX_UNITS];
@@ -43,6 +44,7 @@ interface VX_pipeline_perf_if ();
     modport issue (
         output ibf_stalls,
         output scb_stalls,
+        output scb_any_unit_uses,
         output scb_fires,
         output scb_any_fire_cycles,
         output units_uses,
@@ -59,6 +61,7 @@ interface VX_pipeline_perf_if ();
         input sched_stalls,
         input ibf_stalls,
         input scb_stalls,
+        input scb_any_unit_uses,
         input scb_fires,
         input scb_any_fire_cycles,
         input units_uses,

@@ -264,7 +264,7 @@
 
 // Number of SFU units
 `ifndef NUM_SFU_LANES
-`define NUM_SFU_LANES   `NUM_THREADS
+`define NUM_SFU_LANES   `MIN(`NUM_THREADS, 4)
 `endif
 
 // Size of Instruction Buffer

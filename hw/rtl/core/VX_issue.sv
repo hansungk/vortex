@@ -61,6 +61,7 @@ module VX_issue #(
         .reset          (scoreboard_reset),
     `ifdef PERF_ENABLE
         .perf_scb_stalls(perf_issue_if.scb_stalls),
+        .perf_scb_any_unit_uses(perf_issue_if.scb_any_unit_uses),
         .perf_scb_fires (perf_issue_if.scb_fires),
         .perf_scb_any_fire_cycles (perf_issue_if.scb_any_fire_cycles),
         .perf_units_uses(perf_issue_if.units_uses),
@@ -71,8 +72,13 @@ module VX_issue #(
         .scoreboard_if  (scoreboard_if)
     );
 
+`ifdef GPR_DUPLICATED
+    VX_operands_dup #(
+`else
     VX_operands #(
-        .CORE_ID (CORE_ID)
+`endif
+        .CORE_ID (CORE_ID),
+        .CACHE_ENABLE (0)
     ) operands (
         .clk            (clk), 
         .reset          (operands_reset), 
