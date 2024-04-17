@@ -21,7 +21,7 @@ module VX_lzc #(
 ) (
     input  wire [N-1:0]    data_in,
     output wire [LOGN-1:0] data_out,
-    output wire            valid_out
+    output logic           valid_out
 );
     if (N == 1) begin
 
@@ -33,11 +33,11 @@ module VX_lzc #(
     end else begin
 
         wire [N-1:0][LOGN-1:0] indices;
-
+    
         for (genvar i = 0; i < N; ++i) begin
             assign indices[i] = REVERSE ? LOGN'(i) : LOGN'(N-1-i);
         end
-
+    
         VX_find_first #(
             .N       (N),
             .DATAW   (LOGN),
@@ -51,5 +51,42 @@ module VX_lzc #(
 
     end
   
+endmodule
+
+module VX_lzc_rr #(
+    parameter N       = 2
+) (
+    input  wire                  clk,
+    input  wire                  reset,
+    input  wire [N-1:0]          data_in,
+    output logic [$clog2(N)-1:0] data_out,
+    output logic                 valid_out
+);
+
+    logic [$clog2(N)-1:0] current_idx;
+
+    always @(*) begin
+        integer i;
+        data_out = 0;
+        for (i = 0; i < N; i += 1) begin
+            if (data_in[(current_idx + i) % N] == 1'b1) begin
+                data_out = (current_idx + i) % N;
+                break;
+            end
+        end
+    end
+
+    assign valid_out = |data_in;
+
+    always @(posedge clk) begin
+        if (reset) begin
+            current_idx <= 0;
+        end else begin
+            if (valid_out) begin
+                current_idx = (current_idx + 1) % N;
+            end
+        end
+    end
+
 endmodule
 `TRACING_ON

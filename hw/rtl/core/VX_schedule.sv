@@ -308,10 +308,11 @@ module VX_schedule import VX_gpu_pkg::*; #(
 
     wire [`NUM_WARPS-1:0] ready_warps = active_warps & ~(stalled_warps | barrier_stalls);
 
-    VX_lzc #(
-        .N       (`NUM_WARPS),
-        .REVERSE (1)
+    VX_lzc_rr #(
+        .N       (`NUM_WARPS)
     ) wid_select (
+        .clk       (clk),
+        .reset     (reset),
         .data_in   (ready_warps),
         .data_out  (schedule_wid),
         .valid_out (schedule_valid)

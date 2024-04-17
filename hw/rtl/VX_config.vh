@@ -274,7 +274,7 @@
 
 // Size of LSU Request Queue
 `ifndef LSUQ_SIZE
-`define LSUQ_SIZE   (8 * (`NUM_THREADS / `NUM_LSU_LANES))
+`define LSUQ_SIZE   (2 * `NUM_WARPS * (`NUM_THREADS / `NUM_LSU_LANES))
 `endif
 
 // LSU Duplicate Address Check
