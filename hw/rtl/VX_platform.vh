@@ -14,6 +14,27 @@
 `ifndef VX_PLATFORM_VH
 `define VX_PLATFORM_VH
 
+`define GPR_RESET
+`define LSU_DUP_DISABLE
+`define ICACHE_DISABLE
+`define DCACHE_DISABLE
+`define GBAR_ENABLE
+`define GBAR_CLUSTER_ENABLE
+`define FPU_FPNEW
+`define NUM_BARRIERS 8
+`define NUM_CORES 2
+`define NUM_THREADS 8
+`define NUM_WARPS 8
+
+// synthesis only
+`ifndef SIMULATION
+`define SYNTHESIS
+`define NDEBUG
+`define DPI_DISABLE
+`else
+`define SV_DPI
+`endif
+
 `ifdef SV_DPI
 `include "util_dpi.vh"
 `endif
@@ -25,7 +46,11 @@
 `ifdef VIVADO
 `define STRING
 `else
+`ifdef SYNTHESIS
+`define STRING
+`else
 `define STRING string
+`endif
 `endif
 
 `ifdef SYNTHESIS

@@ -83,7 +83,7 @@ module VX_lzc_rr #(
             current_idx <= 0;
         end else begin
             if (valid_out) begin
-                current_idx = (current_idx + 1) % N;
+                current_idx <= (current_idx + 1) % N;
             end
         end
     end

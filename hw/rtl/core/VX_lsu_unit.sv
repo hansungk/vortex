@@ -326,7 +326,7 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
     `RESET_RELAY (mem_scheduler_reset, reset);
 
     VX_mem_scheduler #(
-        .INSTANCE_ID ($sformatf("core%0d-lsu-memsched", CORE_ID)),
+        .INST_ID     ($sformatf("core%0d-lsu-memsched", CORE_ID)),
         .NUM_REQS    (LSU_MEM_REQS), 
         .NUM_BANKS   (DCACHE_NUM_REQS),
         .ADDR_WIDTH  (DCACHE_ADDR_WIDTH),

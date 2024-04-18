@@ -27,8 +27,9 @@ module VX_smem_switch #(
     input wire              reset,
     
     VX_mem_bus_if.slave     bus_in_if,
-    VX_mem_bus_if.master    bus_out_if [NUM_REQS]
-);  
+    VX_mem_bus_if.master    bus_out_if_0,
+    VX_mem_bus_if.master    bus_out_if_1
+);
     localparam ADDR_WIDTH    = (MEM_ADDR_WIDTH-`CLOG2(DATA_SIZE));
     localparam DATA_WIDTH    = (8 * DATA_SIZE);
     localparam LOG_NUM_REQS  = `CLOG2(NUM_REQS);
@@ -77,11 +78,18 @@ module VX_smem_switch #(
         .ready_out (req_ready_out)
     );
 
-    for (genvar i = 0; i < NUM_REQS; ++i) begin
-        assign bus_out_if[i].req_valid = req_valid_out[i];
-        assign {bus_out_if[i].req_data.tag, bus_out_if[i].req_data.addr, bus_out_if[i].req_data.rw, bus_out_if[i].req_data.byteen, bus_out_if[i].req_data.data} = req_data_out[i];
-        assign req_ready_out[i] = bus_out_if[i].req_ready;
-    end
+    // for (genvar i = 0; i < NUM_REQS; ++i) begin
+    //     assign bus_out_if[i].req_valid = req_valid_out[i];
+    //     assign {bus_out_if[i].req_data.tag, bus_out_if[i].req_data.addr, bus_out_if[i].req_data.rw, bus_out_if[i].req_data.byteen, bus_out_if[i].req_data.data} = req_data_out[i];
+    //     assign req_ready_out[i] = bus_out_if[i].req_ready;
+    // end
+
+    assign bus_out_if_0.req_valid = req_valid_out[0];
+    assign bus_out_if_1.req_valid = req_valid_out[1];
+    assign {bus_out_if_0.req_data.tag, bus_out_if_0.req_data.addr, bus_out_if_0.req_data.rw, bus_out_if_0.req_data.byteen, bus_out_if_0.req_data.data} = req_data_out[0];
+    assign {bus_out_if_1.req_data.tag, bus_out_if_1.req_data.addr, bus_out_if_1.req_data.rw, bus_out_if_1.req_data.byteen, bus_out_if_1.req_data.data} = req_data_out[1];
+    assign req_ready_out[0] = bus_out_if_0.req_ready;
+    assign req_ready_out[1] = bus_out_if_1.req_ready;
 
     ///////////////////////////////////////////////////////////////////////        
 
@@ -92,11 +100,18 @@ module VX_smem_switch #(
     wire [TAG_OUT_WIDTH-1:0]           rsp_tag_in;
     wire [`UP(LOG_NUM_REQS)-1:0]       rsp_sel_in;
     
-    for (genvar i = 0; i < NUM_REQS; ++i) begin
-        assign rsp_valid_out[i] = bus_out_if[i].rsp_valid;
-        assign rsp_data_out[i] = {bus_out_if[i].rsp_data.tag, bus_out_if[i].rsp_data.data};
-        assign bus_out_if[i].rsp_ready = rsp_ready_out[i];
-    end
+    // for (genvar i = 0; i < NUM_REQS; ++i) begin
+    //     assign rsp_valid_out[i] = bus_out_if[i].rsp_valid;
+    //     assign rsp_data_out[i] = {bus_out_if[i].rsp_data.tag, bus_out_if[i].rsp_data.data};
+    //     assign bus_out_if[i].rsp_ready = rsp_ready_out[i];
+    // end
+    assign rsp_valid_out[0] = bus_out_if_0.rsp_valid;
+    assign rsp_valid_out[1] = bus_out_if_1.rsp_valid;
+    assign rsp_data_out[0] = {bus_out_if_0.rsp_data.tag, bus_out_if_0.rsp_data.data};
+    assign rsp_data_out[1] = {bus_out_if_1.rsp_data.tag, bus_out_if_1.rsp_data.data};
+    assign bus_out_if_0.rsp_ready = rsp_ready_out[0];
+    assign bus_out_if_1.rsp_ready = rsp_ready_out[1];
+
 
     VX_stream_arb #(            
         .NUM_INPUTS (NUM_REQS),

@@ -14,7 +14,7 @@
 `include "VX_cache_define.vh"
 
 module VX_cache import VX_gpu_pkg::*; #(
-    parameter `STRING INSTANCE_ID    = "",
+    parameter `STRING INST_ID       = "",
 
     // Number of Word requests per cycle
     parameter NUM_REQS              = 4,
@@ -333,7 +333,7 @@ module VX_cache import VX_gpu_pkg::*; #(
         
         VX_cache_bank #(                
             .BANK_ID      (i),
-            .INSTANCE_ID  (INSTANCE_ID),
+            .INST_ID      (INST_ID),
             .CACHE_SIZE   (CACHE_SIZE),
             .LINE_SIZE    (LINE_SIZE),
             .NUM_BANKS    (NUM_BANKS),

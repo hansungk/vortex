@@ -130,7 +130,8 @@ module VX_smem_unit import VX_gpu_pkg::*; #(
             .clk        (clk),
             .reset      (switch_reset),
             .bus_in_if  (dcache_bus_in_if[i]),
-            .bus_out_if (switch_out_bus_if[i * 2 +: 2])
+            .bus_out_if_0 (switch_out_bus_if[i * 2]),
+            .bus_out_if_1 (switch_out_bus_if[i * 2 + 1])
         );
     end
 

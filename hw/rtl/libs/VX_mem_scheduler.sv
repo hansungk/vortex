@@ -15,7 +15,7 @@
 
 `TRACING_OFF
 module VX_mem_scheduler #(
-    parameter `STRING INSTANCE_ID = "",
+    parameter `STRING INST_ID = "",
     parameter NUM_REQS     = 1,
     parameter NUM_BANKS    = 1,
     parameter ADDR_WIDTH   = 32,
@@ -522,7 +522,7 @@ module VX_mem_scheduler #(
             if (pending_req_valids[i]) begin
                 `ASSERT(($time - pending_reqs[i][0 +: 64]) < STALL_TIMEOUT,
                     ("%t: *** %s response timeout: remaining=%b, tag=0x%0h (#%0d)", 
-                        $time, INSTANCE_ID, rsp_rem_mask[i], pending_reqs[i][64 +: TAG_ONLY_WIDTH], pending_reqs[i][64+TAG_ONLY_WIDTH +: `UP(UUID_WIDTH)]));
+                        $time, INST_ID, rsp_rem_mask[i], pending_reqs[i][64 +: TAG_ONLY_WIDTH], pending_reqs[i][64+TAG_ONLY_WIDTH +: `UP(UUID_WIDTH)]));
             end
         end
     end
@@ -535,39 +535,39 @@ module VX_mem_scheduler #(
     always @(posedge clk) begin
         if (req_valid && req_ready) begin
             if (req_rw) begin
-                `TRACE(1, ("%d: %s-core-req-wr: valid=%b, addr=", $time, INSTANCE_ID, req_mask));
+                `TRACE(1, ("%d: %s-core-req-wr: valid=%b, addr=", $time, INST_ID, req_mask));
                 `TRACE_ARRAY1D(1, req_addr, NUM_REQS);                       
                 `TRACE(1, (", byteen="));
                 `TRACE_ARRAY1D(1, req_byteen, NUM_REQS);
                 `TRACE(1, (", data="));
                 `TRACE_ARRAY1D(1, req_data, NUM_REQS);         
             end else begin
-                `TRACE(1, ("%d: %s-core-req-rd: valid=%b, addr=", $time, INSTANCE_ID, req_mask));
+                `TRACE(1, ("%d: %s-core-req-rd: valid=%b, addr=", $time, INST_ID, req_mask));
                 `TRACE_ARRAY1D(1, req_addr, NUM_REQS);                
             end 
             `TRACE(1, (", tag=0x%0h, tag_only=0x%0h (#%0d)\n", req_tag, req_tag[TAG_ONLY_WIDTH-1:0], req_dbg_uuid));           
         end
         if (rsp_valid && rsp_ready) begin
-            `TRACE(1, ("%d: %s-rsp: valid=%b, sop=%b, eop=%b, data=", $time, INSTANCE_ID, rsp_mask, rsp_sop, rsp_eop));
+            `TRACE(1, ("%d: %s-rsp: valid=%b, sop=%b, eop=%b, data=", $time, INST_ID, rsp_mask, rsp_sop, rsp_eop));
             `TRACE_ARRAY1D(1, rsp_data, NUM_REQS);
             `TRACE(1, (", tag=0x%0h, tag_only=0x%0h (#%0d)\n", rsp_tag, rsp_tag[TAG_ONLY_WIDTH-1:0], rsp_dbg_uuid));
         end
         if (| mem_req_fire_s) begin
             if (| mem_req_rw_s) begin
-                `TRACE(1, ("%d: %s-mem-req-wr: valid=%b, addr=", $time, INSTANCE_ID, mem_req_fire_s));
+                `TRACE(1, ("%d: %s-mem-req-wr: valid=%b, addr=", $time, INST_ID, mem_req_fire_s));
                 `TRACE_ARRAY1D(1, mem_req_addr_s, NUM_BANKS);
                 `TRACE(1, (", byteen="));
                 `TRACE_ARRAY1D(1, mem_req_byteen_s, NUM_BANKS);
                 `TRACE(1, (", data="));
                 `TRACE_ARRAY1D(1, mem_req_data_s, NUM_BANKS);           
             end else begin
-                `TRACE(1, ("%d: %s-mem-req-rd: valid=%b, addr=", $time, INSTANCE_ID, mem_req_fire_s));
+                `TRACE(1, ("%d: %s-mem-req-rd: valid=%b, addr=", $time, INST_ID, mem_req_fire_s));
                 `TRACE_ARRAY1D(1, mem_req_addr_s, NUM_BANKS);                
             end
             `TRACE(1, (", ibuf_idx=%0d, batch_idx=%0d (#%0d)\n", ibuf_waddr, req_batch_idx, mem_req_dbg_uuid));
         end 
         if (mem_rsp_fire_s) begin
-            `TRACE(1, ("%d: %s-mem-rsp: valid=%b, data=", $time, INSTANCE_ID, mem_rsp_mask_s));                
+            `TRACE(1, ("%d: %s-mem-rsp: valid=%b, data=", $time, INST_ID, mem_rsp_mask_s));                
             `TRACE_ARRAY1D(1, mem_rsp_data_s, NUM_BANKS);
             `TRACE(1, (", ibuf_idx=%0d, batch_idx=%0d (#%0d)\n", ibuf_raddr, rsp_batch_idx, mem_rsp_dbg_uuid));
         end

@@ -14,7 +14,7 @@
 `include "VX_cache_define.vh"
 
 module VX_cache_tags #(
-    parameter `STRING INSTANCE_ID = "",
+    parameter `STRING INST_ID = "",
     parameter BANK_ID       = 0,
     // Size of cache in bytes
     parameter CACHE_SIZE    = 1024, 
@@ -46,7 +46,7 @@ module VX_cache_tags #(
     output wire [NUM_WAYS-1:0]          way_sel,
     output wire [NUM_WAYS-1:0]          tag_matches
 );
-    `UNUSED_SPARAM (INSTANCE_ID)
+    `UNUSED_PARAM (INST_ID)
     `UNUSED_PARAM (BANK_ID)
     `UNUSED_VAR (reset)
     `UNUSED_VAR (lookup)
@@ -98,16 +98,16 @@ module VX_cache_tags #(
 `ifdef DBG_TRACE_CACHE_TAG
     always @(posedge clk) begin
         if (fill && ~stall) begin
-            `TRACE(3, ("%d: %s-bank%0d tag-fill: addr=0x%0h, way=%b, blk_addr=%0d, tag_id=0x%0h\n", $time, INSTANCE_ID, BANK_ID, `CS_LINE_TO_FULL_ADDR(line_addr, BANK_ID), way_sel, line_sel, line_tag));
+            `TRACE(3, ("%d: %s-bank%0d tag-fill: addr=0x%0h, way=%b, blk_addr=%0d, tag_id=0x%0h\n", $time, INST_ID, BANK_ID, `CS_LINE_TO_FULL_ADDR(line_addr, BANK_ID), way_sel, line_sel, line_tag));
         end
         if (init) begin
-            `TRACE(3, ("%d: %s-bank%0d tag-init: addr=0x%0h, blk_addr=%0d\n", $time, INSTANCE_ID, BANK_ID, `CS_LINE_TO_FULL_ADDR(line_addr, BANK_ID), line_sel));
+            `TRACE(3, ("%d: %s-bank%0d tag-init: addr=0x%0h, blk_addr=%0d\n", $time, INST_ID, BANK_ID, `CS_LINE_TO_FULL_ADDR(line_addr, BANK_ID), line_sel));
         end
         if (lookup && ~stall) begin
             if (tag_matches != 0) begin
-                `TRACE(3, ("%d: %s-bank%0d tag-hit: addr=0x%0h, way=%b, blk_addr=%0d, tag_id=0x%0h (#%0d)\n", $time, INSTANCE_ID, BANK_ID, `CS_LINE_TO_FULL_ADDR(line_addr, BANK_ID), way_sel, line_sel, line_tag, req_uuid));
+                `TRACE(3, ("%d: %s-bank%0d tag-hit: addr=0x%0h, way=%b, blk_addr=%0d, tag_id=0x%0h (#%0d)\n", $time, INST_ID, BANK_ID, `CS_LINE_TO_FULL_ADDR(line_addr, BANK_ID), way_sel, line_sel, line_tag, req_uuid));
             end else begin
-                `TRACE(3, ("%d: %s-bank%0d tag-miss: addr=0x%0h, blk_addr=%0d, tag_id=0x%0h, (#%0d)\n", $time, INSTANCE_ID, BANK_ID, `CS_LINE_TO_FULL_ADDR(line_addr, BANK_ID), line_sel, line_tag, req_uuid));
+                `TRACE(3, ("%d: %s-bank%0d tag-miss: addr=0x%0h, blk_addr=%0d, tag_id=0x%0h, (#%0d)\n", $time, INST_ID, BANK_ID, `CS_LINE_TO_FULL_ADDR(line_addr, BANK_ID), line_sel, line_tag, req_uuid));
             end
         end          
     end    

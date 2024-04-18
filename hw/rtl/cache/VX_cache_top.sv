@@ -14,7 +14,7 @@
 `include "VX_cache_define.vh"
 
 module VX_cache_top import VX_gpu_pkg::*; #(
-    parameter `STRING INSTANCE_ID    = "",
+    parameter `STRING INST_ID       = "",
 
     // Number of Word requests per cycle
     parameter NUM_REQS              = 4,
@@ -97,7 +97,7 @@ module VX_cache_top import VX_gpu_pkg::*; #(
     VX_mem_bus_if #(
         .DATA_SIZE (WORD_SIZE),
         .TAG_WIDTH (TAG_WIDTH)
-    ) core_bus_if[NUM_REQS]();
+    ) core_bus_if[NUM_REQS-1:0]();
 
     VX_mem_bus_if #(
         .DATA_SIZE (LINE_SIZE),
@@ -139,7 +139,7 @@ module VX_cache_top import VX_gpu_pkg::*; #(
     assign mem_rsp_ready = mem_bus_if.rsp_ready;
 
     VX_cache #(
-        .INSTANCE_ID    (INSTANCE_ID),
+        .INST_ID        (INST_ID),
         .CACHE_SIZE     (CACHE_SIZE),
         .LINE_SIZE      (LINE_SIZE),
         .NUM_BANKS      (NUM_BANKS),

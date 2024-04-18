@@ -18,7 +18,7 @@ module Vortex import VX_gpu_pkg::*; #(
     input         interrupts_mtip,
     input         interrupts_msip,
     input         interrupts_meip,
-    // input         interrupts_seip,
+    input         interrupts_seip,
 
     // imem ------------------------------------------------
 
@@ -297,18 +297,6 @@ module Vortex import VX_gpu_pkg::*; #(
     // assign {fpu_hartid, fpu_time, fpu_inst, fpu_fromint_data, fpu_fcsr_rm, fpu_dmem_resp_val, fpu_dmem_resp_type,
     //         fpu_dmem_resp_tag, fpu_valid, fpu_killx, fpu_killm, fpu_keep_clock_enabled} = '0;
 
-    for (genvar i = 0; i < 4; i++) begin
-        always @(posedge clock) begin
-            if (dcache_bus_if[i].req_valid && dcache_bus_if[i].req_ready && dcache_bus_if[i].req_data.rw) begin
-                // anything that starts with 0xC is heap address
-                if ({dcache_bus_if[i].req_data.addr, 2'b0}[31:28] == 4'hc) begin
-                    $display("[%d] STORE HEAP MEM: CORE=%d, THREAD=%d, ADDRESS=0x%X, DATA=0x%08X",
-                             $time(), CORE_ID, i, {dcache_bus_if[i].req_data.addr, 2'b0}, dcache_bus_if[i].req_data.data);
-                end
-            end
-        end
-    end
-
     logic sim_ebreak;
     logic [`NUM_REGS-1:0][`XLEN-1:0] sim_wb_value;
 
@@ -398,10 +386,11 @@ module Vortex import VX_gpu_pkg::*; #(
 
     VX_mem_perf_if mem_perf_if();
 
+    // TODO: SCOPE_IO_BIND should be socket id
     VX_core #(
         .CORE_ID (CORE_ID)
     ) core (
-        `SCOPE_IO_BIND  (0) // TODO: should be socket id
+        `SCOPE_IO_BIND  (0)
 
         .clk            (clock),
         .reset          (core_reset),
@@ -498,9 +487,6 @@ module Vortex import VX_gpu_pkg::*; #(
     always @(*) begin
         if (busy === 1'b0) begin
             $display("---------------- no more active warps ----------------");
-
-            @(negedge clock);
-
             // TODO: lane assumed to be 4
             // `ifndef SYNTHESIS
             // for (integer j = 0; j < `NUM_WARPS; j++) begin
@@ -513,7 +499,6 @@ module Vortex import VX_gpu_pkg::*; #(
             //             pipeline.issue.gpr_stage.iports[/*thread*/3].dp_ram1.not_out_reg.reg_dump.ram[j * `NUM_REGS + k]);
             //     end
             // `endif
-
             // @(posedge clock) $finish();
         end
     end
