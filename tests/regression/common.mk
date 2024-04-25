@@ -79,13 +79,16 @@ endif
 endif
 endif
 
-all: $(PROJECT) kernel.bin kernel.dump kernel.radiance.dump
+all: $(PROJECT) kernel.bin kernel.dump kernel.radiance.dump kernel.radiance.$(CONFIG).dump
 
 kernel.dump: kernel.elf
 	$(VX_DP) -D kernel.elf > kernel.dump
 
 kernel.radiance.dump: kernel.radiance.elf
 	$(VX_DP) -D kernel.radiance.elf > kernel.radiance.dump
+
+kernel.radiance.$(CONFIG).dump: kernel.radiance.$(CONFIG).elf
+	$(VX_DP) -D kernel.radiance.$(CONFIG).elf > kernel.radiance.$(CONFIG).dump
 
 kernel.bin: kernel.elf kernel.radiance.elf
 	$(VX_CP) -O binary kernel.elf kernel.bin
@@ -95,12 +98,15 @@ kernel.elf: $(VX_SRCS)
 
 OBJCOPY ?= "riscv32-unknown-elf-objcopy"
 OBJCOPY_FLAGS ?= "LOAD,ALLOC,DATA,CONTENTS"
-kernel.radiance.elf: $(VX_SRCS)
+kernel.radiance.elf: kernel.elf
 	$(VX_CXX) $(VX_CFLAGS) $(VX_SRCS) $(VX_LDFLAGS) -DRADIANCE -o kernel.radiance.elf
 	$(OBJCOPY) --set-section-flags .operand.a=$(OBJCOPY_FLAGS) kernel.radiance.elf
 	$(OBJCOPY) --set-section-flags .operand.b=$(OBJCOPY_FLAGS) kernel.radiance.elf
 	$(OBJCOPY) --update-section .operand.a=input.a.bin kernel.radiance.elf
 	$(OBJCOPY) --update-section .operand.b=input.b.bin kernel.radiance.elf
+
+kernel.radiance.$(CONFIG).elf: kernel.radiance.elf
+	cp $< $@
 
 $(PROJECT): $(SRCS)
 	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
@@ -128,7 +134,7 @@ clean:
 	rm -rf $(PROJECT) *.o .depend
 
 clean-all: clean
-	rm -rf kernel.elf kernel.radiance.elf *.dump
+	rm -rf kernel.elf kernel.dump
 
 ifneq ($(MAKECMDGOALS),clean)
     -include .depend
