@@ -93,8 +93,14 @@ kernel.bin: kernel.elf kernel.radiance.elf
 kernel.elf: $(VX_SRCS)
 	$(VX_CXX) $(VX_CFLAGS) $(VX_SRCS) $(VX_LDFLAGS) -o kernel.elf
 
+OBJCOPY ?= "riscv32-unknown-elf-objcopy"
+OBJCOPY_FLAGS ?= "LOAD,ALLOC,DATA,CONTENTS"
 kernel.radiance.elf: $(VX_SRCS)
 	$(VX_CXX) $(VX_CFLAGS) $(VX_SRCS) $(VX_LDFLAGS) -DRADIANCE -o kernel.radiance.elf
+	$(OBJCOPY) --set-section-flags .operand.a=$(OBJCOPY_FLAGS) kernel.radiance.elf
+	$(OBJCOPY) --set-section-flags .operand.b=$(OBJCOPY_FLAGS) kernel.radiance.elf
+	$(OBJCOPY) --update-section .operand.a=input.a.bin kernel.radiance.elf
+	$(OBJCOPY) --update-section .operand.b=input.b.bin kernel.radiance.elf
 
 $(PROJECT): $(SRCS)
 	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
