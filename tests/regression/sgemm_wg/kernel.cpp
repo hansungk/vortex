@@ -16,11 +16,11 @@
 //   (BM*BN) / (TM*TN) == threadblock size >= NT * CORES_PER_CLUSTER
 // * Combining BM * BK >= (BM*BN) / (TM*TN) == threadblock yields
 //   BM <= BK*TM*TN
-#define BM 8
+#define BM 32
 #define BN BM
-#define BK 2
-#define TM 2
-#define TN 2
+#define BK 8
+#define TM 4
+#define TN 4
 
 void threadblock_barrier(unsigned int tid_in_threadblock, unsigned int barrier_id, unsigned int count) {
     vx_fence();
@@ -80,14 +80,14 @@ void thread_block_gemm(kernel_arg_t *__UNIFORM__ arg,
     //
     // Make sure global offset values for A and B are contiguous between
     // neighboring threads to ensure GMEM coalescing.
-// #pragma GCC unroll 1
+#pragma GCC unroll 2
     for (uint32_t load_offset = 0; load_offset < BM; load_offset += stride_a) {
       const uint32_t global_a_offset =
           dim_k * (global_a_row + load_offset) + (k + local_a_col);
       local_a[BK * (local_a_row + load_offset) + local_a_col] =
           A[global_a_offset];
     }
-// #pragma GCC unroll 1
+#pragma GCC unroll 2
     for (uint32_t load_offset = 0; load_offset < BK; load_offset += stride_b) {
       const uint32_t global_b_offset =
           dim_n * (k + local_b_row + load_offset) + global_b_col;
@@ -99,7 +99,7 @@ void thread_block_gemm(kernel_arg_t *__UNIFORM__ arg,
                         threadblock_dim_y);
 
     // Compute single tile*tile matmul
-// #pragma GCC unroll 2
+#pragma GCC unroll 4
     for (uint32_t local_k = 0; local_k < BK; local_k++) {
       // First, pump data from SMEM->RF
 #pragma GCC unroll TM
