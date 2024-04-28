@@ -6,46 +6,42 @@
 #include "include/gemmini.h"
 #include "gemmini_mmio.h"
 
-#define MATRIX_M 64  // TODO: remove hardcode
-#define MATRIX_N 64
-#define MATRIX_K 64
-#define TILE_M 32        // tile size = SMEM size / 2 (double buffering) / 4 (A, B, C, Psum)
+#define TILE_M 32
 #define TILE_N 32
 #define TILE_K 32
 #define TILE_MN 1024
 #define TILE_MK 1024
 #define TILE_NK 1024
 
-//#define EXT_ACCUMULATE
-
 #define NUM_CLUSTERS 1
-#define TB_M (MATRIX_M / NUM_CLUSTERS)
-#define TB_N MATRIX_N
-#define TB_SIZE (TB_M * TB_N)
-#define NUM_TILE_ROWS_PER_TB (TB_M / TILE_M)
-#define THREAD_ELEMS 8 // elements per thread in a tile
-#define THREAD_STRIDE 8 // threads per core
+#define NUM_THREADS_IN_CLUSTER 128
 
 #define SMEM_ADDR_0K  ((float * const) 0xff000000)
 #define SMEM_ADDR_4K  ((float * const) 0xff001000)
 #define SMEM_ADDR_8K  ((float * const) 0xff002000)
 #define SMEM_ADDR_12K ((float * const) 0xff003000)
-
 #define SPAD_ADDR_0K 0x0
 #define SPAD_ADDR_4K 0x80
 #define SPAD_ADDR_8K 0x100
 #define SPAD_ADDR_12K 0x180
 
-#define HARDCODE
-#define PRINTF(...) sprintf(PRINT_BUF, __VA_ARGS__)
-//#define PRINTF(...) vx_printf(__VA_ARGS__)
-
 // #define DEBUG_PRINT
-#define rd_cycles(x) asm volatile ("csrr %0, mcycle" : "=r" (x))
+// #define EXT_ACCUMULATE
+#define HARDCODE
+#define DBUF
+// #define DETAILED_PERF
 
-#define HW_TID() ({uint32_t gtid; asm ("csrr %0, mhartid" : "=r" (gtid)); gtid;})
+#define rd_cycles_force(x) asm volatile ("csrr %0, mcycle" : "=r" (x))
+#ifdef DETAILED_PERF
+  #define rd_cycles(x) rd_cycles_force(x)
+#else
+  #define rd_cycles(x)
+#endif
+#define HW_TID() ({uint32_t gtid; asm volatile ("csrr %0, mhartid" : "=r" (gtid)); gtid;})
+#define PRINTF(...) sprintf(PRINT_BUF, __VA_ARGS__)
+// #define PRINTF(...) vx_printf(__VA_ARGS__)
 
-void threadblock_barrier(unsigned int tid_in_threadblock, unsigned int barrier_id, unsigned int count) {
+inline void threadblock_barrier(unsigned int barrier_id, unsigned int count) {
   vx_fence();
   vx_barrier(barrier_id, count);
 }
@@ -58,14 +54,26 @@ void thread_block_matmul_gemmini(kernel_arg_t *__UNIFORM__ arg,
   const float * const B = (const float * const) arg->addr_b;
   float * const C = (float * const) arg->addr_c;
 
+  if (HW_TID() == 0) {
+    gemmini_config_ld(0);
+    gemmini_extended_config_ex(WEIGHT_STATIONARY, 0, 0, 1, 0, 0);
+    gemmini_config_st(0);
+    PRINTF("start\n");
+  }
+
+  vx_fence();
+
+  uint32_t marker0, marker1, marker2, marker3, marker4;
+  uint32_t marker5, marker6, marker7, marker8, marker9;
+  rd_cycles_force(marker0);
+
   const uint32_t dim_m = arg->dim_m;
   const uint32_t dim_n = arg->dim_n;
   const uint32_t dim_k = arg->dim_k;
+  const uint32_t num_tiles_m = dim_m / TILE_M;
   const uint32_t num_tiles_n = dim_n / TILE_N;
   const uint32_t num_tiles_k = dim_k / TILE_K;
-  // TODO: make this into constexpr by subbing architectural params with macros
-  // const uint32_t num_threads_in_cluster = vx_num_threads() * vx_num_warps() * CORES_PER_CLUSTER;
-  constexpr uint32_t num_threads_in_cluster = 128;
+  constexpr uint32_t num_threads_in_cluster = NUM_THREADS_IN_CLUSTER;
   constexpr uint32_t a_elems_per_thread = TILE_MK / num_threads_in_cluster;
   constexpr uint32_t b_elems_per_thread = TILE_NK / num_threads_in_cluster;
   constexpr uint32_t c_elems_per_thread = TILE_MN / num_threads_in_cluster;
@@ -84,25 +92,13 @@ void thread_block_matmul_gemmini(kernel_arg_t *__UNIFORM__ arg,
   constexpr uint32_t i1_stride = DIM; // step per increment (increment doesnt happen every iteration)
   constexpr uint32_t i1_iters = (DIM * DIM * (TILE_K / DIM)) / num_threads_in_cluster; // num of iters before striding
 
-  uint32_t marker0, marker1, marker2, marker3, marker4;
-  uint32_t marker5, marker6, marker7, marker8, marker9;
-
-  if (HW_TID() == 0) {
-    gemmini_config_ld(0);
-    gemmini_extended_config_ex(WEIGHT_STATIONARY, 0, 0, 1, 0, 0);
-    gemmini_config_st(0);
-    PRINTF("start\n");
-  }
-
-  // TODO: check for tb id
-  rd_cycles(marker0);
-
-  __asm__("i_loop:");
-  for (int tile_i = NUM_TILE_ROWS_PER_TB * threadblock_id;
-           tile_i < NUM_TILE_ROWS_PER_TB * (threadblock_id + 1);
-           tile_i += 1) {
-    __asm__("j_loop:");
+  const uint32_t num_tile_rows_per_tb = num_tiles_m / NUM_CLUSTERS;
+  for (uint32_t tile_i = num_tile_rows_per_tb * threadblock_id;
+                tile_i < num_tile_rows_per_tb * (threadblock_id + 1);
+                tile_i += 1) {
+    __asm__("i_loop:");
     for (int tile_j = 0; tile_j < num_tiles_n; tile_j += 1) {
+      __asm__("j_loop:");
       float * const smem_c_tile_start = SMEM_ADDR_4K;
       #ifndef EXT_ACCUMULATE
       float * const smem_acc_tile_start = SMEM_ADDR_0K + HW_TID();
@@ -119,7 +115,6 @@ void thread_block_matmul_gemmini(kernel_arg_t *__UNIFORM__ arg,
           #if (TILE_MK / NUM_THREADS / NUM_WARPS / CORES_PER_CLUSTER) != 8
             #error CANNOT UNROLL
           #endif
-        // preload A B matrix
 
         constexpr uint32_t every_iter = j1_stride;
         const uint32_t every_2iters_a = i1_stride * dim_k;
@@ -129,50 +124,57 @@ void thread_block_matmul_gemmini(kernel_arg_t *__UNIFORM__ arg,
 
         const float * const dram_a_tile_start = A + tile_i * TILE_M * dim_k + tile_k * TILE_K + runtime_const_a;
         const float * const dram_b_tile_start = B + tile_k * TILE_K * dim_n + tile_j * TILE_N + runtime_const_b;
+        #ifdef DBUF
+        float * const smem_a_tile_start = ((tile_k & 1) ? SMEM_ADDR_4K : SMEM_ADDR_0K) + HW_TID();
+        float * const smem_b_tile_start = ((tile_k & 1) ? SMEM_ADDR_12K : SMEM_ADDR_8K) + HW_TID();
+        #else
         float * const smem_a_tile_start = SMEM_ADDR_0K + HW_TID();
         float * const smem_b_tile_start = SMEM_ADDR_12K + HW_TID();
+        #endif
 
-        __asm__("load_ab:");
-        float v0 = dram_a_tile_start[every_iter * 0 + every_2iters_a * 0];
-        float v1 = dram_a_tile_start[every_iter * 1 + every_2iters_a * 0];
-        float v2 = dram_a_tile_start[every_iter * 0 + every_2iters_a * 1];
-        float v3 = dram_a_tile_start[every_iter * 1 + every_2iters_a * 1];
-        smem_a_tile_start[0 * num_threads_in_cluster] = v0;
-        smem_a_tile_start[1 * num_threads_in_cluster] = v1;
-        smem_a_tile_start[2 * num_threads_in_cluster] = v2;
-        smem_a_tile_start[3 * num_threads_in_cluster] = v3;
+        {
+          __asm__("load_ab:");
+          float v0 = dram_a_tile_start[every_iter * 0 + every_2iters_a * 0];
+          float v1 = dram_a_tile_start[every_iter * 1 + every_2iters_a * 0];
+          float v2 = dram_a_tile_start[every_iter * 0 + every_2iters_a * 1];
+          float v3 = dram_a_tile_start[every_iter * 1 + every_2iters_a * 1];
+          smem_a_tile_start[0 * num_threads_in_cluster] = v0;
+          smem_a_tile_start[1 * num_threads_in_cluster] = v1;
+          smem_a_tile_start[2 * num_threads_in_cluster] = v2;
+          smem_a_tile_start[3 * num_threads_in_cluster] = v3;
 
-        __asm__("load_ab1:");
-        v0 = dram_b_tile_start[every_iter * 0 + every_2iters_b * 0];
-        v1 = dram_b_tile_start[every_iter * 1 + every_2iters_b * 0];
-        v2 = dram_b_tile_start[every_iter * 0 + every_2iters_b * 1];
-        v3 = dram_b_tile_start[every_iter * 1 + every_2iters_b * 1];
-        smem_b_tile_start[0 * num_threads_in_cluster] = v0;
-        smem_b_tile_start[1 * num_threads_in_cluster] = v1;
-        smem_b_tile_start[2 * num_threads_in_cluster] = v2;
-        smem_b_tile_start[3 * num_threads_in_cluster] = v3;
+          __asm__("load_ab1:");
+          v0 = dram_b_tile_start[every_iter * 0 + every_2iters_b * 0];
+          v1 = dram_b_tile_start[every_iter * 1 + every_2iters_b * 0];
+          v2 = dram_b_tile_start[every_iter * 0 + every_2iters_b * 1];
+          v3 = dram_b_tile_start[every_iter * 1 + every_2iters_b * 1];
+          smem_b_tile_start[0 * num_threads_in_cluster] = v0;
+          smem_b_tile_start[1 * num_threads_in_cluster] = v1;
+          smem_b_tile_start[2 * num_threads_in_cluster] = v2;
+          smem_b_tile_start[3 * num_threads_in_cluster] = v3;
 
-        __asm__("load_ab2:");
-        v0 = dram_a_tile_start[every_iter * 0 + every_2iters_a * 2];
-        v1 = dram_a_tile_start[every_iter * 1 + every_2iters_a * 2];
-        v2 = dram_a_tile_start[every_iter * 0 + every_2iters_a * 3];
-        v3 = dram_a_tile_start[every_iter * 1 + every_2iters_a * 3];
-        smem_a_tile_start[4 * num_threads_in_cluster] = v0;
-        smem_a_tile_start[5 * num_threads_in_cluster] = v1;
-        smem_a_tile_start[6 * num_threads_in_cluster] = v2;
-        smem_a_tile_start[7 * num_threads_in_cluster] = v3;
+          __asm__("load_ab2:");
+          v0 = dram_a_tile_start[every_iter * 0 + every_2iters_a * 2];
+          v1 = dram_a_tile_start[every_iter * 1 + every_2iters_a * 2];
+          v2 = dram_a_tile_start[every_iter * 0 + every_2iters_a * 3];
+          v3 = dram_a_tile_start[every_iter * 1 + every_2iters_a * 3];
+          smem_a_tile_start[4 * num_threads_in_cluster] = v0;
+          smem_a_tile_start[5 * num_threads_in_cluster] = v1;
+          smem_a_tile_start[6 * num_threads_in_cluster] = v2;
+          smem_a_tile_start[7 * num_threads_in_cluster] = v3;
 
-        __asm__("load_ab3:");
-        v0 = dram_b_tile_start[every_iter * 0 + every_2iters_b * 2];
-        v1 = dram_b_tile_start[every_iter * 1 + every_2iters_b * 2];
-        v2 = dram_b_tile_start[every_iter * 0 + every_2iters_b * 3];
-        v3 = dram_b_tile_start[every_iter * 1 + every_2iters_b * 3];
-        smem_b_tile_start[4 * num_threads_in_cluster] = v0;
-        smem_b_tile_start[5 * num_threads_in_cluster] = v1;
-        smem_b_tile_start[6 * num_threads_in_cluster] = v2;
-        smem_b_tile_start[7 * num_threads_in_cluster] = v3;
+          __asm__("load_ab3:");
+          v0 = dram_b_tile_start[every_iter * 0 + every_2iters_b * 2];
+          v1 = dram_b_tile_start[every_iter * 1 + every_2iters_b * 2];
+          v2 = dram_b_tile_start[every_iter * 0 + every_2iters_b * 3];
+          v3 = dram_b_tile_start[every_iter * 1 + every_2iters_b * 3];
+          smem_b_tile_start[4 * num_threads_in_cluster] = v0;
+          smem_b_tile_start[5 * num_threads_in_cluster] = v1;
+          smem_b_tile_start[6 * num_threads_in_cluster] = v2;
+          smem_b_tile_start[7 * num_threads_in_cluster] = v3;
 
-        __asm__("end_loadab:");
+          __asm__("end_loadab:");
+        }
         #else
         /* smem_a_tile_start[0 * num_threads_in_cluster + hw_tid] = \
           dram_a_tile_start[runtime_const + every_iter * 0 + every_2iters * 0];
@@ -265,11 +267,20 @@ void thread_block_matmul_gemmini(kernel_arg_t *__UNIFORM__ arg,
 
         rd_cycles(marker2);
         // cluster wide barrier to wait for A and B loads to complete
-        threadblock_barrier(0, /*barrier_id=*/0, /*count=*/NUM_WARPS);
+        threadblock_barrier(/*barrier_id=*/0, /*count=*/NUM_WARPS);
         rd_cycles(marker3);
         __asm__("gemmini:");
         if (HW_TID() == 0) {
-          sp_tiled_matmul_full_spad_ws(SPAD_ADDR_0K, SPAD_ADDR_12K, /*spad_D=*/0, SPAD_ADDR_4K,
+          #ifdef DBUF
+            gemmini_fence();
+          #endif
+          sp_tiled_matmul_full_spad_ws(
+            #ifdef DBUF
+              (tile_k & 1) ? SPAD_ADDR_4K : SPAD_ADDR_0K, (tile_k & 1) ? SPAD_ADDR_12K : SPAD_ADDR_8K,
+            #else
+              SPAD_ADDR_0K, SPAD_ADDR_12K,
+            #endif
+            /*spad_D=*/0, /*spad_C=*/SPAD_ADDR_4K,
             /*I=*/TILE_M / DIM, /*J=*/TILE_N / DIM, /*K=*/TILE_K / DIM, /*pad_I=*/0, /*pad_J=*/0, /*pad_K=*/0,
             /*a_transpose=*/0, /*b_transpose=*/0, /*full_C=*/0, /*low_D=*/0,
             #ifdef EXT_ACCUMULATE
@@ -277,11 +288,13 @@ void thread_block_matmul_gemmini(kernel_arg_t *__UNIFORM__ arg,
             #else
             /*acc=*/tile_k != 0, /*act=*/NO_ACTIVATION, /*skips=*/0xB8U);
             #endif
+          #ifndef DBUF
           gemmini_fence();
+          #endif
         }
         __asm__("end_gemmini:");
         rd_cycles(marker4);
-        threadblock_barrier(0, /*barrier_id=*/0, /*count=*/NUM_WARPS);
+        threadblock_barrier(/*barrier_id=*/0, /*count=*/NUM_WARPS);
         rd_cycles(marker5);
 
         // accumulate C matrix
@@ -329,18 +342,30 @@ void thread_block_matmul_gemmini(kernel_arg_t *__UNIFORM__ arg,
         }
         #endif
         rd_cycles(marker6);
+
+        /* if (HW_TID() == 0) {
+          PRINTF("\ntile start:           %d\n", marker1);
+          PRINTF("single tile cycles:   %d\n", marker6 - marker1);
+          PRINTF("A/B tile load cycles: %d\n", marker2 - marker1);
+          PRINTF("first barrier:        %d\n", marker3 - marker2);
+          PRINTF("gemmini cycles:       %d\n", marker4 - marker3);
+          PRINTF("second barrier:       %d\n", marker5 - marker4);
+        } */
+
       }
 
       #ifndef EXT_ACCUMULATE
-      threadblock_barrier(0, /*barrier_id=*/0, /*count=*/NUM_WARPS);
+      threadblock_barrier(/*barrier_id=*/0, /*count=*/NUM_WARPS);
       rd_cycles(marker6);
       __asm__("mvout_spad_ser:");
       // mvout to scratchpad for activation
       if (HW_TID() == 0) {
         __asm__("mvout_spad:");
+        #ifdef DBUF
+        gemmini_fence();
+        #endif
         ROCC_INSTRUCTION_RS1_RS2(XCUSTOM_ACC, 0, (4ULL << 32) | (4ULL << 16) | 4ULL, k_LOOP_WS_CONFIG_BOUNDS)
-        ROCC_INSTRUCTION_RS1_RS2(XCUSTOM_ACC, 0, 0, k_LOOP_WS_CONFIG_SPAD_AB)
-        ROCC_INSTRUCTION_RS1_RS2(XCUSTOM_ACC, 0, 0x78U, k_LOOP_WS)
+        ROCC_INSTRUCTION_RS1_RS2(XCUSTOM_ACC, 0, 0x278U, k_LOOP_WS)
         /* #pragma gcc unroll 16
         for (int i = 0; i < TILE_MN / DIM; i += DIM) {
           gemmini_mvout_spad(i, 0x80000000ULL + i); // FIXME: C is not necessarily at 0
@@ -349,7 +374,7 @@ void thread_block_matmul_gemmini(kernel_arg_t *__UNIFORM__ arg,
         gemmini_fence();
       }
       __asm__("mvout_spad_bar:");
-      threadblock_barrier(0, /*barrier_id=*/0, /*count=*/NUM_WARPS);
+      threadblock_barrier(/*barrier_id=*/0, /*count=*/NUM_WARPS);
       __asm__("end_mvout_spad:");
       #endif
       rd_cycles(marker7);
@@ -415,30 +440,32 @@ void thread_block_matmul_gemmini(kernel_arg_t *__UNIFORM__ arg,
   }
   // last thread block complete
   if (threadblock_id == NUM_CLUSTERS - 1) {
-    threadblock_barrier(0, /*barrier_id=*/0, /*count=*/NUM_WARPS);
-    rd_cycles(marker9);
+    threadblock_barrier(/*barrier_id=*/0, /*count=*/NUM_WARPS);
+    rd_cycles_force(marker9);
     if (HW_TID() == 0) {
       PRINTF("\ncomplete\n");
       PRINTF("total cycles:         %d\n", marker9 - marker0);
     }
-    vx_tmc(0x81);
-    for (int x = 0; x < num_threads_in_cluster; x += num_threads_in_cluster - 1) {
-      if (HW_TID() == x) {
-        PRINTF("\ntile start:           %d\n", marker1);
-        PRINTF("single tile cycles:   %d\n", marker6 - marker1);
-        PRINTF("A/B tile load cycles: %d\n", marker2 - marker1);
-        PRINTF("first barrier:        %d\n", marker3 - marker2);
-        PRINTF("gemmini cycles:       %d\n", marker4 - marker3);
-        PRINTF("second barrier:       %d\n", marker5 - marker4);
-        #ifdef EXT_ACCUMULATE
-        PRINTF("accumulation cycles:  %d\n", marker6 - marker5);
-        #else
-        PRINTF("smem mvout cycles:    %d %d-%d\n", marker7 - marker6, marker7, marker6);
-        #endif
-        PRINTF("dram mvout cycles:    %d\n", marker8 - marker7);
+    #ifdef DETAILED_PERF
+      vx_tmc(0x81);
+      for (int x = 0; x < num_threads_in_cluster; x += num_threads_in_cluster - 1) {
+        if (HW_TID() == x) {
+          PRINTF("\ntile start:           %d\n", marker1);
+          PRINTF("single tile cycles:   %d\n", marker6 - marker1);
+          PRINTF("A/B tile load cycles: %d\n", marker2 - marker1);
+          PRINTF("first barrier:        %d\n", marker3 - marker2);
+          PRINTF("gemmini cycles:       %d\n", marker4 - marker3);
+          PRINTF("second barrier:       %d\n", marker5 - marker4);
+          #ifdef EXT_ACCUMULATE
+          PRINTF("accumulation cycles:  %d\n", marker6 - marker5);
+          #else
+          PRINTF("smem mvout cycles:    %d %d-%d\n", marker7 - marker6, marker7, marker6);
+          #endif
+          PRINTF("dram mvout cycles:    %d\n", marker8 - marker7);
+        }
+        threadblock_barrier(/*barrier_id=*/1, /*count=*/NUM_WARPS);
       }
-      threadblock_barrier(0, /*barrier_id=*/1, /*count=*/NUM_WARPS);
-    }
+    #endif
     if (HW_TID() == 0) {
       for (int i = 0; i < dim_m; i += 8) {
         for (int j = 0; j < dim_n; j += 8) {
@@ -455,8 +482,8 @@ void kernel_body(int task_id, kernel_arg_t *__UNIFORM__ arg) {
   // @perf: All threads are running these compute whose result is mostly same
   // across the threadblock
 
-  const int threadblock_id = task_id / TB_SIZE;
-  const int tid_in_threadblock = task_id % TB_SIZE;
+  const int threadblock_id = task_id / NUM_THREADS_IN_CLUSTER;
+  const int tid_in_threadblock = task_id % NUM_THREADS_IN_CLUSTER;
 
   thread_block_matmul_gemmini(arg, threadblock_id, tid_in_threadblock);
 }

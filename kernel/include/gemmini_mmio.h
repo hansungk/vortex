@@ -37,30 +37,33 @@
 
 #undef ROCC_INSTRUCTION_RS1_RS2
 #define ROCC_INSTRUCTION_RS1_RS2(x, rs1, rs2, funct) { \
-    /* printf("function %d\n", funct); */ \
-    uint32_t instruction = (0x7B) | (0 << 7) | (3 << 12) | (1 << 15) | (2 << 20) | ((uint32_t) (funct) << 25); \
-    *((volatile uint64_t *) GEMMINI_RS1_ADDR) = (volatile uint64_t) (rs1); \
-    *((volatile uint64_t *) GEMMINI_RS2_ADDR) = (volatile uint64_t) (rs2); \
+    /* printf("function %d\n", funct); */              \
+    *((volatile uint64_t *) GEMMINI_RS1_ADDR) = (rs1); \
+    *((volatile uint64_t *) GEMMINI_RS2_ADDR) = (rs2); \
     /* *((volatile uint32_t*) GEMMINI_RS2_ADDR) = (uint32_t) ((uint64_t) (rs2) & 0xFFFFFFFFULL); */ \
     /* *((volatile uint32_t*) (GEMMINI_RS2_ADDR + 4)) = (uint32_t) ((uint64_t) (rs2) >> 32); */ \
     /* gemmini_fence(); */ \
-    *((volatile uint32_t*) GEMMINI_INST_ADDR) = instruction; \
+    *((volatile uint32_t*) GEMMINI_INST_ADDR) = (0x7B) | (0 << 7) | (3 << 12) | (1 << 15) | (2 << 20) | ((funct) << 25); \
     /* sprintf((char *) PRINT_BUF, "%llx %llx %d\n", rs1, rs2, funct); */ \
 }
 
-static void sp_tiled_matmul_full_spad_ws(const uint32_t A_sp_addr_start, const uint32_t B_sp_addr_start,
-                                         const uint32_t D_sp_addr_start, const uint32_t C_dst_sp_addr_start,
-                                         size_t I, size_t J, size_t K, size_t pad_I, size_t pad_J, size_t pad_K,
-                                         bool a_transpose, bool b_transpose,
-                                         bool full_C, bool low_D,
-                                         bool no_bias, bool repeating_bias,
-                                         int act) {
+#define sp_tiled_matmul_full_spad_ws(A_sp_addr_start, B_sp_addr_start, D_sp_addr_start, C_dst_sp_addr_start,\
+  I, J, K, pad_I, pad_J, pad_K, a_transpose, b_transpose, full_C, low_D, acc, act, skips) \
+  gemmini_loop_ws_spad(I, J, K, pad_I, pad_J, pad_K, A_sp_addr_start, (B_sp_addr_start) + (K) * (J) * DIM, NULL, \
+  C_dst_sp_addr_start, a_transpose, b_transpose, full_C, low_D, acc, act, 0, 0, false, skips)
+
+/* inline static void sp_tiled_matmul_full_spad_ws(const uint32_t A_sp_addr_start, const uint32_t B_sp_addr_start,
+                                                const uint32_t D_sp_addr_start, const uint32_t C_dst_sp_addr_start,
+                                                size_t I, size_t J, size_t K, size_t pad_I, size_t pad_J, size_t pad_K,
+                                                bool a_transpose, bool b_transpose,
+                                                bool full_C, bool low_D, bool acc,
+                                                int act, int skip_mvout) {
 
   gemmini_loop_ws_spad(I, J, K, pad_I, pad_J, pad_K,
                        A_sp_addr_start, B_sp_addr_start + K * J * DIM, NULL, C_dst_sp_addr_start,
                        a_transpose, b_transpose,
-                       full_C, low_D, false,
-                       act, 0, 0, false);
+                       full_C, low_D, acc,
+                       act, 0, 0, false, skip_mvout); */
   /*
   return;
 
@@ -155,8 +158,7 @@ static void sp_tiled_matmul_full_spad_ws(const uint32_t A_sp_addr_start, const u
     }
   }
   gemmini_fence();
-  */
-}
+}*/
 
 
 #endif
