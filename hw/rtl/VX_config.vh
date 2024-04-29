@@ -309,7 +309,7 @@
 
 // Size of FPU Request Queue
 `ifndef FPUQ_SIZE
-`define FPUQ_SIZE (2 * (`NUM_THREADS / `NUM_FPU_LANES))
+`define FPUQ_SIZE (8 * (`NUM_THREADS / `NUM_FPU_LANES))
 `endif
 
 // FNCP Latency
