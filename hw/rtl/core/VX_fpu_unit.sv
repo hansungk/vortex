@@ -85,6 +85,25 @@ module VX_fpu_unit import VX_fpu_pkg::*; #(
         wire execute_fire = execute_if[block_idx].valid && execute_if[block_idx].ready;
         wire fpu_rsp_fire = fpu_rsp_valid && fpu_rsp_ready;
 
+        reg [63:0] perf_execute_fires;
+        reg [63:0] perf_execute_valids;
+        reg [63:0] perf_fpu_req_valids;
+        reg [63:0] perf_fpu_req_readys;
+
+        always @(posedge clk) begin
+            if (reset) begin
+                perf_execute_fires  <= '0;
+                perf_execute_valids <= '0;
+                perf_fpu_req_valids <= '0;
+                perf_fpu_req_readys <= '0;
+            end else begin
+                perf_execute_fires  <= perf_execute_fires  + 64'(execute_fire);
+                perf_execute_valids <= perf_execute_valids + 64'(execute_if[block_idx].valid);
+                perf_fpu_req_valids <= perf_fpu_req_valids + 64'(fpu_req_valid);
+                perf_fpu_req_readys <= perf_fpu_req_readys + 64'(fpu_req_ready);
+            end
+        end
+
         VX_index_buffer #(
             .DATAW  (`UUID_WIDTH + `NW_WIDTH + NUM_LANES + `XLEN + `NR_BITS + PID_WIDTH + 1 + 1),
             .SIZE   (`FPUQ_SIZE)

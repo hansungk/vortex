@@ -31,9 +31,6 @@ module VX_operands_dup import VX_gpu_pkg::*; #(
     localparam RAM_ADDRW = `LOG2UP(`NUM_REGS * ISSUE_RATIO);
 
     for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin
-        // NOTE(hansung): toggle_buffer is 1-reg pipe without flow, halving
-        // throughput.  Wouldn't this cap overall IPC?  Or OK as long as
-        // ISSUE_WIDTH > 1?
         VX_stream_buffer #(
             .DATAW (DATAW)
         ) staging_buffer (
