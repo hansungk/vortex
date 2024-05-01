@@ -36,6 +36,8 @@ module VX_ibuffer import VX_gpu_pkg::*; #(
     
     assign decode_if.ready = ibuf_ready_in[decode_isw];
 
+    VX_ibuffer_if uop_sequencer_if [`ISSUE_WIDTH]();
+
     for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin
         VX_elastic_buffer #(
             .DATAW   (DATAW),
@@ -62,13 +64,24 @@ module VX_ibuffer import VX_gpu_pkg::*; #(
                 decode_if.data.rs1, 
                 decode_if.data.rs2, 
                 decode_if.data.rs3}),
-            .data_out(ibuffer_if[i].data),
-            .valid_out (ibuffer_if[i].valid),
-            .ready_out(ibuffer_if[i].ready)
-        );        
+        
+            .data_out  (uop_sequencer_if[i].data),
+            .valid_out (uop_sequencer_if[i].valid),
+            .ready_out (uop_sequencer_if[i].ready)
+        );
+
     `ifndef L1_ENABLE
-        assign decode_if.ibuf_pop[i] = ibuffer_if[i].valid && ibuffer_if[i].ready;
+        assign decode_if.ibuf_pop[i] = uop_sequencer_if[i].valid && uop_sequencer_if[i].ready;
     `endif
+
+        VX_uop_sequencer uop_sequencer (
+            .clk(clk),
+            .reset(reset),
+
+            .uop_sequencer_if(uop_sequencer_if[i]),
+            .ibuffer_if(ibuffer_if[i])
+        );
+
     end
 
 endmodule

@@ -35,6 +35,9 @@ module VX_dispatch import VX_gpu_pkg::*; #(
 `ifdef EXT_F_ENABLE
     VX_dispatch_if.master   fpu_dispatch_if [`ISSUE_WIDTH],
 `endif
+`ifdef EXT_T_ENABLE
+    VX_dispatch_if.master   tensor_dispatch_if [`ISSUE_WIDTH],
+`endif
     VX_dispatch_if.master   sfu_dispatch_if [`ISSUE_WIDTH] 
 );
     `UNUSED_PARAM (CORE_ID)
@@ -142,6 +145,35 @@ module VX_dispatch import VX_gpu_pkg::*; #(
     end
 `endif
 
+    // Tensor Core dispatch
+
+`ifdef EXT_T_ENABLE
+
+    VX_operands_if tensor_operands_if[`ISSUE_WIDTH]();
+
+    for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin
+        assign tensor_operands_if[i].valid = operands_if[i].valid && (operands_if[i].data.ex_type == `EX_TENSOR);
+        assign tensor_operands_if[i].data = operands_if[i].data;
+
+        `RESET_RELAY (tensor_reset, reset);
+
+        VX_elastic_buffer #(
+            .DATAW   (DATAW),
+            .SIZE    (2),
+            .OUT_REG (2)
+        ) tensor_buffer (
+            .clk        (clk),
+            .reset      (tensor_reset),
+            .valid_in   (tensor_operands_if[i].valid),
+            .ready_in   (tensor_operands_if[i].ready),
+            .data_in    (`TO_DISPATCH_DATA(tensor_operands_if[i].data, last_active_tid[i])),           
+            .data_out   (tensor_dispatch_if[i].data),
+            .valid_out  (tensor_dispatch_if[i].valid),
+            .ready_out  (tensor_dispatch_if[i].ready)
+        );
+    end
+`endif
+
     // SFU dispatch
 
     VX_operands_if sfu_operands_if[`ISSUE_WIDTH]();
@@ -174,6 +206,9 @@ module VX_dispatch import VX_gpu_pkg::*; #(
                                    || (lsu_operands_if[i].ready && (operands_if[i].data.ex_type == `EX_LSU))
                                 `ifdef EXT_F_ENABLE
                                    || (fpu_operands_if[i].ready && (operands_if[i].data.ex_type == `EX_FPU))
+                                `endif
+                                `ifdef EXT_T_ENABLE
+                                   || (tensor_operands_if[i].ready && (operands_if[i].data.ex_type == `EX_TENSOR))
                                 `endif
                                    || (sfu_operands_if[i].ready && (operands_if[i].data.ex_type == `EX_SFU));
     end

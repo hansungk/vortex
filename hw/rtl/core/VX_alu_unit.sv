@@ -33,7 +33,7 @@ module VX_alu_unit #(
     localparam PID_BITS     = `CLOG2(`NUM_THREADS / NUM_LANES);
     localparam PID_WIDTH    = `UP(PID_BITS);
     localparam RSP_ARB_DATAW= `UUID_WIDTH + `NW_WIDTH + NUM_LANES + `XLEN + `NR_BITS + 1 + NUM_LANES * `XLEN + PID_WIDTH + 1 + 1;
-    localparam RSP_ARB_SIZE = 1 + `EXT_M_ENABLED;
+    localparam RSP_ARB_SIZE = 2 + `EXT_M_ENABLED;
     localparam PARTIAL_BW   = (BLOCK_SIZE != `ISSUE_WIDTH) || (NUM_LANES != `NUM_THREADS);
 
     VX_execute_if #(
@@ -60,12 +60,13 @@ module VX_alu_unit #(
     for (genvar block_idx = 0; block_idx < BLOCK_SIZE; ++block_idx) begin
 
         wire is_muldiv_op;
+        wire is_reduce_op;
 
         VX_execute_if #(
             .NUM_LANES (NUM_LANES)
         ) int_execute_if();
 
-        assign int_execute_if.valid = execute_if[block_idx].valid && ~is_muldiv_op;
+        assign int_execute_if.valid = execute_if[block_idx].valid && ~is_muldiv_op && ~is_reduce_op;
         assign int_execute_if.data = execute_if[block_idx].data;
 
         VX_commit_if #(
@@ -86,6 +87,31 @@ module VX_alu_unit #(
             .commit_if  (int_commit_if)
         );
 
+        assign is_reduce_op = `INST_ALU_IS_RED(execute_if[block_idx].data.op_mod);
+
+        VX_execute_if #(
+            .NUM_LANES (NUM_LANES)
+        ) red_execute_if();
+
+        assign red_execute_if.valid = execute_if[block_idx].valid && is_reduce_op;
+        assign red_execute_if.data = execute_if[block_idx].data;
+
+        VX_commit_if #(
+            .NUM_LANES (NUM_LANES)
+        ) red_commit_if();
+
+        `RESET_RELAY(red_reset, reset);
+
+        VX_reduce_unit #(
+            .CORE_ID(CORE_ID),
+            .NUM_LANES(NUM_LANES)
+        ) reduce_unit (
+            .clk(clk),
+            .reset(red_reset),
+            .execute_if(red_execute_if),
+            .commit_if(red_commit_if)
+        );
+
     `ifdef EXT_M_ENABLE
 
         assign is_muldiv_op = `INST_ALU_IS_M(execute_if[block_idx].data.op_mod);
@@ -96,7 +122,7 @@ module VX_alu_unit #(
             .NUM_LANES (NUM_LANES)
         ) mdv_execute_if();
         
-        assign mdv_execute_if.valid = execute_if[block_idx].valid && is_muldiv_op;
+        assign mdv_execute_if.valid = execute_if[block_idx].valid && is_muldiv_op && ~is_reduce_op;
         assign mdv_execute_if.data = execute_if[block_idx].data;
 
         VX_commit_if #(
@@ -113,12 +139,12 @@ module VX_alu_unit #(
             .commit_if  (mdv_commit_if)
         );       
        
-        assign execute_if[block_idx].ready = is_muldiv_op ? mdv_execute_if.ready : int_execute_if.ready;
+        assign execute_if[block_idx].ready = is_reduce_op ? red_execute_if.ready : (is_muldiv_op ? mdv_execute_if.ready : int_execute_if.ready);
 
     `else
 
         assign is_muldiv_op = 0;
-        assign execute_if[block_idx].ready = int_execute_if.ready;
+        assign execute_if[block_idx].ready = is_reduce_op ? red_execute_if.ready : int_execute_if.ready;
 
     `endif
 
@@ -135,19 +161,22 @@ module VX_alu_unit #(
             `ifdef EXT_M_ENABLE
                 mdv_commit_if.valid,
             `endif
-                int_commit_if.valid
+                int_commit_if.valid,
+                red_commit_if.valid
             }),
             .ready_in  ({
             `ifdef EXT_M_ENABLE
                 mdv_commit_if.ready,
             `endif
-                int_commit_if.ready
+                int_commit_if.ready,
+                red_commit_if.ready
             }),
             .data_in   ({
             `ifdef EXT_M_ENABLE
                 mdv_commit_if.data,
             `endif
-                int_commit_if.data
+                int_commit_if.data,
+                red_commit_if.data
             }),
             .data_out  (commit_block_if[block_idx].data),
             .valid_out (commit_block_if[block_idx].valid), 

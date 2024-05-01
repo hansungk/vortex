@@ -513,6 +513,40 @@ module VX_decode  #(
                     default:;
                 endcase
             end
+            `INST_EXT3: begin
+                ex_type = `EX_ALU;
+                op_mod[3] = 1;
+                `USED_IREG(rs1);
+                `USED_IREG(rd);
+
+                case (func7[5:0])
+                    6'h0: begin
+                        op_type = func7[6] ? `INST_RED_ADDU : `INST_RED_ADD;
+                    end
+                    6'h1: begin
+                        op_type = func7[6] ? `INST_RED_MINU : `INST_RED_MIN;
+                    end
+                    6'h2: begin
+                        op_type = func7[6] ? `INST_RED_MAXU : `INST_RED_MAX;
+                    end
+                    6'h3: begin
+                        op_type = `INST_RED_AND;
+                    end
+                    6'h4: begin
+                        op_type = `INST_RED_OR;
+                    end
+                    6'h5: begin
+                        op_type = `INST_RED_XOR;
+                    end
+                    default:;
+                endcase
+            end
+        `ifdef EXT_T_ENABLE
+            `INST_EXT4: begin
+                ex_type = `EX_TENSOR;
+                op_type = `INST_TENSOR_HMMA;
+            end
+        `endif
             default:;
         endcase
     end

@@ -41,7 +41,7 @@ module VX_execute import VX_gpu_pkg::*; #(
     VX_dispatch_if.slave    fpu_dispatch_if [`ISSUE_WIDTH],
     VX_commit_if.master     fpu_commit_if [`ISSUE_WIDTH],
 `endif
-  
+
     VX_dispatch_if.slave    alu_dispatch_if [`ISSUE_WIDTH],
     VX_commit_if.master     alu_commit_if [`ISSUE_WIDTH],
     VX_branch_ctl_if.master branch_ctl_if [`NUM_ALU_BLOCKS],
@@ -52,6 +52,11 @@ module VX_execute import VX_gpu_pkg::*; #(
     VX_dispatch_if.slave    sfu_dispatch_if [`ISSUE_WIDTH], 
     VX_commit_if.master     sfu_commit_if [`ISSUE_WIDTH],
     VX_warp_ctl_if.master   warp_ctl_if,
+
+`ifdef EXT_T_ENABLE
+    VX_dispatch_if.slave    tensor_dispatch_if [`ISSUE_WIDTH],
+    VX_commit_if.master     tensor_commit_if [`ISSUE_WIDTH],
+`endif
 
     // simulation helper signals
     output wire             sim_ebreak
@@ -126,6 +131,18 @@ module VX_execute import VX_gpu_pkg::*; #(
         .warp_ctl_if    (warp_ctl_if),
         .commit_if      (sfu_commit_if)
     );
+
+`ifdef EXT_T_ENABLE
+    VX_tensor_core #(
+        
+    ) tensor_core (
+        .clk(clk),
+        .reset(reset),
+
+        .dispatch_if(tensor_dispatch_if),
+        .commit_if(tensor_commit_if)
+    );
+`endif
 
     // simulation helper signal to get RISC-V tests Pass/Fail status
     assign sim_ebreak = alu_dispatch_if[0].valid && alu_dispatch_if[0].ready 

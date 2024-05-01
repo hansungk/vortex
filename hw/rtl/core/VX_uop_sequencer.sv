@@ -1,0 +1,163 @@
+`include "VX_define.vh"
+
+`define FREG(x) {1'b1, `NRI_BITS'(x)}
+
+module VX_uop_sequencer import VX_gpu_pkg::*; (
+    input clk,
+    input reset,
+
+    VX_ibuffer_if.slave  uop_sequencer_if,
+    VX_ibuffer_if.master ibuffer_if
+);
+
+`ifdef EXT_T_ENABLE
+    localparam UOP_TABLE_SIZE = 64;
+    localparam UPC_BITS = `CLOG2(UOP_TABLE_SIZE);
+
+    localparam NEXT   = 2'b00;
+    localparam FINISH = 2'b01;
+
+    localparam UBR_BITS = 2;
+
+    // uop metadata (sequencing, next state), execution metadata (EX_TYPE, OP_TYPE, OP_MOD), wb, use pc, use imm, pc, imm, rd, rs1, rs2, rs3
+    localparam UOP_TABLE_WIDTH = UBR_BITS + UPC_BITS + `EX_BITS + `INST_OP_BITS + `INST_MOD_BITS + 1 + 1 + 1 + `XLEN + `XLEN + (`NR_BITS * 4);
+    localparam IBUFFER_IF_DATAW = `UUID_WIDTH + ISSUE_WIS_W + `NUM_THREADS + `XLEN + 1 + `EX_BITS + `INST_OP_BITS + `INST_MOD_BITS + 1 + 1 + `XLEN + (`NR_BITS * 4);
+
+    logic [UOP_TABLE_WIDTH-1:0] uop;
+
+    // reserve space at start of table for more uop sequences
+    localparam HMMA_SET0_STEP0_0 = UPC_BITS'(0);
+    localparam HMMA_SET0_STEP0_1 = UPC_BITS'(8);
+    localparam HMMA_SET0_STEP1_0 = UPC_BITS'(9);
+    localparam HMMA_SET0_STEP1_1 = UPC_BITS'(10);
+    localparam HMMA_SET0_STEP2_0 = UPC_BITS'(11);
+    localparam HMMA_SET0_STEP2_1 = UPC_BITS'(12);
+    localparam HMMA_SET0_STEP3_0 = UPC_BITS'(13);
+    localparam HMMA_SET0_STEP3_1 = UPC_BITS'(14);
+
+    localparam HMMA_SET1_STEP0_0 = UPC_BITS'(15);
+    localparam HMMA_SET1_STEP0_1 = UPC_BITS'(16);
+    localparam HMMA_SET1_STEP1_0 = UPC_BITS'(17);
+    localparam HMMA_SET1_STEP1_1 = UPC_BITS'(18);
+    localparam HMMA_SET1_STEP2_0 = UPC_BITS'(19);
+    localparam HMMA_SET1_STEP2_1 = UPC_BITS'(20);
+    localparam HMMA_SET1_STEP3_0 = UPC_BITS'(21);
+    localparam HMMA_SET1_STEP3_1 = UPC_BITS'(22);
+
+    localparam HMMA_SET2_STEP0_0 = UPC_BITS'(23);
+    localparam HMMA_SET2_STEP0_1 = UPC_BITS'(24);
+    localparam HMMA_SET2_STEP1_0 = UPC_BITS'(25);
+    localparam HMMA_SET2_STEP1_1 = UPC_BITS'(26);
+    localparam HMMA_SET2_STEP2_0 = UPC_BITS'(27);
+    localparam HMMA_SET2_STEP2_1 = UPC_BITS'(28);
+    localparam HMMA_SET2_STEP3_0 = UPC_BITS'(29);
+    localparam HMMA_SET2_STEP3_1 = UPC_BITS'(30);
+
+    localparam HMMA_SET3_STEP0_0 = UPC_BITS'(31);
+    localparam HMMA_SET3_STEP0_1 = UPC_BITS'(32);
+    localparam HMMA_SET3_STEP1_0 = UPC_BITS'(33);
+    localparam HMMA_SET3_STEP1_1 = UPC_BITS'(34);
+    localparam HMMA_SET3_STEP2_0 = UPC_BITS'(35);
+    localparam HMMA_SET3_STEP2_1 = UPC_BITS'(36);
+    localparam HMMA_SET3_STEP3_0 = UPC_BITS'(37);
+    localparam HMMA_SET3_STEP3_1 = UPC_BITS'(38);
+    // register layout: f0-f7 used for A, f8-f15 used for B, f16-f23 used for C
+
+    always @(*) begin
+        case (upc)
+            `include "VX_tensor_ucode.vh"
+            default: begin
+                uop = '0;
+            end
+        endcase
+    end
+
+    logic [UPC_BITS-1:0] upc, upc_r, upc_n;
+
+    wire [UBR_BITS-1:0] ubr = uop[UOP_TABLE_WIDTH-1:UOP_TABLE_WIDTH-UBR_BITS];
+    wire [UPC_BITS-1:0] next_upc = uop[UOP_TABLE_WIDTH-UBR_BITS-1:UOP_TABLE_WIDTH-UBR_BITS-UPC_BITS];
+
+    logic use_uop, use_uop_1d;
+    wire uop_fire = use_uop && ibuffer_if.valid && ibuffer_if.ready;
+    
+    wire uop_start = ~use_uop_1d && use_uop;
+    wire uop_finish = use_uop && uop_sequencer_if.valid && uop_sequencer_if.ready;
+    
+
+    // merging the 2 always blocks leads to spurious UNOPTFLAT verilator lint, but conceptually they should be linked
+    always @(*) begin
+        use_uop = uop_sequencer_if.valid && uop_sequencer_if.data.ex_type == `EX_TENSOR;
+
+        if (uop_start) begin
+            // 1st cycle of microcoded operation, use op_type to determine entry point into microcode table
+            upc_n = UPC_BITS'(uop_sequencer_if.data.op_type);
+        end
+        else begin
+            upc_n = upc;
+        end
+        
+        if (uop_fire) begin
+            upc_n = next_upc;
+        end
+    end
+
+    always @(*) begin
+        if (uop_start) begin
+            // 1st cycle of microcoded operation, use op_type to determine entry point into microcode table
+            upc = UPC_BITS'(uop_sequencer_if.data.op_type);
+        end
+        else begin
+            upc = upc_r;
+        end
+    end
+
+    // copy UUID, wis, tmask from microcoded instruction
+    wire [IBUFFER_IF_DATAW-1:0] ibuffer_output = {
+        uop_sequencer_if.data.uuid,
+        uop_sequencer_if.data.wis,
+        uop_sequencer_if.data.tmask,
+        uop[UOP_TABLE_WIDTH-UBR_BITS-UPC_BITS-1:0]
+    };
+
+    assign ibuffer_if.valid = use_uop ? 1'b1 : uop_sequencer_if.valid;
+    assign uop_sequencer_if.ready = use_uop ? (uop_fire && ubr == FINISH) : ibuffer_if.ready;
+    assign ibuffer_if.data = use_uop ? ibuffer_output : uop_sequencer_if.data;
+
+    always @(posedge clk) begin
+        if (uop_start) begin
+            $display("UOP start @ %t", $time);
+            $display("use_uop=%0d, use_uop_1d=%0d, uop_start=%0d, ibuffer_if.valid=%0d, ibuffer_if.ready=%0d", use_uop, use_uop_1d, uop_start, ibuffer_if.valid, ibuffer_if.ready);
+        end
+
+        if (uop_fire) begin
+            $display("UOP fire @ %t", $time);
+        end
+
+        if (uop_finish) begin
+            $display("UOP finish @ %t", $time);
+        end
+
+        if (reset) begin
+            upc_r <= '0;
+            use_uop_1d <= '0;
+        end
+        else begin
+            upc_r <= upc_n;
+            if (uop_finish) begin
+                use_uop_1d <= 1'b0; // allow microcoded instructions to start immediately after eachother
+            end
+            else begin
+                use_uop_1d <= use_uop;
+            end
+        end
+    end
+`else
+    `UNUSED_VAR(clk);
+    `UNUSED_VAR(reset);
+    assign ibuffer_if.valid = uop_sequencer_if.valid;
+    assign uop_sequencer_if.ready = ibuffer_if.ready;
+    assign ibuffer_if.data = uop_sequencer_if.data;
+`endif
+    
+
+endmodule

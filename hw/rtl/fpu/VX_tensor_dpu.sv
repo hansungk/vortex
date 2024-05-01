@@ -1,0 +1,37 @@
+`include "VX_fpu_define.vh"
+
+module VX_tensor_dpu #(
+
+) (
+    input clk,
+    input reset,
+
+    input stall,
+
+    input valid_in,
+    input [3:0][1:0][31:0] A_tile,
+    input [1:0][3:0][31:0] B_tile,
+    input [3:0][3:0][31:0] C_tile,
+
+    output valid_out,
+    output [3:0][3:0][31:0] D_tile
+);
+    logic [3:0][3:0][31:0] result_hmma;
+
+    always @(*) begin
+        dpi_hmma(valid_in, A_tile, B_tile, C_tile, result_hmma);
+    end
+    
+
+    VX_shift_register #(
+        .DATAW  (1 + $bits(D_tile)),
+        .DEPTH  (`LATENCY_HMMA),
+        .RESETW (1)
+    ) shift_reg (
+        .clk      (clk),
+        .reset    (reset),
+        .enable   (~stall),
+        .data_in  ({valid_in, result_hmma}),
+        .data_out ({valid_out, D_tile})
+    );
+endmodule
