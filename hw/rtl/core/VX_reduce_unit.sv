@@ -252,7 +252,7 @@ module VX_reduce_unit #(
 
     VX_elastic_buffer #(
         .DATAW(NUM_LANES + PID_WIDTH + 1 + 1),
-        .SIZE(NUM_PACKETS),
+        .SIZE(NUM_PACKETS)
     ) tmask_pid_store (
         .clk(clk),
         .reset(reset),

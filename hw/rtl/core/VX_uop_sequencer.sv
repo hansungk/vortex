@@ -63,6 +63,8 @@ module VX_uop_sequencer import VX_gpu_pkg::*; (
     localparam HMMA_SET3_STEP3_1 = UPC_BITS'(38);
     // register layout: f0-f7 used for A, f8-f15 used for B, f16-f23 used for C
 
+    logic [UPC_BITS-1:0] upc, upc_r, upc_n;
+
     always @(*) begin
         case (upc)
             `include "VX_tensor_ucode.vh"
@@ -71,8 +73,6 @@ module VX_uop_sequencer import VX_gpu_pkg::*; (
             end
         endcase
     end
-
-    logic [UPC_BITS-1:0] upc, upc_r, upc_n;
 
     wire [UBR_BITS-1:0] ubr = uop[UOP_TABLE_WIDTH-1:UOP_TABLE_WIDTH-UBR_BITS];
     wire [UPC_BITS-1:0] next_upc = uop[UOP_TABLE_WIDTH-UBR_BITS-1:UOP_TABLE_WIDTH-UBR_BITS-UPC_BITS];
