@@ -37,9 +37,12 @@ module VX_tensor_core_warp import VX_gpu_pkg::*; #(
     wire [1:0] step = 2'(dispatch_if.data.op_type);
     logic [3:0] octet_results_valid;
     logic [3:0] octet_results_ready;
+    logic [3:0] octet_operands_ready;
     logic [`NUM_THREADS-1:0][`XLEN-1:0] wb_data_0;
     logic [`NUM_THREADS-1:0][`XLEN-1:0] wb_data_1;
     
+    assign dispatch_if.ready = &octet_operands_ready;
+
     for (genvar i = 0; i < 4; ++i) begin
         wire [7:0][31:0] octet_A = {
             dispatch_if.data.rs1_data[16+4*i +: 4], dispatch_if.data.rs1_data[4*i +: 4]
@@ -64,7 +67,7 @@ module VX_tensor_core_warp import VX_gpu_pkg::*; #(
             .B_in(octet_B),
             .C_in(octet_C),
             .operands_valid(dispatch_if.valid),
-            .operands_ready(dispatch_if.ready),
+            .operands_ready(octet_operands_ready[i]),
 
             .step(step),
 
