@@ -24,7 +24,7 @@
 #include "VX_config.h"
 
 #include <bit>
-#include "half.hpp"
+#include "half.h"
 
 extern "C" {
   void dpi_fadd(bool enable, int dst_fmt, int64_t a, int64_t b, const svBitVecVal* frm, int64_t* result, svBitVecVal* fflags);
