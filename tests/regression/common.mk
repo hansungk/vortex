@@ -79,7 +79,10 @@ endif
 endif
 endif
 
-all: $(PROJECT) kernel.bin kernel.dump kernel.radiance.dump kernel.radiance.$(CONFIG).dump
+# CONFIG is supplied from the command line to differentiate ELF files with custom suffixes
+CONFIGEXT = $(if $(CONFIG),.$(CONFIG),)
+
+all: $(PROJECT) kernel.bin kernel.dump kernel.radiance.dump kernel.radiance$(CONFIGEXT).dump
 
 kernel.dump: kernel.elf
 	$(VX_DP) -D kernel.elf > kernel.dump
@@ -87,8 +90,10 @@ kernel.dump: kernel.elf
 kernel.radiance.dump: kernel.radiance.elf
 	$(VX_DP) -D kernel.radiance.elf > kernel.radiance.dump
 
-kernel.radiance.$(CONFIG).dump: kernel.radiance.$(CONFIG).elf
-	$(VX_DP) -D kernel.radiance.$(CONFIG).elf > kernel.radiance.$(CONFIG).dump
+ifneq ($(CONFIG),)
+kernel.radiance$(CONFIGEXT).dump: kernel.radiance$(CONFIGEXT).elf
+	$(VX_DP) -D kernel.radiance$(CONFIGEXT).elf > kernel.radiance$(CONFIGEXT).dump
+endif
 
 kernel.bin: kernel.elf kernel.radiance.elf
 	$(VX_CP) -O binary kernel.elf kernel.bin
@@ -105,8 +110,10 @@ kernel.radiance.elf: kernel.elf
 	$(OBJCOPY) --update-section .operand.a=input.a.bin kernel.radiance.elf
 	$(OBJCOPY) --update-section .operand.b=input.b.bin kernel.radiance.elf
 
-kernel.radiance.$(CONFIG).elf: kernel.radiance.elf
+ifneq ($(CONFIG),)
+kernel.radiance$(CONFIGEXT).elf: kernel.radiance.elf
 	cp $< $@
+endif
 
 $(PROJECT): $(SRCS)
 	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
