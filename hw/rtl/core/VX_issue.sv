@@ -96,7 +96,6 @@ module VX_issue #(
         .clk            (clk), 
         .reset          (dispatch_reset),
     `ifdef PERF_ENABLE
-        `UNUSED_PIN     (perf_stalls),
         .perf_stalls    (perf_issue_if.dispatch_stalls),
         .perf_valids    (perf_issue_if.dispatch_valids),
         .perf_fires     (perf_issue_if.dispatch_fires),
