@@ -82,11 +82,11 @@ module VX_uop_sequencer import VX_gpu_pkg::*; (
     
     wire uop_start = ~use_uop_1d && use_uop;
     wire uop_finish = use_uop && uop_sequencer_if.valid && uop_sequencer_if.ready;
-    
 
-    // merging the 2 always blocks leads to spurious UNOPTFLAT verilator lint, but conceptually they should be linked
+    // merging the 2 always blocks leads to spurious UNOPTFLAT verilator lint,
+    // but conceptually they should be linked
     always @(*) begin
-        use_uop = uop_sequencer_if.valid && uop_sequencer_if.data.ex_type == `EX_TENSOR;
+        use_uop = uop_sequencer_if.valid && uop_sequencer_if.data.ex_type == `EX_BITS'(`EX_TENSOR);
 
         if (uop_start) begin
             // 1st cycle of microcoded operation, use op_type to determine entry point into microcode table

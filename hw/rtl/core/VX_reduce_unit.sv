@@ -151,7 +151,8 @@ module VX_reduce_unit #(
     wire stored_sop;
     wire stored_eop;
 
-    logic [PID_BITS:0] size, size_n;
+    logic [PID_BITS:0] size;
+    logic [PID_BITS:0] size_n;
     
     // 1. idle state - wait for execute_if to be valid
     // 2. accumulate - continue accumulating until eop, store packet id + thread mask for broadcast phase
