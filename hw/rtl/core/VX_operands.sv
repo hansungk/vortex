@@ -300,14 +300,14 @@ module VX_operands import VX_gpu_pkg::*; #(
                     cycle <= cycle_n;
                 end
 
-                if (cycle == 32'd25000) begin
-                    for (integer k = 0; k < `NUM_REGS * ISSUE_RATIO; ++k) begin
-                        integer warp = i * ISSUE_RATIO + (k / `NUM_REGS);
-                        integer thread = j;
-                        integer register = k % `NUM_REGS;
-                        $display("warp %0d, thread %0d, register %0d: %0x", warp, thread, register, gpr_ram.ram[k]);
-                    end
-                end
+                // if (cycle == 32'd25000) begin
+                //     for (integer k = 0; k < `NUM_REGS * ISSUE_RATIO; ++k) begin
+                //         integer warp = i * ISSUE_RATIO + (k / `NUM_REGS);
+                //         integer thread = j;
+                //         integer register = k % `NUM_REGS;
+                //         $display("warp %0d, thread %0d, register %0d: %0x", warp, thread, register, gpr_ram.ram[k]);
+                //     end
+                // end
             end
         end
     end

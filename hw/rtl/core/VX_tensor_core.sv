@@ -55,7 +55,8 @@ module VX_tensor_core_warp import VX_gpu_pkg::*; #(
         logic result_valid;
         logic result_ready;
         VX_tensor_octet #(
-
+            .ISW(ISW),
+            .OCTET(i)
         ) octet (
             .clk(clk),
             .reset(reset),
@@ -177,7 +178,8 @@ module VX_tensor_core_warp import VX_gpu_pkg::*; #(
 endmodule
 
 module VX_tensor_octet #(
-    
+    parameter ISW,
+    parameter OCTET
 ) (
     input clk,
     input reset,
@@ -282,7 +284,8 @@ module VX_tensor_octet #(
 
     wire do_hmma = (substep == 1'b1 && operands_valid && operands_ready);
     VX_tensor_dpu #(
-
+        .ISW(ISW),
+        .OCTET(OCTET)
     ) dpu (
         .clk(clk),
         .reset(reset),
