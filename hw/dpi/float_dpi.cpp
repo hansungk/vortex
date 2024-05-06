@@ -345,7 +345,7 @@ void dpi_fmax(bool enable, int dst_fmt, int64_t a, int64_t b, int64_t* result, s
   }
 }
 
-// A is M * K, B is K * K * M, C is M * M, D is M * M
+// A is M * K, B is K * M, C is M * M, D is M * M
 #define M 4
 #define K 2
 
@@ -414,6 +414,7 @@ void dpi_hmma(bool enable, const svBitVecVal* A_tile, const svBitVecVal* B_tile,
   }
 
   write_float_array(D_tile, &c_D_tile[0][0], M, M);
+}
 
 // 1 copy per warp
 float A_tile_full[4][16][8];
