@@ -56,6 +56,7 @@ extern "C" {
   void dpi_fmax(bool enable, int dst_fmt, int64_t a, int64_t b, int64_t* result, svBitVecVal* fflags);
 
   void dpi_hmma(bool enable, const svBitVecVal* A_tile, const svBitVecVal* B_tile, const svBitVecVal* C_tile, svBitVecVal* D_tile);
+  void dpi_print_results(int wid, int octet, const svBitVecVal* A_tile, const svBitVecVal* B_tile, const svBitVecVal* C_tile, const svBitVecVal* D_tile);
 }
 
 inline uint64_t nan_box(uint32_t value) {
@@ -413,4 +414,152 @@ void dpi_hmma(bool enable, const svBitVecVal* A_tile, const svBitVecVal* B_tile,
   }
 
   write_float_array(D_tile, &c_D_tile[0][0], M, M);
+
+// 1 copy per warp
+float A_tile_full[4][16][8];
+float B_tile_full[4][8][16];
+float C_tile_full[4][16][16];
+float D_tile_full[4][16][16];
+int steps[4];
+
+void print_array(float* array, int rows, int cols) {
+  for (int i = 0; i < rows; i += 1) {
+    for (int j = 0; j < cols; j += 1) {
+      std::cout << array[i*cols+j] << " ";
+    }
+    std::cout << "\n";
+  }
+  std::cout << std::endl;
+}
+
+void dpi_print_results(int wid, int octet, const svBitVecVal* A_tile, const svBitVecVal* B_tile, const svBitVecVal* C_tile, const svBitVecVal* D_tile) {
+  // std::cout << "A: " << std::endl;
+  fill_float_array(A_tile, &c_A_tile[0][0], M, K);
+  // std::cout << "B: " << std::endl;
+  fill_float_array(B_tile, &c_B_tile[0][0], K, M);
+  // std::cout << "C: " << std::endl;
+  fill_float_array(C_tile, &c_C_tile[0][0], M, M);
+  // for some reason this still holds onto old value? very strange
+  // std::cout << "D: " << std::endl;
+  fill_float_array(D_tile, &c_D_tile[0][0], M, M);
+
+  int octet_row_offset;
+  int octet_col_offset;
+  switch(octet) {
+  case 0:
+    octet_row_offset = 0;
+    octet_col_offset = 0;
+    break;
+  case 1:
+    octet_row_offset = 8;
+    octet_col_offset = 0;
+    break;
+  case 2:
+    octet_row_offset = 0;
+    octet_col_offset = 8;
+    break;
+  case 3:
+    octet_row_offset = 8;
+    octet_col_offset = 8;
+    break;
+  }
+
+  int step_row_offset;
+  int step_col_offset;
+  int step = (steps[wid] % 16) / 4;
+  int set = (steps[wid] / 16);
+  switch(step) {
+  case 0:
+    step_row_offset = 0;
+    step_col_offset = 0;
+    break;
+  case 1:
+    step_row_offset = 2;
+    step_col_offset = 0;
+    break;
+  case 2:
+    step_row_offset = 0;
+    step_col_offset = 4;
+    break;
+  case 3:
+    step_row_offset = 2;
+    step_col_offset = 4;
+    break;
+  }
+  
+  if (steps[0] >= 48) {
+    // std::cout << "octet " << octet << " step " << steps[0] << "\n";
+    // print_array(&c_D_tile[0][0], 4, 4); 
+  }
+
+  D_tile_full[wid][octet_row_offset+step_row_offset+0][octet_col_offset+step_col_offset+0] = c_D_tile[0][0];
+  D_tile_full[wid][octet_row_offset+step_row_offset+0][octet_col_offset+step_col_offset+1] = c_D_tile[0][1];
+  D_tile_full[wid][octet_row_offset+step_row_offset+0][octet_col_offset+step_col_offset+2] = c_D_tile[0][2];
+  D_tile_full[wid][octet_row_offset+step_row_offset+0][octet_col_offset+step_col_offset+3] = c_D_tile[0][3];
+  D_tile_full[wid][octet_row_offset+step_row_offset+1][octet_col_offset+step_col_offset+0] = c_D_tile[1][0];
+  D_tile_full[wid][octet_row_offset+step_row_offset+1][octet_col_offset+step_col_offset+1] = c_D_tile[1][1];
+  D_tile_full[wid][octet_row_offset+step_row_offset+1][octet_col_offset+step_col_offset+2] = c_D_tile[1][2];
+  D_tile_full[wid][octet_row_offset+step_row_offset+1][octet_col_offset+step_col_offset+3] = c_D_tile[1][3];
+  D_tile_full[wid][octet_row_offset+step_row_offset+4][octet_col_offset+step_col_offset+0] = c_D_tile[2][0];
+  D_tile_full[wid][octet_row_offset+step_row_offset+4][octet_col_offset+step_col_offset+1] = c_D_tile[2][1];
+  D_tile_full[wid][octet_row_offset+step_row_offset+4][octet_col_offset+step_col_offset+2] = c_D_tile[2][2];
+  D_tile_full[wid][octet_row_offset+step_row_offset+4][octet_col_offset+step_col_offset+3] = c_D_tile[2][3];
+  D_tile_full[wid][octet_row_offset+step_row_offset+5][octet_col_offset+step_col_offset+0] = c_D_tile[3][0];
+  D_tile_full[wid][octet_row_offset+step_row_offset+5][octet_col_offset+step_col_offset+1] = c_D_tile[3][1];
+  D_tile_full[wid][octet_row_offset+step_row_offset+5][octet_col_offset+step_col_offset+2] = c_D_tile[3][2];
+  D_tile_full[wid][octet_row_offset+step_row_offset+5][octet_col_offset+step_col_offset+3] = c_D_tile[3][3];
+
+  if (octet == 0 || octet == 1) {
+    octet_row_offset = octet * 8;
+    if (step == 0) {
+      step_row_offset = 0; 
+    }
+    if (step == 1) {
+      step_row_offset = 2;
+    }
+    if (step == 0 || step == 1) {
+      A_tile_full[wid][octet_row_offset+step_row_offset+0][set*2+0] = c_A_tile[0][0];
+      A_tile_full[wid][octet_row_offset+step_row_offset+0][set*2+1] = c_A_tile[0][1];
+      A_tile_full[wid][octet_row_offset+step_row_offset+1][set*2+0] = c_A_tile[1][0];
+      A_tile_full[wid][octet_row_offset+step_row_offset+1][set*2+1] = c_A_tile[1][1];
+      A_tile_full[wid][octet_row_offset+step_row_offset+4][set*2+0] = c_A_tile[2][0];
+      A_tile_full[wid][octet_row_offset+step_row_offset+4][set*2+1] = c_A_tile[2][1];
+      A_tile_full[wid][octet_row_offset+step_row_offset+5][set*2+0] = c_A_tile[3][0];
+      A_tile_full[wid][octet_row_offset+step_row_offset+5][set*2+1] = c_A_tile[3][1];
+    }
+  }
+
+  if (octet == 0 || octet == 2) {
+    octet_col_offset = octet * 4;
+    if (step == 0) {
+      step_col_offset = 0; 
+    }
+    else if (step == 2) {
+      step_col_offset = 4;
+    }
+    if (step == 0 || step == 2) {
+      B_tile_full[wid][set*2+0][octet_col_offset+step_col_offset+0] = c_B_tile[0][0];
+      B_tile_full[wid][set*2+0][octet_col_offset+step_col_offset+1] = c_B_tile[0][1];
+      B_tile_full[wid][set*2+0][octet_col_offset+step_col_offset+2] = c_B_tile[0][2];
+      B_tile_full[wid][set*2+0][octet_col_offset+step_col_offset+3] = c_B_tile[0][3];
+      B_tile_full[wid][set*2+1][octet_col_offset+step_col_offset+0] = c_B_tile[1][0];
+      B_tile_full[wid][set*2+1][octet_col_offset+step_col_offset+1] = c_B_tile[1][1];
+      B_tile_full[wid][set*2+1][octet_col_offset+step_col_offset+2] = c_B_tile[1][2];
+      B_tile_full[wid][set*2+1][octet_col_offset+step_col_offset+3] = c_B_tile[1][3];
+    }
+  }
+
+  steps[wid] += 1;
+  if (steps[wid] % 64 == 0) {
+    steps[wid] = 0;
+    std::cout << "warp " << wid << " finished wmma\n";
+    std::cout << "A tile" << "\n";
+    print_array(&A_tile_full[wid][0][0], 16, 8);
+    std::cout << "B tile" << "\n";
+    print_array(&B_tile_full[wid][0][0], 8, 16);
+    // std::cout << "C tile" << "\n";
+    // print_array(&C_tile_full[wid][0][0], 16, 16);
+    std::cout << "D tile" << "\n";
+    print_array(&D_tile_full[wid][0][0], 16, 16);
+  }
 }

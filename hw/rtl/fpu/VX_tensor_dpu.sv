@@ -1,7 +1,8 @@
 `include "VX_fpu_define.vh"
 
 module VX_tensor_dpu #(
-
+    parameter ISW,
+    parameter OCTET
 ) (
     input clk,
     input reset,
@@ -20,6 +21,12 @@ module VX_tensor_dpu #(
 
     always @(*) begin
         dpi_hmma(valid_in, A_tile, B_tile, C_tile, result_hmma);
+    end
+
+    always @(posedge clk) begin
+        if (~reset && valid_in) begin
+            dpi_print_results(int'(ISW), int'(OCTET), A_tile, B_tile, C_tile, result_hmma);
+        end
     end
     
 

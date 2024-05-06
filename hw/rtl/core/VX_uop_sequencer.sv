@@ -125,16 +125,16 @@ module VX_uop_sequencer import VX_gpu_pkg::*; (
 
     always @(posedge clk) begin
         if (uop_start) begin
-            $display("UOP start @ %t", $time);
-            $display("use_uop=%0d, use_uop_1d=%0d, uop_start=%0d, ibuffer_if.valid=%0d, ibuffer_if.ready=%0d", use_uop, use_uop_1d, uop_start, ibuffer_if.valid, ibuffer_if.ready);
+            // $display("UOP start @ %t", $time);
+            // $display("use_uop=%0d, use_uop_1d=%0d, uop_start=%0d, ibuffer_if.valid=%0d, ibuffer_if.ready=%0d", use_uop, use_uop_1d, uop_start, ibuffer_if.valid, ibuffer_if.ready);
         end
 
         if (uop_fire) begin
-            $display("UOP fire @ %t", $time);
+            // $display("UOP fire @ %t", $time);
         end
 
         if (uop_finish) begin
-            $display("UOP finish @ %t", $time);
+            // $display("UOP finish @ %t", $time);
         end
 
         if (reset) begin

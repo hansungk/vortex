@@ -55,17 +55,21 @@ with open('VX_tensor_ucode.vh', 'w') as f:
         finish = (next_sequence_num == 0)
 
         name = "HMMA_SET{}_STEP{}_{}"
-        ucode = "{}, HMMA_SET{}_STEP{}_{}, `EX_BITS'(`EX_TENSOR), `INST_OP_BITS'({}), `INST_MOD_BITS'({}), 1'b1, 1'b0, 1'b0, 32'b0, 32'b0, `FREG({}), `FREG({}), `FREG({}), `FREG({})"
+        ucode = "{}, HMMA_SET{}_STEP{}_{}, `EX_BITS'(`EX_TENSOR), `INST_OP_BITS'({}), `INST_MOD_BITS'({}), 1'b1, 1'b0, 1'b0, 32'b{}, 32'b{}, `FREG({}), `FREG({}), `FREG({}), `FREG({})"
         
         name = name.format(
             set_num, step, substep,
         )
+        
+        pc_imm = 1 if finish else 0
 
         ucode = ucode.format(
             "FINISH" if finish else "NEXT",
             next_set_num, next_step, next_substep,
             step,
             substep,
+            pc_imm,
+            pc_imm,
             rs3_rd[(step, substep)],
             rs1[(set_num, substep)],
             rs2[(set_num, substep)],

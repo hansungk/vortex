@@ -90,7 +90,7 @@ int main()
 	vx_wmma();
 	store_wmma_result();
 	vx_tmc(1);
-	print_wmma_result();
+	// print_wmma_result();
 	
 	return 0;
 }
