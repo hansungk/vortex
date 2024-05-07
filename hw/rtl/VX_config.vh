@@ -238,7 +238,7 @@
 
 // Issue width
 `ifndef ISSUE_WIDTH
-`define ISSUE_WIDTH     `MIN(`NUM_WARPS, 8)
+`define ISSUE_WIDTH     `NUM_WARPS
 `endif
 
 // Number of ALU units
@@ -246,7 +246,7 @@
 `define NUM_ALU_LANES   `NUM_THREADS
 `endif
 `ifndef NUM_ALU_BLOCKS
-`define NUM_ALU_BLOCKS  `ISSUE_WIDTH
+`define NUM_ALU_BLOCKS  4
 `endif
 
 // Number of FPU units
@@ -254,7 +254,7 @@
 `define NUM_FPU_LANES   `NUM_THREADS
 `endif
 `ifndef NUM_FPU_BLOCKS
-`define NUM_FPU_BLOCKS  `ISSUE_WIDTH
+`define NUM_FPU_BLOCKS  2
 `endif
 
 // Number of LSU units
@@ -269,12 +269,12 @@
 
 // Size of Instruction Buffer
 `ifndef IBUF_SIZE
-`define IBUF_SIZE   (8 * (`NUM_WARPS / `ISSUE_WIDTH))
+`define IBUF_SIZE   (4 * `ISSUE_WIDTH)
 `endif
 
 // Size of LSU Request Queue
 `ifndef LSUQ_SIZE
-`define LSUQ_SIZE   (2 * `NUM_WARPS * (`NUM_THREADS / `NUM_LSU_LANES))
+`define LSUQ_SIZE   (4 * `NUM_WARPS * (`NUM_THREADS / `NUM_LSU_LANES))
 `endif
 
 // LSU Duplicate Address Check
@@ -469,7 +469,7 @@
 
 // Miss Handling Register Size
 `ifndef DCACHE_MSHR_SIZE
-`define DCACHE_MSHR_SIZE 16
+`define DCACHE_MSHR_SIZE 8
 `endif
 
 // Memory Request Queue Size
