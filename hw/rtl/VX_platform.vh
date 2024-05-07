@@ -14,6 +14,16 @@
 `ifndef VX_PLATFORM_VH
 `define VX_PLATFORM_VH
 
+// synthesis only
+`ifndef SIMULATION
+`define SYNTHESIS
+`define NDEBUG
+`define DPI_DISABLE
+`else
+`define SV_DPI
+`endif
+
+`ifdef SYNTHESIS
 `define GPR_RESET
 `define LSU_DUP_DISABLE
 `define ICACHE_DISABLE

@@ -72,6 +72,10 @@ module VX_core import VX_gpu_pkg::*; #(
     VX_dispatch_if      fpu_dispatch_if[`ISSUE_WIDTH]();
     VX_commit_if        fpu_commit_if[`ISSUE_WIDTH]();
 `endif
+`ifdef EXT_T_ENABLE 
+    VX_dispatch_if      tensor_dispatch_if[`ISSUE_WIDTH]();
+    VX_commit_if        tensor_commit_if[`ISSUE_WIDTH]();
+`endif
     VX_dispatch_if      sfu_dispatch_if[`ISSUE_WIDTH]();
     VX_commit_if        sfu_commit_if[`ISSUE_WIDTH]();    
     
@@ -179,6 +183,9 @@ module VX_core import VX_gpu_pkg::*; #(
     `ifdef EXT_F_ENABLE
         .fpu_dispatch_if(fpu_dispatch_if),
     `endif
+    `ifdef EXT_T_ENABLE
+        .tensor_dispatch_if(tensor_dispatch_if),
+    `endif
         .sfu_dispatch_if(sfu_dispatch_if)
     );
 
@@ -202,6 +209,10 @@ module VX_core import VX_gpu_pkg::*; #(
     `ifdef EXT_F_ENABLE
         .fpu_dispatch_if(fpu_dispatch_if),
         .fpu_commit_if  (fpu_commit_if),
+    `endif
+    `ifdef EXT_T_ENABLE
+        .tensor_dispatch_if (tensor_dispatch_if),
+        .tensor_commit_if (tensor_commit_if),
     `endif
 
         .commit_csr_if  (commit_csr_if),
@@ -237,6 +248,9 @@ module VX_core import VX_gpu_pkg::*; #(
         .fpu_commit_if  (fpu_commit_if),
     `endif
         .sfu_commit_if  (sfu_commit_if),
+    `ifdef EXT_T_ENABLE
+        .tensor_commit_if (tensor_commit_if),
+    `endif
         
         .writeback_if   (writeback_if),
         

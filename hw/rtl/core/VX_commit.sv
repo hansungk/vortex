@@ -28,6 +28,10 @@ module VX_commit import VX_gpu_pkg::*; #(
 `endif
     VX_commit_if.slave      sfu_commit_if [`ISSUE_WIDTH],
 
+`ifdef EXT_T_ENABLE
+    VX_commit_if.slave      tensor_commit_if [`ISSUE_WIDTH],
+`endif
+
     // outputs
     VX_writeback_if.master  writeback_if  [`ISSUE_WIDTH],
     VX_commit_csr_if.master commit_csr_if,
@@ -49,6 +53,8 @@ module VX_commit import VX_gpu_pkg::*; #(
     wire [`ISSUE_WIDTH-1:0][`NW_WIDTH-1:0] commit_wid;
     wire [`ISSUE_WIDTH-1:0][`NUM_THREADS-1:0] commit_tmask;
     wire [`ISSUE_WIDTH-1:0] commit_eop;
+    wire [`ISSUE_WIDTH-1:0][`EX_BITS-1:0] commit_sel;
+    `UNUSED_VAR (commit_sel)
 
     for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin
 
@@ -67,6 +73,9 @@ module VX_commit import VX_gpu_pkg::*; #(
             `ifdef EXT_F_ENABLE
                 fpu_commit_if[i].valid,
             `endif
+            `ifdef EXT_T_ENABLE
+                tensor_commit_if[i].valid,
+            `endif
                 alu_commit_if[i].valid,
                 lsu_commit_if[i].valid
             }),
@@ -74,6 +83,9 @@ module VX_commit import VX_gpu_pkg::*; #(
                 sfu_commit_if[i].ready,
             `ifdef EXT_F_ENABLE
                 fpu_commit_if[i].ready,
+            `endif
+            `ifdef EXT_T_ENABLE
+                tensor_commit_if[i].ready,
             `endif
                 alu_commit_if[i].ready,
                 lsu_commit_if[i].ready                
@@ -83,13 +95,16 @@ module VX_commit import VX_gpu_pkg::*; #(
             `ifdef EXT_F_ENABLE
                 fpu_commit_if[i].data,
             `endif
+            `ifdef EXT_T_ENABLE
+                tensor_commit_if[i].data,
+            `endif
                 alu_commit_if[i].data,
                 lsu_commit_if[i].data       
             }),
             .data_out  (commit_if[i].data),
             .valid_out (commit_if[i].valid),
             .ready_out (commit_if[i].ready),
-            `UNUSED_PIN (sel_out)
+            .sel_out   (commit_sel[i])
         );
 
         assign commit_fire[i] = commit_if[i].valid && commit_if[i].ready;        
@@ -158,7 +173,36 @@ module VX_commit import VX_gpu_pkg::*; #(
 
     // Committed instructions
 
-    wire [`ISSUE_WIDTH-1:0] committed = commit_fire & commit_eop;
+    // temporary hack to not underflow the pending instructions buffer
+    // relies on 1 cycle delay of arbiter and continuous issuing of tensor instructions, 
+    // so probably want to change this at some point 
+    // (i.e. pass a "don't count this towards pending instructions" signal down the pipeline)
+    // logic [`ISSUE_WIDTH-1:0][4:0] hmma_ctr, hmma_ctr_n;
+    wire [`ISSUE_WIDTH-1:0] final_hmma;
+`ifdef EXT_T_ENABLE
+    for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin
+        // assign hmma_ctr_n[i] = (tensor_commit_if[i].valid && tensor_commit_if[i].ready) ? hmma_ctr[i] + 5'b1 : hmma_ctr[i];
+        // assign final_hmma[i] = (commit_sel[i] != `EX_BITS'(2) || hmma_ctr == '0);
+        // i suppose this is now a feature and not a bug
+        // if PC is 0, this means it is not final step of a wmma, shouldn't be committed
+        assign final_hmma[i] = (commit_if[i].data.PC != 32'b0); 
+    end
+    /*
+    always @(posedge clk) begin
+        if (reset) begin
+            hmma_ctr <= '0;
+        end
+        else begin
+            hmma_ctr <= hmma_ctr_n;
+        end 
+    end
+    */
+`else
+    assign final_hmma = '1;
+`endif
+
+
+    wire [`ISSUE_WIDTH-1:0] committed = (commit_fire & commit_eop) & final_hmma;
 
     VX_pipe_register #(
         .DATAW  (`ISSUE_WIDTH * (1 + `NW_WIDTH)),

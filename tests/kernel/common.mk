@@ -33,7 +33,7 @@ $(PROJECT).dump: $(PROJECT).elf
 $(PROJECT).bin: $(PROJECT).elf
 	$(CP) -O binary $(PROJECT).elf $(PROJECT).bin
 
-$(PROJECT).elf: $(SRCS)
+$(PROJECT).elf: $(SRCS) $(DEPS)
 	$(CC) $(CFLAGS) $(SRCS) $(LDFLAGS) -o $(PROJECT).elf
 
 run-rtlsim: $(PROJECT).bin
