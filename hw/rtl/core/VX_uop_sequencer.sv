@@ -119,6 +119,7 @@ module VX_uop_sequencer import VX_gpu_pkg::*; (
         uop[UOP_TABLE_WIDTH-UBR_BITS-UPC_BITS-1:0]
     };
 
+    // passthrough when !use_uop
     assign ibuffer_if.valid = use_uop ? 1'b1 : uop_sequencer_if.valid;
     assign uop_sequencer_if.ready = use_uop ? (uop_fire && ubr == FINISH) : ibuffer_if.ready;
     assign ibuffer_if.data = use_uop ? ibuffer_output : uop_sequencer_if.data;

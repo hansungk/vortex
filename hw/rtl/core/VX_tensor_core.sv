@@ -211,12 +211,11 @@ module VX_tensor_octet #(
     // half the inputs are buffered, half are not (instead coming straight
     // from operand bus) unlike the real tensor core.
     // the banks are only 32 bit rather than 64 bit (a pair of fp32 regs).
-    // since A and B are supplied by 4 lanes each, we get 4 fp32's at a time
-    // (8 for C).
     logic [3:0][31:0] A_half;
     logic [3:0][31:0] B_half;
     logic [7:0][31:0] C_half;
     always @(*) begin
+        // note that not all lanes participate at every step
         case (step)
             2'b00: begin
                 A_half = { A_in[5:4], A_in[1:0] };
@@ -268,7 +267,6 @@ module VX_tensor_octet #(
         end
     end
 
-    
     wire stall = result_valid && ~result_ready;
     assign operands_ready = ~stall;
 

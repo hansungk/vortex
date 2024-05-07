@@ -74,6 +74,11 @@ module VX_ibuffer import VX_gpu_pkg::*; #(
         assign decode_if.ibuf_pop[i] = uop_sequencer_if[i].valid && uop_sequencer_if[i].ready;
     `endif
 
+        // tensor-core operation is controlled by a single macro-instruction at
+        // the ISA; internally, the uop_sequencer blitzs micro-ops (counterpart
+        // to Volta SASS set/step instructions) into the ibuffer upon encountering
+        // this macro-instruction.  this becomes a pass-through for non-tensorcore
+        // instructions.
         VX_uop_sequencer uop_sequencer (
             .clk(clk),
             .reset(reset),

@@ -27,6 +27,7 @@ module VX_reduce_ext #(
     input wire [`INST_RED_BITS-1:0]  op_type,
     output wire [DATAW_OUT-1:0]      data_out
 );
+    // recursive binary reduction
     if (N == 1) begin
         `UNUSED_VAR(op_type)
         `UNUSED_VAR(mask)
