@@ -26,6 +26,8 @@
 `define NUM_THREADS 8
 `define NUM_WARPS 8
 
+`define FIRESIM
+
 // synthesis only
 `ifndef SIMULATION
 `define SYNTHESIS

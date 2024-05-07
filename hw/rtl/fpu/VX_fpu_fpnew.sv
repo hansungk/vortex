@@ -13,9 +13,7 @@
 
 `include "VX_fpu_define.vh"
 
-`ifdef FPU_FPNEW
-
-module VX_fpu_fpnew 
+module VX_fpu_fpnew
     import VX_fpu_pkg::*; 
     import fpnew_pkg::*; 
     import cf_math_pkg::*; 
@@ -110,7 +108,7 @@ module VX_fpu_fpnew
     `UNUSED_VAR (fmt)
 
     always @(*) begin
-        fpu_op          = 'x;
+        fpu_op          = fpnew_pkg::ADD;
         fpu_rnd         = frm;  
         fpu_op_mod      = 0;        
         fpu_has_fflags  = 1;
@@ -283,4 +281,3 @@ module VX_fpu_fpnew
     );
 
 endmodule
-`endif
