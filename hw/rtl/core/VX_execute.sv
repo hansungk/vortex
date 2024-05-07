@@ -54,7 +54,11 @@ module VX_execute import VX_gpu_pkg::*; #(
     VX_warp_ctl_if.master   warp_ctl_if,
 
     // simulation helper signals
-    output wire             sim_ebreak
+    output wire             sim_ebreak,
+
+    input wire [31:0]       acc_read_in,
+    output wire [31:0]      acc_write_out,
+    output wire             acc_write_en
 );
 
 `ifdef EXT_F_ENABLE
@@ -124,7 +128,11 @@ module VX_execute import VX_gpu_pkg::*; #(
         .commit_csr_if  (commit_csr_if),
         .sched_csr_if   (sched_csr_if),
         .warp_ctl_if    (warp_ctl_if),
-        .commit_if      (sfu_commit_if)
+        .commit_if      (sfu_commit_if),
+
+        .acc_read_in    (acc_read_in),
+        .acc_write_out  (acc_write_out),
+        .acc_write_en   (acc_write_en)
     );
 
     // simulation helper signal to get RISC-V tests Pass/Fail status

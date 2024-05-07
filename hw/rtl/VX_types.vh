@@ -184,4 +184,7 @@
 `define VX_CSR_NUM_WARPS                12'hFC1
 `define VX_CSR_NUM_CORES                12'hFC2
 
+// CISC Accelerator Invocation
+`define VX_CSR_ACCEL_CISC               12'hACC
+
 `endif // VX_TYPES_VH

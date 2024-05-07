@@ -37,7 +37,11 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
     VX_commit_if.master     commit_if [`ISSUE_WIDTH],
     VX_commit_csr_if.slave  commit_csr_if,
     VX_sched_csr_if.slave   sched_csr_if,
-    VX_warp_ctl_if.master   warp_ctl_if    
+    VX_warp_ctl_if.master   warp_ctl_if,
+
+    input wire [31:0]           acc_read_in,
+    output wire [31:0]          acc_write_out,
+    output wire                 acc_write_en
 );
     `UNUSED_PARAM (CORE_ID)
     localparam BLOCK_SIZE   = 1;
@@ -134,8 +138,12 @@ module VX_sfu_unit import VX_gpu_pkg::*; #(
 
         .sched_csr_if   (sched_csr_if),
         .commit_csr_if  (commit_csr_if),
-        .commit_if      (csr_commit_if)
-    );    
+        .commit_if      (csr_commit_if),
+
+        .acc_read_in    (acc_read_in),
+        .acc_write_out  (acc_write_out),
+        .acc_write_en   (acc_write_en)
+    );
 
     assign rsp_arb_valid_in[RSP_ARB_IDX_CSRS] = csr_commit_if.valid;
     assign rsp_arb_data_in[RSP_ARB_IDX_CSRS] = csr_commit_if.data;

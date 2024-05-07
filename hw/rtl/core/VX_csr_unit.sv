@@ -34,7 +34,11 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
     VX_commit_csr_if.slave      commit_csr_if,
     VX_sched_csr_if.slave       sched_csr_if,
     VX_execute_if.slave         execute_if,
-    VX_commit_if.master         commit_if
+    VX_commit_if.master         commit_if,
+
+    input wire [31:0]           acc_read_in,
+    output wire [31:0]          acc_write_out,
+    output wire                 acc_write_en
 );
     `UNUSED_PARAM (CORE_ID)
     localparam PID_BITS   = `CLOG2(`NUM_THREADS / NUM_LANES);
@@ -102,7 +106,11 @@ module VX_csr_unit import VX_gpu_pkg::*; #(
         .write_uuid     (execute_if.data.uuid),
         .write_wid      (execute_if.data.wid),
         .write_addr     (csr_addr),
-        .write_data     (csr_write_data)
+        .write_data     (csr_write_data),
+
+        .acc_read_in    (acc_read_in),
+        .acc_write_out  (acc_write_out),
+        .acc_write_en   (acc_write_en)
     );
 
     // CSR read

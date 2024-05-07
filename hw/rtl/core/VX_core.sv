@@ -47,7 +47,11 @@ module VX_core import VX_gpu_pkg::*; #(
     output wire [`NUM_REGS-1:0][`XLEN-1:0] sim_wb_value,
 
     // Status
-    output wire             busy    //stays 1 when busy, 0 when done (termination) detect the negative edge
+    output wire             busy,    //stays 1 when busy, 0 when done (termination) detect the negative edge
+
+    input wire [31:0]       acc_read_in,
+    output wire [31:0]      acc_write_out,
+    output wire             acc_write_en
 );
     VX_schedule_if      schedule_if();
     VX_fetch_if         fetch_if();
@@ -214,7 +218,11 @@ module VX_core import VX_gpu_pkg::*; #(
         .lsu_commit_if  (lsu_commit_if),
         .sfu_commit_if  (sfu_commit_if),
 
-        .sim_ebreak     (sim_ebreak)
+        .sim_ebreak     (sim_ebreak),
+
+        .acc_read_in    (acc_read_in),
+        .acc_write_out  (acc_write_out),
+        .acc_write_en   (acc_write_en)
     );    
 
     VX_commit #(

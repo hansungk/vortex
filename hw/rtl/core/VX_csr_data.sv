@@ -58,7 +58,11 @@ import VX_fpu_pkg::*;
     input wire [`UUID_WIDTH-1:0]        write_uuid,
     input wire [`NW_WIDTH-1:0]          write_wid,
     input wire [`VX_CSR_ADDR_BITS-1:0]  write_addr,
-    input wire [31:0]                   write_data
+    input wire [31:0]                   write_data,
+
+    input wire [31:0]                   acc_read_in,
+    output wire [31:0]                  acc_write_out,
+    output wire                         acc_write_en
 );
 
     `UNUSED_VAR (reset)
@@ -108,6 +112,9 @@ import VX_fpu_pkg::*;
     end
 `endif
 
+    assign acc_write_en = write_enable && (write_addr == `VX_CSR_ACCEL_CISC);
+    assign acc_write_out = write_data;
+
     always @(posedge clk) begin
         if (write_enable) begin
             case (write_addr)
@@ -116,6 +123,7 @@ import VX_fpu_pkg::*;
                 `VX_CSR_FRM,
                 `VX_CSR_FCSR,
             `endif
+                `VX_CSR_ACCEL_CISC,
                 `VX_CSR_SATP,
                 `VX_CSR_MSTATUS,
                 `VX_CSR_MNSTATUS,
@@ -143,7 +151,7 @@ import VX_fpu_pkg::*;
         read_data_ro_r    = '0;
         read_data_rw_r    = '0;
         read_addr_valid_r = 1;
-        case (read_addr)            
+        case (read_addr)
             `VX_CSR_MVENDORID  : read_data_ro_r = 32'(`VENDOR_ID);
             `VX_CSR_MARCHID    : read_data_ro_r = 32'(`ARCHITECTURE_ID);
             `VX_CSR_MIMPID     : read_data_ro_r = 32'(`IMPLEMENTATION_ID);
@@ -179,6 +187,7 @@ import VX_fpu_pkg::*;
             `VX_CSR_MEPC,
             `VX_CSR_PMPCFG0,
             `VX_CSR_PMPADDR0   : read_data_ro_r = 32'(0);
+            `VX_CSR_ACCEL_CISC : read_data_ro_r = 32'(acc_read_in);
 
             default: begin
                 read_addr_valid_r = 0;

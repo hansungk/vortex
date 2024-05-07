@@ -125,6 +125,12 @@ module Vortex import VX_gpu_pkg::*; #(
     // output        fpu_killm,
     // output        fpu_keep_clock_enabled,
 
+    // accelerator cisc csr --------------------------------
+
+    input wire [31:0]       acc_read_in,
+    output wire [31:0]      acc_write_out,
+    output wire             acc_write_en,
+
     output        finished,
 
     input         traceStall,
@@ -414,7 +420,11 @@ module Vortex import VX_gpu_pkg::*; #(
 
         .sim_ebreak     (sim_ebreak),
         .sim_wb_value   (sim_wb_value),
-        .busy           (busy)
+        .busy           (busy),
+
+        .acc_read_in    (acc_read_in),
+        .acc_write_out  (acc_write_out),
+        .acc_write_en   (acc_write_en)
     );
 
     // VX_dcache_req_if #(
