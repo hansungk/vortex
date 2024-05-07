@@ -58,9 +58,9 @@ static void parse_args(int argc, char **argv) {
 
 void cleanup() {
   if (device) {
-    vx_mem_free(device, kernel_arg.addr_a);
-    vx_mem_free(device, kernel_arg.addr_b);
-    vx_mem_free(device, kernel_arg.addr_c);
+    // vx_mem_free(device, kernel_arg.addr_a);
+    // vx_mem_free(device, kernel_arg.addr_b);
+    // vx_mem_free(device, kernel_arg.addr_c);
     vx_dev_close(device);
   }
 }
@@ -166,9 +166,12 @@ int main(int argc, char *argv[]) {
 
   // allocate device memory
   std::cout << "allocate device memory" << std::endl;
-  RT_CHECK(vx_mem_alloc(device, src_a_buf_size, VX_MEM_TYPE_GLOBAL, &kernel_arg.addr_a));
-  RT_CHECK(vx_mem_alloc(device, src_b_buf_size, VX_MEM_TYPE_GLOBAL, &kernel_arg.addr_b));
-  RT_CHECK(vx_mem_alloc(device, dst_buf_size, VX_MEM_TYPE_GLOBAL, &kernel_arg.addr_c));
+  // RT_CHECK(vx_mem_alloc(device, src_a_buf_size, VX_MEM_TYPE_GLOBAL, &kernel_arg.addr_a));
+  // RT_CHECK(vx_mem_alloc(device, src_b_buf_size, VX_MEM_TYPE_GLOBAL, &kernel_arg.addr_b));
+  // RT_CHECK(vx_mem_alloc(device, dst_buf_size, VX_MEM_TYPE_GLOBAL, &kernel_arg.addr_c));
+  kernel_arg.addr_a = 0x20000;
+  kernel_arg.addr_b = 0x28000;
+  kernel_arg.addr_c = 0xc0000000;
 
   kernel_arg.dim_m = dim_m;
   kernel_arg.dim_n = dim_n;
