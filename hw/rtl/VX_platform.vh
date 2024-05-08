@@ -21,7 +21,7 @@
 `define DPI_DISABLE
 `else
 `define SV_DPI
-`endif
+`endif // SIMULATION
 
 `ifdef SYNTHESIS
 `define GPR_RESET
@@ -38,15 +38,7 @@
 `endif
 
 `define FIRESIM
-
-// synthesis only
-`ifndef SIMULATION
-`define SYNTHESIS
-`define NDEBUG
-`define DPI_DISABLE
-`else
-`define SV_DPI
-`endif
+`endif // SYNTHESIS
 
 `ifdef SV_DPI
 `include "util_dpi.vh"
