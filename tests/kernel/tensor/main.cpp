@@ -65,6 +65,7 @@ float results[32*8];
 void store_wmma_result() {
 	int tid = vx_thread_id();
 	
+	float *results = reinterpret_cast<float *>(0xc0000000UL);
 	asm volatile ("fsw f16, %0" :: "m"(results[tid*8+0])); 
 	asm volatile ("fsw f17, %0" :: "m"(results[tid*8+1])); 
 	asm volatile ("fsw f18, %0" :: "m"(results[tid*8+2])); 
@@ -87,7 +88,10 @@ int main()
 {
 	vx_tmc(-1);
 	vx_wmma_load();
-	vx_wmma();
+#pragma GCC unroll 100
+	for (int i = 0; i < 100; i++) {
+		vx_wmma();
+	}
 	store_wmma_result();
 	vx_tmc(1);
 	// print_wmma_result();
