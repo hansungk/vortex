@@ -35,7 +35,6 @@
 `define NUM_CORES 2
 `define NUM_THREADS 8
 `define NUM_WARPS 8
-`endif
 
 `define FIRESIM
 `endif // SYNTHESIS
