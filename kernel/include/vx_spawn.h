@@ -17,6 +17,10 @@
 #include <stdint.h>
 #include <stdio.h>
 
+#ifndef CORES_PER_CLUSTER
+#define CORES_PER_CLUSTER 2
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -48,6 +52,7 @@ void vx_wspawn_wait();
 void vx_spawn_kernel(context_t * ctx, vx_spawn_kernel_cb callback, void * arg);
 
 void vx_spawn_tasks(int num_tasks, vx_spawn_tasks_cb callback, void * arg);
+void vx_spawn_tasks_cluster(int num_tasks, vx_spawn_tasks_cb callback, void * arg);
 void vx_spawn_tasks_contiguous(int num_tasks, vx_spawn_tasks_cb callback , void * arg);
 
 void vx_serial(vx_serial_cb callback, void * arg);

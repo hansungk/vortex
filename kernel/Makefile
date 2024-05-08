@@ -51,10 +51,10 @@ $(PROJECT).dump: $(PROJECT).a
 %.S.o: src/%.S
 	$(CC) $(CFLAGS) -c $< -o $@
 
-%.cpp.o: src/%.cpp
+%.cpp.o: src/%.cpp include/vx_spawn.h
 	$(CXX) $(CFLAGS) -c $< -o $@
 
-%.c.o: src/%.c
+%.c.o: src/%.c include/vx_spawn.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(PROJECT).a: $(OBJS)

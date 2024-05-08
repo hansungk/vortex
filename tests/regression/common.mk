@@ -22,6 +22,7 @@ RISCV_SYSROOT ?= $(RISCV_TOOLCHAIN_PATH)/$(RISCV_PREFIX)
 
 VORTEX_RT_PATH ?= $(realpath ../../../runtime)
 VORTEX_KN_PATH ?= $(realpath ../../../kernel)
+GEMMINI_SW_PATH ?= $(realpath ../../../third_party/gemmini-rocc-tests)
 
 FPGA_BIN_DIR ?= $(VORTEX_RT_PATH)/opae
 
@@ -49,7 +50,7 @@ VX_CP  = $(LLVM_VORTEX)/bin/llvm-objcopy
 
 VX_CFLAGS += -v -O3 -std=c++17
 VX_CFLAGS += -mcmodel=medany -fno-rtti -fno-exceptions -nostartfiles -fdata-sections -ffunction-sections
-VX_CFLAGS += -I$(VORTEX_KN_PATH)/include -I$(VORTEX_KN_PATH)/../hw
+VX_CFLAGS += -I$(VORTEX_KN_PATH)/include -I$(VORTEX_KN_PATH)/../hw -I$(GEMMINI_SW_PATH)
 VX_CFLAGS += -DNDEBUG -DLLVM_VORTEX
 
 VX_LDFLAGS += -Wl,-Bstatic,--gc-sections,-T,$(VORTEX_KN_PATH)/linker/vx_link$(XLEN).ld,--defsym=STARTUP_ADDR=$(STARTUP_ADDR) $(VORTEX_KN_PATH)/libvortexrt.a
@@ -78,16 +79,41 @@ endif
 endif
 endif
 
-all: $(PROJECT) kernel.bin kernel.dump
+# CONFIG is supplied from the command line to differentiate ELF files with custom suffixes
+CONFIGEXT = $(if $(CONFIG),.$(CONFIG),)
+
+all: $(PROJECT) kernel.bin kernel.dump kernel.radiance.dump kernel.radiance$(CONFIGEXT).dump
 
 kernel.dump: kernel.elf
 	$(VX_DP) -D kernel.elf > kernel.dump
 
-kernel.bin: kernel.elf
+kernel.radiance.dump: kernel.radiance.elf
+	$(VX_DP) -D kernel.radiance.elf > kernel.radiance.dump
+
+ifneq ($(CONFIG),)
+kernel.radiance$(CONFIGEXT).dump: kernel.radiance$(CONFIGEXT).elf
+	$(VX_DP) -D kernel.radiance$(CONFIGEXT).elf > kernel.radiance$(CONFIGEXT).dump
+endif
+
+kernel.bin: kernel.elf kernel.radiance.elf
 	$(VX_CP) -O binary kernel.elf kernel.bin
 
 kernel.elf: $(VX_SRCS)
 	$(VX_CXX) $(VX_CFLAGS) $(VX_SRCS) $(VX_LDFLAGS) -o kernel.elf
+
+OBJCOPY ?= "riscv32-unknown-elf-objcopy"
+OBJCOPY_FLAGS ?= "LOAD,ALLOC,DATA,CONTENTS"
+kernel.radiance.elf: kernel.elf
+	$(VX_CXX) $(VX_CFLAGS) $(VX_SRCS) $(VX_LDFLAGS) -DRADIANCE -o kernel.radiance.elf
+	$(OBJCOPY) --set-section-flags .operand.a=$(OBJCOPY_FLAGS) kernel.radiance.elf
+	$(OBJCOPY) --set-section-flags .operand.b=$(OBJCOPY_FLAGS) kernel.radiance.elf
+	$(OBJCOPY) --update-section .operand.a=input.a.bin kernel.radiance.elf
+	$(OBJCOPY) --update-section .operand.b=input.b.bin kernel.radiance.elf
+
+ifneq ($(CONFIG),)
+kernel.radiance$(CONFIGEXT).elf: kernel.radiance.elf
+	cp $< $@
+endif
 
 $(PROJECT): $(SRCS)
 	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
@@ -115,7 +141,7 @@ clean:
 	rm -rf $(PROJECT) *.o .depend
 
 clean-all: clean
-	rm -rf *.elf *.bin *.dump
+	rm -rf kernel.elf kernel.dump
 
 ifneq ($(MAKECMDGOALS),clean)
     -include .depend

@@ -1,0 +1,5 @@
+smemcoherence
+*.bin*
+*.pocl
+*.dump
+*.o

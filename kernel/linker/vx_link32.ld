@@ -7,6 +7,13 @@ OUTPUT_FORMAT("elf32-littleriscv", "elf32-littleriscv",
 	      "elf32-littleriscv")
 OUTPUT_ARCH(riscv)
 ENTRY(_start)
+
+MEMORY {
+  DRAM0    (rwx): ORIGIN = 0x80000000, LENGTH = 512M
+  DRAM1    (rwx): ORIGIN = 0xa0000000, LENGTH = 32K
+  DRAM2    (rwx): ORIGIN = 0xa1000000, LENGTH = 32K
+}
+
 SECTIONS
 {
   . = STARTUP_ADDR;
@@ -85,6 +92,7 @@ SECTIONS
   /* Adjust the address for the data segment.  We want to adjust up to
      the same address within the page on the next page up.  */
   . = DATA_SEGMENT_ALIGN (CONSTANT (MAXPAGESIZE), CONSTANT (COMMONPAGESIZE));
+
   /* Exception handling  */
   .eh_frame       : ONLY_IF_RW { KEEP (*(.eh_frame)) *(.eh_frame.*) }
   .gnu_extab      : ONLY_IF_RW { *(.gnu_extab) }
@@ -166,6 +174,7 @@ SECTIONS
     *(.data .data.* .gnu.linkonce.d.*)
     SORT(CONSTRUCTORS)
   }
+    
   .data1          : { *(.data1) }
   .got            : { *(.got.plt) *(.igot.plt) *(.got) *(.igot) }
   /* We want the small data sections together, so single-instruction offsets
@@ -200,6 +209,7 @@ SECTIONS
   }
   . = ALIGN(32 / 8);
   . = SEGMENT_START("ldata-segment", .);
+    
   . = ALIGN(32 / 8);
   __BSS_END__ = .;
     __global_pointer = MIN(__SDATA_BEGIN__ + 0x800,
@@ -249,4 +259,12 @@ SECTIONS
   .gnu.attributes 0 : { KEEP (*(.gnu.attributes)) }
   /DISCARD/ : { *(.note.GNU-stack) *(.gnu_debuglink) *(.gnu.lto_*) }
 
+  .operand.a : {
+    *(.operand.a)
+    . += 32K;
+  }> DRAM1
+  .operand.b : {
+    *(.operand.b)
+    . += 32K;
+  }> DRAM2
 }

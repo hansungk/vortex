@@ -1,0 +1,5 @@
+sharedmem
+*.bin*
+*.pocl
+*.dump
+*.o

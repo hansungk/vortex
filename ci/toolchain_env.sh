@@ -24,3 +24,7 @@ export PATH=$SV2V_PATH/bin:$PATH
 
 export YOSYS_PATH=$TOOLDIR/yosys
 export PATH=$YOSYS_PATH/bin:$PATH
+
+export LLVM_VORTEX=$TOOLDIR/llvm-vortex
+export POCL_CC_PATH=$TOOLDIR/pocl/compiler
+export POCL_RT_PATH=$TOOLDIR/pocl/runtime

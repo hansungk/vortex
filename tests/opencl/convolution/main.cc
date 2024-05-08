@@ -56,6 +56,27 @@ static int read_kernel_file(const char* filename, uint8_t** data, size_t* size) 
   return 0;
 }
 
+static int write_operand_file(const char* filename, void* data, size_t size) {
+  if (nullptr == filename || nullptr == data || 0 == size)
+    return -1;
+
+  FILE* fp = fopen(filename, "wb");
+  if (NULL == fp) {
+    fprintf(stderr, "Failed to write operand data.\n");
+    return -1;
+  }
+
+  size_t wsize = fwrite(data, size, 1, fp);
+  if (wsize != 1) {
+    fprintf(stderr, "Failed to write operand data.\n");
+    return -1;
+  }
+
+  fclose(fp);
+
+  return 0;
+}
+
 static bool compare_equal(float a, float b) {
   union fi_t { float f; int32_t i; };
   fi_t fa, fb;
@@ -215,6 +236,12 @@ int main (int argc, char **argv) {
   for (uint32_t i = 0; i < w_points; ++i) {
     h_w[i] = static_cast<float>(rand()) / RAND_MAX;
   }
+
+  // NOTE(hansung): Dump operand buffer to a file
+  if (write_operand_file("convolution.input.input.bin", h_i.data(), i_nbytes) != 0)
+    return EXIT_FAILURE;
+  if (write_operand_file("convolution.input.weights.bin", h_w.data(), w_nbytes) != 0)
+    return EXIT_FAILURE;
 
   // Creating command queue
   commandQueue = CL_CHECK2(clCreateCommandQueue(context, device_id, 0, &_err));  

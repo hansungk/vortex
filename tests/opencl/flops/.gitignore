@@ -1,0 +1,6 @@
+flops
+*.o
+*.bin*
+*.pocl
+*.dump
+*.vcd
