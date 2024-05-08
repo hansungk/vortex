@@ -31,7 +31,8 @@
 #define REGBLOCK
 #define DBUF
 //#define DETAILED_PERF
-#define ACTIVATE
+//#define ACTIVATE
+#define CISC
 
 #define rd_cycles_force(x) asm volatile ("csrr %0, mcycle" : "=r" (x))
 #ifdef DETAILED_PERF
@@ -39,7 +40,7 @@
 #else
   #define rd_cycles(x)
 #endif
-#define HW_TID() ({uint32_t gtid; asm ("csrr %0, mhartid" : "=r" (gtid)); gtid;})
+#define HW_TID() ({uint32_t gtid; asm volatile ("csrr %0, mhartid" : "=r" (gtid)); gtid;})
 #define PRINTF(...) sprintf(PRINT_BUF, __VA_ARGS__)
 // #define PRINTF(...) vx_printf(__VA_ARGS__)
 #define SWISH(beta, x) ((x) / (1 + exp(-(beta) * (x))))
@@ -285,6 +286,21 @@ void thread_block_matmul_gemmini(kernel_arg_t *__UNIFORM__ arg,
           #ifdef DBUF
             gemmini_fence();
           #endif
+          #ifdef CISC
+          #ifndef DBUF
+          #error MUST ENABLE DBUF
+          #endif
+          #ifdef EXT_ACCUMULATE
+          #error MUST DISABLE EXT ACCUMULATE
+          #endif
+          if (tile_k == 0) {
+            GEMMINI_CISC_CMD_I(0);
+          } else if (tile_k & 1) {
+            GEMMINI_CISC_CMD_I(2);
+          } else {
+            GEMMINI_CISC_CMD_I(1);
+          }
+          #else
           sp_tiled_matmul_full_spad_ws(
             #ifdef DBUF
               (tile_k & 1) ? SPAD_ADDR_4K : SPAD_ADDR_0K, (tile_k & 1) ? SPAD_ADDR_12K : SPAD_ADDR_8K,
@@ -299,13 +315,15 @@ void thread_block_matmul_gemmini(kernel_arg_t *__UNIFORM__ arg,
             #else
             /*acc=*/tile_k != 0, /*act=*/NO_ACTIVATION, /*skips=*/0xB8U)
             #endif
+
+          #endif
           #ifndef DBUF
           gemmini_fence();
           #endif
         }
         __asm__("end_gemmini:");
         rd_cycles(marker4);
-        threadblock_barrier(/*barrier_id=*/0, /*count=*/NUM_WARPS);
+        // threadblock_barrier(/*barrier_id=*/0, /*count=*/NUM_WARPS);
         rd_cycles(marker5);
 
         // accumulate C matrix
@@ -375,8 +393,12 @@ void thread_block_matmul_gemmini(kernel_arg_t *__UNIFORM__ arg,
 //        #ifdef DBUF
 //        gemmini_fence();
 //        #endif
+      #ifdef CISC
+        GEMMINI_CISC_CMD_I(9);
+      #else
         ROCC_INSTRUCTION_RS1_RS2(XCUSTOM_ACC, 0, (4ULL << 32) | (4ULL << 16) | 4ULL, k_LOOP_WS_CONFIG_BOUNDS)
         ROCC_INSTRUCTION_RS1_RS2(XCUSTOM_ACC, 0, 0x278U, k_LOOP_WS)
+      #endif
         __asm__("mvout_spad_fence:");
         gemmini_fence();
       }

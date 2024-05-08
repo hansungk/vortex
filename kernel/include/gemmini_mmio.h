@@ -6,8 +6,10 @@
 
 #define SMEM_BASE 0xff000000
 #define SMEM_SIZE 0x4000
+
 #define SMEM_MASK (SMEM_SIZE - 1)
-#define SMEM_ADDR_END 0xff008000
+#define SMEM_ADDR_END (SMEM_BASE + SMEM_SIZE)
+#define GEMMINI_CTRL (SMEM_BASE + SMEM_SIZE + 0x3000)
 
 #define SPAD_BASE 0x0
 #define SPAD_ROW_SIZE (DIM * sizeof(elem_t))
@@ -15,13 +17,25 @@
 #define SPAD_MASK (SPAD_NUM_ROWS - 1)
 
 #define PRINT_BUF ((char *) (SMEM_ADDR_END))
-#define GEMMINI_RS1_ADDR 0xff007010
-#define GEMMINI_RS2_ADDR 0xff007018
-#define GEMMINI_INST_ADDR 0xff007000
-#define GEMMINI_BUSY_ADDR 0xff007020
+#define GEMMINI_RS1_ADDR (GEMMINI_CTRL + 0x10)
+#define GEMMINI_RS2_ADDR (GEMMINI_CTRL + 0x18)
+#define GEMMINI_INST_ADDR (GEMMINI_CTRL + 0x0)
+#define GEMMINI_BUSY_ADDR (GEMMINI_CTRL + 0x20)
 
 #define SMEM_TO_SPAD(smem_addr) (SPAD_BASE + ((smem_addr) & SMEM_MASK) / SPAD_ROW_SIZE)
 #define SPAD_TO_SMEM(spad_addr) (SMEM_BASE + ((spad_addr) & SPAD_MASK) * SPAD_ROW_SIZE)
+
+
+// CISC instructions:
+// 0, 1, 2: tile-sized matmuls
+// 0: k = 0, no accumulation
+// 1: k % 2 = 0, buffer regions 0
+// 2: k % 2 = 1, buffer regions 1
+// 8, 9: memory ops
+// 8: tile-sized move-in (unused)
+// 9: tile-sized move-out
+#define GEMMINI_CISC_CMD_I(x) asm("csrwi 0xacc, "#x)
+#define GEMMINI_STATUS() ({uint32_t status; asm volatile ("csrr %0, 0xacc" : "=r" (status)); status;})
 
 // convert normal matrix i,j into tiled smem offset
 // top_in_tiles = i / DIM
@@ -33,6 +47,7 @@
 
 // #define fence() { for (int i = 0; i < 10; i++) *((volatile uint32_t *) (0xFFFF0000)) = 0xdeadbeef; }
 #undef gemmini_fence
+//#define gemmini_fence() { while (GEMMINI_STATUS()); }
 #define gemmini_fence() { while (*((volatile uint32_t *) GEMMINI_BUSY_ADDR)) asm volatile ("nop"); }
 
 #undef ROCC_INSTRUCTION_RS1_RS2
