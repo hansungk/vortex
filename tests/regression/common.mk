@@ -101,7 +101,7 @@ kernel.bin: kernel.elf kernel.radiance.elf
 kernel.elf: $(VX_SRCS)
 	$(VX_CXX) $(VX_CFLAGS) $(VX_SRCS) $(VX_LDFLAGS) -o kernel.elf
 
-OBJCOPY ?= "riscv32-unknown-elf-objcopy"
+OBJCOPY ?= $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-objcopy
 OBJCOPY_FLAGS ?= "LOAD,ALLOC,DATA,CONTENTS"
 kernel.radiance.elf: kernel.elf
 	$(VX_CXX) $(VX_CFLAGS) $(VX_SRCS) $(VX_LDFLAGS) -DRADIANCE -o kernel.radiance.elf
