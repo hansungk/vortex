@@ -98,17 +98,21 @@ endif
 kernel.bin: kernel.elf kernel.radiance.elf
 	$(VX_CP) -O binary kernel.elf kernel.bin
 
-kernel.elf: $(VX_SRCS)
-	$(VX_CXX) $(VX_CFLAGS) $(VX_SRCS) $(VX_LDFLAGS) -o kernel.elf
-
 OBJCOPY ?= $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-objcopy
 OBJCOPY_FLAGS ?= "LOAD,ALLOC,DATA,CONTENTS"
-kernel.radiance.elf: kernel.elf
-	$(VX_CXX) $(VX_CFLAGS) $(VX_SRCS) $(VX_LDFLAGS) -DRADIANCE -o kernel.radiance.elf
-	$(OBJCOPY) --set-section-flags .operand.a=$(OBJCOPY_FLAGS) kernel.radiance.elf
-	$(OBJCOPY) --set-section-flags .operand.b=$(OBJCOPY_FLAGS) kernel.radiance.elf
-	$(OBJCOPY) --update-section .operand.a=input.a.bin kernel.radiance.elf
-	$(OBJCOPY) --update-section .operand.b=input.b.bin kernel.radiance.elf
+kernel.elf: $(VX_SRCS)
+	$(VX_CXX) $(VX_CFLAGS) $(VX_SRCS) $(VX_LDFLAGS) -o $@
+	$(OBJCOPY) --set-section-flags .operand.a=$(OBJCOPY_FLAGS) $@
+	$(OBJCOPY) --set-section-flags .operand.b=$(OBJCOPY_FLAGS) $@
+	$(OBJCOPY) --update-section .operand.a=input.a.bin $@
+	$(OBJCOPY) --update-section .operand.b=input.b.bin $@
+
+kernel.radiance.elf: $(VX_SRCS)
+	$(VX_CXX) $(VX_CFLAGS) $(VX_SRCS) $(VX_LDFLAGS) -DRADIANCE -o $@
+	$(OBJCOPY) --set-section-flags .operand.a=$(OBJCOPY_FLAGS) $@
+	$(OBJCOPY) --set-section-flags .operand.b=$(OBJCOPY_FLAGS) $@
+	$(OBJCOPY) --update-section .operand.a=input.a.bin $@
+	$(OBJCOPY) --update-section .operand.b=input.b.bin $@
 
 ifneq ($(CONFIG),)
 kernel.radiance$(CONFIGEXT).elf: kernel.radiance.elf
