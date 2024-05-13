@@ -6,9 +6,25 @@
 #include <vx_spawn.h>
 #include "common.h"
 
+// Constraints on parameters:
+// * Memory:
+//   (BM + BN) * BK * sizeof(float) <= sharedmem size.
+//   BM * BK == BN * BK >= threadblock size >= NT * CORES_PER_CLUSTER
+//     When larger, the kernel runs a sequential loop to read into sharedmem;
+//     but smaller case is not handled.
+// * Compute:
+//   ( M* N) / (TM*TN) == grid size >= NC*NW*NT
+//   (BM*BN) / (TM*TN) == threadblock size < NT * NW * CORES_PER_CLUSTER
+//   (BM*BN) / (TM*TN) == threadblock size >= NT * CORES_PER_CLUSTER
+// * Combining BM * BK >= (BM*BN) / (TM*TN) == threadblock yields
+//   BM <= BK*TM*TN
 #define BM 16
-#define BN 16
+#define BN BM
 #define BK 8
+#define TCM 16
+#define TCN 16
+#define TM 1
+#define TN 1
 
 inline constexpr void map_operand_32lanes(const int tid, int &row, int &col) {
   const int tg = tid / 4;
@@ -90,12 +106,12 @@ void vx_wmma_load(volatile float *smem_A, volatile float *smem_B, int warp_x,
   int col = 0;
   map_operand_32lanes(tid, row, col);
 
-  int smem_A_m = 32;
-  int smem_A_n = 8;
-  int smem_B_m = 8;
-  int smem_B_n = 32;
+  int smem_A_rows = BM;
+  int smem_A_cols = BK;
+  int smem_B_rows = BK;
+  int smem_B_cols = BN;
 
-  int A_offset = (row + BM * warp_y) * smem_A_n;
+  int A_offset = (row + TCM * warp_y) * smem_A_cols;
 
   asm volatile("flw f0, %0" ::"m"(smem_A[A_offset + 0]));
   asm volatile("flw f1, %0" ::"m"(smem_A[A_offset + 1]));
@@ -106,14 +122,14 @@ void vx_wmma_load(volatile float *smem_A, volatile float *smem_B, int warp_x,
   asm volatile("flw f6, %0" ::"m"(smem_A[A_offset + 6]));
   asm volatile("flw f7, %0" ::"m"(smem_A[A_offset + 7]));
 
-  asm volatile("flw f8 , %0" ::"m"(smem_B[(0 * smem_B_n) + warp_x * BN + col]));
-  asm volatile("flw f9 , %0" ::"m"(smem_B[(1 * smem_B_n) + warp_x * BN + col]));
-  asm volatile("flw f10, %0" ::"m"(smem_B[(2 * smem_B_n) + warp_x * BN + col]));
-  asm volatile("flw f11, %0" ::"m"(smem_B[(3 * smem_B_n) + warp_x * BN + col]));
-  asm volatile("flw f12, %0" ::"m"(smem_B[(4 * smem_B_n) + warp_x * BN + col]));
-  asm volatile("flw f13, %0" ::"m"(smem_B[(5 * smem_B_n) + warp_x * BN + col]));
-  asm volatile("flw f14, %0" ::"m"(smem_B[(6 * smem_B_n) + warp_x * BN + col]));
-  asm volatile("flw f15, %0" ::"m"(smem_B[(7 * smem_B_n) + warp_x * BN + col]));
+  asm volatile("flw f8 , %0" ::"m"(smem_B[(0 * smem_B_cols) + warp_x * TCN + col]));
+  asm volatile("flw f9 , %0" ::"m"(smem_B[(1 * smem_B_cols) + warp_x * TCN + col]));
+  asm volatile("flw f10, %0" ::"m"(smem_B[(2 * smem_B_cols) + warp_x * TCN + col]));
+  asm volatile("flw f11, %0" ::"m"(smem_B[(3 * smem_B_cols) + warp_x * TCN + col]));
+  asm volatile("flw f12, %0" ::"m"(smem_B[(4 * smem_B_cols) + warp_x * TCN + col]));
+  asm volatile("flw f13, %0" ::"m"(smem_B[(5 * smem_B_cols) + warp_x * TCN + col]));
+  asm volatile("flw f14, %0" ::"m"(smem_B[(6 * smem_B_cols) + warp_x * TCN + col]));
+  asm volatile("flw f15, %0" ::"m"(smem_B[(7 * smem_B_cols) + warp_x * TCN + col]));
 }
 
 inline void initialize_C() {
@@ -163,9 +179,15 @@ inline void write_results(volatile float *local_warp_results,
   int local_col = 0;
   map_c_32lanes(tid, local_row, local_col);
 
+      // C[dim_n * (BM * threadblock_id_y + TM * local_c_row + res_idx_m) +
+      //   (BN * threadblock_id_x + TN * local_c_col + res_idx_n)] =
+      //     reg_c[TN * res_idx_m + res_idx_n];
+  // float *global_offset_C = C +
+  //                          (threadblock_id_y * TCM * 2 + warp_y * TCM) * dim_n +
+  //                          threadblock_id_x * TCN * 2 + warp_x * TCN;
   float *global_offset_C = C +
-                           (threadblock_id_y * BM * 2 + warp_y * BM) * dim_n +
-                           threadblock_id_x * BN * 2 + warp_x * BM;
+                           (BM * threadblock_id_y /* 1 warp */) * dim_n +
+                           BN * threadblock_id_x /* 1 warp */;
   for (int i = 0; i < 8; i += 1) {
     int row_offset = ((i / 2) % 2) * 2;
     int col_offset = (i / 4) * 4 + i % 2;
@@ -173,6 +195,7 @@ inline void write_results(volatile float *local_warp_results,
     int adjusted_local_row = local_row + row_offset;
     int adjusted_local_col = local_col + col_offset;
 
+    // FIXME: do we need to store to SMEM at all?
     float v = local_warp_results[tid * 8 + i];
     global_offset_C[adjusted_local_row * dim_n + adjusted_local_col] = v;
   }
@@ -184,17 +207,18 @@ void threadblock_barrier(unsigned int tid_in_threadblock, unsigned int barrier_i
 }
 
 void thread_block_gemm(kernel_arg_t *__UNIFORM__ arg,
-                       const uint32_t tid_in_threadblock,
-                       const uint32_t threadblock_dim_x,
-                       const uint32_t threadblock_dim_y,
-                       const uint32_t threadblock_id_x,
-                       const uint32_t threadblock_id_y,
-                       const uint32_t threadblock_id,
-                       float *sharedmem_per_threadblock) {
+                              const uint32_t tid_in_threadblock,
+                              const uint32_t threadblock_dim_x,
+                              const uint32_t threadblock_dim_y,
+                              const uint32_t threadblock_id_x,
+                              const uint32_t threadblock_id_y,
+                              const uint32_t threadblock_id_in_cluster,
+                              float *sharedmem_per_threadblock) {
   const float *A = (const float *)arg->addr_a;
   const float *B = (const float *)arg->addr_b;
   float *C = (float *)arg->addr_c;
 
+  // assumes NT == NW == matrix_dim
   const uint32_t dim_m = arg->dim_m;
   const uint32_t dim_n = arg->dim_n;
   const uint32_t dim_k = arg->dim_k;
@@ -207,28 +231,38 @@ void thread_block_gemm(kernel_arg_t *__UNIFORM__ arg,
   // constexpr uint32_t BN = 8;
   // constexpr uint32_t BK = 2;
 
+  const uint32_t local_a_row = tid_in_threadblock / BK;
+  const uint32_t local_a_col = tid_in_threadblock % BK;
+  const uint32_t local_b_row = tid_in_threadblock / BN;
+  const uint32_t local_b_col = tid_in_threadblock % BN;
+  const uint32_t global_a_row = BM * threadblock_id_y + local_a_row;
+  const uint32_t global_b_col = BN * threadblock_id_x + local_b_col;
+
+  const uint32_t local_c_row = tid_in_threadblock / (BN / TN);
+  const uint32_t local_c_col = tid_in_threadblock % (BN / TN);
+
+  // each thread generates TM output element
+  float reg_c[TM * TN] = { 0.0f };
+  float reg_a[TM] = { 0.0f };
+  float reg_b[TN] = { 0.0f };
+
   const uint32_t warp_in_threadblock = tid_in_threadblock / 32;
   const uint32_t tid_in_warp = tid_in_threadblock % 32;
   const uint32_t warp_x = warp_in_threadblock % 2;
   const uint32_t warp_y = warp_in_threadblock / 2;
 
-  const uint32_t global_a_row = threadblock_dim_y * threadblock_id_y;
-
-  // 32 * 8 block of A, being loaded by 4 warps
-  const uint32_t local_a_row = warp_y * BM + warp_x * (BM / 2) + (tid_in_warp / BK);
-  const uint32_t local_a_col = tid_in_warp % BK;
-
-  // 8 * 32 block of B, being loaded by 4 warps
-  // do a fat coalesced load
-  const uint32_t global_b_col = threadblock_dim_x * threadblock_id_x;
-  const uint32_t local_b_row = warp_in_threadblock;
-  const uint32_t local_b_col = tid_in_warp;
-  
   volatile float *local_a = sharedmem_per_threadblock;
-  const size_t local_a_elems = (threadblock_dim_y * BK);
+  // const size_t local_a_elems = threadblock_dim_x * threadblock_dim_y;
+  // FIXME: this better be BM * BK, but the GMEM->SMEM load assumes all threads
+  // in TB participates in the load
+  const size_t local_a_elems = (BM * BN);
   volatile float *local_b = sharedmem_per_threadblock + local_a_elems;
-  const size_t local_b_elems = (threadblock_dim_x * BK);
-  volatile float *local_warp_results = local_b + local_b_elems + (warp_in_threadblock * BM * BN);
+  const size_t local_b_elems = (BM * BN);
+  volatile float *local_warp_results =
+      local_b + local_b_elems + (warp_in_threadblock * TCM * TCN);
+
+  constexpr uint32_t stride_a = (BM * BN) / BK / (TM * TN);
+  constexpr uint32_t stride_b = (BM * BN) / BN / (TM * TN);
 
   // clear out C
   initialize_C();
@@ -237,97 +271,132 @@ void thread_block_gemm(kernel_arg_t *__UNIFORM__ arg,
     // Data move from GMEM to SMEM
     //
     // Make sure global offset values for A and B are contiguous between
-    // neighboring threads to ensure GMEM coalescing. (not possible for A here, but for B it's doable)
-        
-    // coalesced load from global memory -> unit-stride store into shared memory
-    uint32_t global_a_offset =
-          dim_k * (global_a_row + local_a_row) + (k + local_a_col);
-    uint32_t shared_a_offset =
-          BK * local_a_row + local_a_col;
-    
-    local_a[shared_a_offset] = A[global_a_offset];
-    
-    global_a_offset += dim_k * (BM / 4);
-    shared_a_offset += BK * (BM / 4);
-    
-    local_a[shared_a_offset] = A[global_a_offset];
+    // neighboring threads to ensure GMEM coalescing.
+#pragma GCC unroll 2
+    for (uint32_t load_offset = 0; load_offset < BM; load_offset += stride_a) {
+      const uint32_t global_a_offset =
+          dim_k * (global_a_row + load_offset) + (k + local_a_col);
+      // FIXME: all threads in TB (BM*BN) will do this load, even if this is
+      // out-of-bounds of BM*BK
+      local_a[BK * (local_a_row + load_offset) + local_a_col] =
+          A[global_a_offset];
+    }
+#pragma GCC unroll 2
+    for (uint32_t load_offset = 0; load_offset < BK; load_offset += stride_b) {
+      const uint32_t global_b_offset =
+          dim_n * (k + local_b_row + load_offset) + global_b_col;
+      local_b[BN * (local_b_row + load_offset) + local_b_col] =
+          B[global_b_offset];
+    }
 
-    uint32_t global_b_offset =
-          dim_n * (k + local_b_row) + (global_b_col + local_b_col);
-    uint32_t shared_b_offset =
-          (BN * 2) * (local_b_row) + local_b_col;
-    
-    local_b[shared_b_offset] = B[global_b_offset];
-    
-    global_b_offset += dim_n * (BK / 2);
-    shared_b_offset += (BN * 2) * (BK / 2);
-
-    local_b[shared_b_offset] = B[global_b_offset];
-
-    // want all 4 warps to reach barrier before moving on (just use barrier 0 for now)
-    threadblock_barrier(tid_in_threadblock, 0, 4);
+    threadblock_barrier(tid_in_threadblock, threadblock_id_in_cluster,
+                        threadblock_dim_y);
 
     // perform wmma
-    vx_wmma_load(local_a, local_b, warp_x, warp_y, tid_in_warp);
-    vx_wmma();
-    
-    // same as above
-    threadblock_barrier(tid_in_threadblock, 0, 4);
+    // vx_wmma_load(local_a, local_b, warp_x, warp_y, tid_in_warp);
+    // FIXME: If multiple warps try to issue to Tensor Core at the same time,
+    // does one stall the other?
+    if (warp_in_threadblock == 0) {
+      vx_wmma_load(local_a, local_b, 0, 0, tid_in_warp);
+      vx_wmma();
+    }
+
+#if 0
+    // Compute single tile*tile matmul
+#pragma GCC unroll 4
+    for (uint32_t local_k = 0; local_k < BK; local_k++) {
+      // First, pump data from SMEM->RF
+#pragma GCC unroll TM
+      for (uint32_t res_idx_m = 0; res_idx_m < TM; res_idx_m++) {
+        reg_a[res_idx_m] =
+            local_a[BK * (TM * local_c_row + res_idx_m) + local_k];
+      }
+#pragma GCC unroll TN
+      for (uint32_t res_idx_n = 0; res_idx_n < TN; res_idx_n++) {
+        reg_b[res_idx_n] =
+            local_b[BN * local_k + (TN * local_c_col + res_idx_n)];
+      }
+
+      // Next, compute multiple result elements (TM*TN) by reusing data in RF
+#pragma GCC unroll TM
+      for (uint32_t res_idx_m = 0; res_idx_m < TM; res_idx_m++) {
+#pragma GCC unroll TN
+        for (uint32_t res_idx_n = 0; res_idx_n < TN; res_idx_n++) {
+          // NOTE use of local_b_row
+          reg_c[TN * res_idx_m + res_idx_n] +=
+              reg_a[res_idx_m] * reg_b[res_idx_n];
+          // reg_c[TN * res_idx_m + res_idx_n] +=
+          //     local_a[BK * (TM * local_c_row + res_idx_m) + local_k] *
+          //     local_b[BN * local_k + (TN * local_c_col + res_idx_n)];
+        }
+      }
+    }
+#endif
+
+    threadblock_barrier(tid_in_threadblock, threadblock_id_in_cluster,
+                        threadblock_dim_y);
   }
 
-  write_results(
-    local_warp_results, 
-    tid_in_warp, 
-    warp_x,
-    warp_y,
-    dim_m,
-    dim_n,
-    C,
-    threadblock_id_x,
-    threadblock_id_y
-  );
+  if (warp_in_threadblock == 0) {
+    write_results(
+        local_warp_results,
+        tid_in_warp,
+        // warp_x,
+        // warp_y,
+        0,
+        0,
+        dim_m,
+        dim_n,
+        C,
+        threadblock_id_x,
+        threadblock_id_y
+        );
+  }
 }
 
 void kernel_body(int task_id, kernel_arg_t *__UNIFORM__ arg) {
   // @perf: All threads are running these compute whose result is mostly same
   // across the threadblock
-  const int NT = 32; // vx_num_threads();
-  const int NW = 4;  // vx_num_warps();
-  const uint32_t threads_per_threadblock = NT * NW;
 
-  // matches 4 warp capacity
-  const uint32_t threadblock_dim_x = 2 * BN;
-  const uint32_t threadblock_dim_y = 2 * BM;
+  const uint32_t threads_per_threadblock = (BM * BN) / (TM * TN);
+#ifdef RADIANCE
+  const uint32_t threadblocks_per_core = vx_num_threads() * vx_num_warps() /
+                                         threads_per_threadblock *
+                                         CORES_PER_CLUSTER;
+#else
+  const uint32_t threadblocks_per_core =
+      vx_num_threads() * vx_num_warps() / threads_per_threadblock;
+#endif
+  const uint32_t threadblock_dim_x = vx_num_threads();
+  const uint32_t threadblock_dim_y = vx_num_warps() / threadblocks_per_core;
   const int threadblock_id = task_id / threads_per_threadblock;
+  const int threadblock_id_in_cluster = threadblock_id % threadblocks_per_core;
   const int tid_in_threadblock = task_id % threads_per_threadblock;
 
   const uint32_t dim_m = arg->dim_m;
   const uint32_t dim_n = arg->dim_n;
-  const uint32_t dim_n_in_blocks = dim_n / threadblock_dim_x;
+  const uint32_t dim_n_in_blocks = dim_n / BN;
   const int threadblock_id_x = threadblock_id % dim_n_in_blocks;
   const int threadblock_id_y = threadblock_id / dim_n_in_blocks;
 
   // "static" shared memory allocation.  This would determine threadblock
   // occupancy of a single cluster
-  // only 1 threadblock running at a time, so this is ok
   float *sharedmem_per_threadblock =
-      (float *)DEV_SMEM_START_ADDR; // + (2 * BM * BK) + (2 * BN * BK) * threadblock_id;
-  
+      (float *)DEV_SMEM_START_ADDR + (2 * BM * BK) * threadblock_id_in_cluster;
   thread_block_gemm(arg, tid_in_threadblock, threadblock_dim_x,
                     threadblock_dim_y, threadblock_id_x, threadblock_id_y,
-                    threadblock_id, sharedmem_per_threadblock);
+                    threadblock_id_in_cluster, sharedmem_per_threadblock);
 }
 
 int main() {
   kernel_arg_t *arg = (kernel_arg_t *)KERNEL_ARG_DEV_MEM_ADDR;
-  int NT = vx_num_threads();
-
-  // TODO: add support for edge-case (m, n not divisible by 16) 
-  const uint32_t grid_size = arg->dim_m * arg->dim_n * NT / (BM * BN);
-  
-  // for now, simplifying assumption of just 1 core
-  // vx_spawn_tasks_contiguous first runs warps 1 through NW, then NW+1 through 2*NW, etc.
-  // we can thus treat 1 through NW as a single threadblock for the purposes of the optimization.
+  const uint32_t grid_size = arg->dim_m * arg->dim_n / (TM * TN);
+#ifdef RADIANCE
+  vx_spawn_tasks_cluster(grid_size, (vx_spawn_tasks_cb)kernel_body, arg);
+#else
+  // NOTE: This kernel assumes contiguous thread scheduling for efficient shared
+  // memory allocation, and therefore does not work with original vx_spawn_tasks
   vx_spawn_tasks_contiguous(grid_size, (vx_spawn_tasks_cb)kernel_body, arg);
+#endif
   return 0;
 }
