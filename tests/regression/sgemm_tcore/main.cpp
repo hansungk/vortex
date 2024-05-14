@@ -169,8 +169,8 @@ int main(int argc, char *argv[]) {
   // RT_CHECK(vx_mem_alloc(device, src_a_buf_size, VX_MEM_TYPE_GLOBAL, &kernel_arg.addr_a));
   // RT_CHECK(vx_mem_alloc(device, src_b_buf_size, VX_MEM_TYPE_GLOBAL, &kernel_arg.addr_b));
   // RT_CHECK(vx_mem_alloc(device, dst_buf_size, VX_MEM_TYPE_GLOBAL, &kernel_arg.addr_c));
-  kernel_arg.addr_a = 0x20000;
-  kernel_arg.addr_b = 0x28000;
+  kernel_arg.addr_a = 0xa0000000;
+  kernel_arg.addr_b = 0xa1000000;
   kernel_arg.addr_c = 0xc0000000;
 
   kernel_arg.dim_m = dim_m;
