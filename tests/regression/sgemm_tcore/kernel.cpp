@@ -6,6 +6,8 @@
 #include <vx_spawn.h>
 #include "common.h"
 
+#define NUM_LANES 8
+
 // Constraints on parameters:
 // * Memory:
 //   (BM + BN) * BK * sizeof(float) <= sharedmem size.
@@ -23,10 +25,14 @@
 #define BK 8
 #define TCM 8
 #define TCN 8
+#define WM 8
+#define WN 8
+#define WMITER (WM / TCM)
+#define WNITER (WN / TCN)
 #define TM 1
+// #define TN ((TCM * TCN) / NUM_LANES / TM)
 #define TN 1
 
-#define NUM_LANES 8
 
 inline constexpr void map_operand_32lanes(const int tid, int &row, int &col) {
   const int tg = tid / 4;
@@ -119,8 +125,9 @@ inline void vx_wmma() {
   asm volatile (".insn r %0, 0, 0, x0, x0, x0" :: "i"(RISCV_CUSTOM3));
 }
 
-void vx_wmma_load(volatile float *smem_A, volatile float *smem_B, int warp_x,
-                  int warp_y, int thread_in_warp) {
+void vx_wmma_load(volatile float *smem_A, volatile float *smem_B, int warp_col,
+                  int warp_row, int wn_iter, int wm_iter,
+                  int thread_in_warp) {
   int tid = thread_in_warp;
   int tg = tid / 4;
 
@@ -133,7 +140,7 @@ void vx_wmma_load(volatile float *smem_A, volatile float *smem_B, int warp_x,
   int smem_B_rows = BK;
   int smem_B_cols = BN;
 
-  int A_offset = (row + TCM * warp_y) * smem_A_cols;
+  int A_offset = (row + WM * warp_row + TCM * wm_iter) * smem_A_cols;
 
   asm volatile("flw f0, %0" ::"m"(smem_A[A_offset + 0]));
   asm volatile("flw f1, %0" ::"m"(smem_A[A_offset + 1]));
@@ -144,14 +151,14 @@ void vx_wmma_load(volatile float *smem_A, volatile float *smem_B, int warp_x,
   asm volatile("flw f6, %0" ::"m"(smem_A[A_offset + 6]));
   asm volatile("flw f7, %0" ::"m"(smem_A[A_offset + 7]));
 
-  asm volatile("flw f8 , %0" ::"m"(smem_B[(0 * smem_B_cols) + warp_x * TCN + col]));
-  asm volatile("flw f9 , %0" ::"m"(smem_B[(1 * smem_B_cols) + warp_x * TCN + col]));
-  asm volatile("flw f10, %0" ::"m"(smem_B[(2 * smem_B_cols) + warp_x * TCN + col]));
-  asm volatile("flw f11, %0" ::"m"(smem_B[(3 * smem_B_cols) + warp_x * TCN + col]));
-  asm volatile("flw f12, %0" ::"m"(smem_B[(4 * smem_B_cols) + warp_x * TCN + col]));
-  asm volatile("flw f13, %0" ::"m"(smem_B[(5 * smem_B_cols) + warp_x * TCN + col]));
-  asm volatile("flw f14, %0" ::"m"(smem_B[(6 * smem_B_cols) + warp_x * TCN + col]));
-  asm volatile("flw f15, %0" ::"m"(smem_B[(7 * smem_B_cols) + warp_x * TCN + col]));
+  asm volatile("flw f8 , %0" ::"m"(smem_B[(0 * smem_B_cols) + (WN * warp_col + TCN * wn_iter) + col]));
+  asm volatile("flw f9 , %0" ::"m"(smem_B[(1 * smem_B_cols) + (WN * warp_col + TCN * wn_iter) + col]));
+  asm volatile("flw f10, %0" ::"m"(smem_B[(2 * smem_B_cols) + (WN * warp_col + TCN * wn_iter) + col]));
+  asm volatile("flw f11, %0" ::"m"(smem_B[(3 * smem_B_cols) + (WN * warp_col + TCN * wn_iter) + col]));
+  asm volatile("flw f12, %0" ::"m"(smem_B[(4 * smem_B_cols) + (WN * warp_col + TCN * wn_iter) + col]));
+  asm volatile("flw f13, %0" ::"m"(smem_B[(5 * smem_B_cols) + (WN * warp_col + TCN * wn_iter) + col]));
+  asm volatile("flw f14, %0" ::"m"(smem_B[(6 * smem_B_cols) + (WN * warp_col + TCN * wn_iter) + col]));
+  asm volatile("flw f15, %0" ::"m"(smem_B[(7 * smem_B_cols) + (WN * warp_col + TCN * wn_iter) + col]));
 }
 
 inline void initialize_C() {
@@ -167,16 +174,20 @@ inline void initialize_C() {
 }
 
 inline void write_results(volatile float *local_warp_results,
-                          int thread_in_warp, int warp_x, int warp_y, int dim_m,
-                          int dim_n, float *C, int threadblock_id_x,
+                          int thread_in_warp, int warp_col, int warp_row,
+                          int wn_iter, int wm_iter, int dim_m, int dim_n,
+                          float *C, int threadblock_id_x,
                           int threadblock_id_y) {
   int tid = thread_in_warp;
   int tg = tid / 4;
 
   // these are [0, TCM/TCN)
-  int local_row = 0;
-  int local_col = 0;
-  map_c(tid, local_row, local_col);
+  int tid_row = 0;
+  int tid_col = 0;
+  map_c(tid, tid_row, tid_col);
+
+  int local_row = (WM * warp_row + TCM * wm_iter) + tid_row;
+  int local_col = (WN * warp_col + TCN * wn_iter) + tid_col;
 
   float *global_offset_C = C +
                            (BM * threadblock_id_y) * dim_n +
@@ -221,18 +232,10 @@ void thread_block_gemm(kernel_arg_t *__UNIFORM__ arg,
   const uint32_t global_a_row = BM * threadblock_id_y + local_a_row;
   const uint32_t global_b_col = BN * threadblock_id_x + local_b_col;
 
-  const uint32_t local_c_row = tid_in_threadblock / (BN / TN);
-  const uint32_t local_c_col = tid_in_threadblock % (BN / TN);
-
-  // each thread generates TM output element
-  float reg_c[TM * TN] = { 0.0f };
-  float reg_a[TM] = { 0.0f };
-  float reg_b[TN] = { 0.0f };
-
   const uint32_t warp_in_threadblock = tid_in_threadblock / NUM_LANES;
+  const uint32_t warp_row = warp_in_threadblock / (BN / WN);
+  const uint32_t warp_col = warp_in_threadblock % (BN / WN);
   const uint32_t tid_in_warp = tid_in_threadblock % NUM_LANES;
-  const uint32_t warp_x = warp_in_threadblock % 2;
-  const uint32_t warp_y = warp_in_threadblock / 2;
 
   volatile float *local_a = sharedmem_per_threadblock;
   // const size_t local_a_elems = threadblock_dim_x * threadblock_dim_y;
@@ -244,8 +247,9 @@ void thread_block_gemm(kernel_arg_t *__UNIFORM__ arg,
   volatile float *local_warp_results =
       local_b + local_b_elems + (warp_in_threadblock * TCM * TCN);
 
-  constexpr uint32_t stride_a = (BM * BN) / BK / (TM * TN);
-  constexpr uint32_t stride_b = (BM * BN) / BN / (TM * TN);
+  // number of rows a full TB can read at a time
+  constexpr uint32_t row_stride_a = (BM * BN) / BK / (TM * TN);
+  constexpr uint32_t row_stride_b = (BM * BN) / BN / (TM * TN);
 
   // clear out C
   initialize_C();
@@ -255,8 +259,10 @@ void thread_block_gemm(kernel_arg_t *__UNIFORM__ arg,
     //
     // Make sure global offset values for A and B are contiguous between
     // neighboring threads to ensure GMEM coalescing.
+    //
+    // TODO: Sharedmem swizzling is important here
 #pragma GCC unroll 2
-    for (uint32_t load_offset = 0; load_offset < BM; load_offset += stride_a) {
+    for (uint32_t load_offset = 0; load_offset < BM; load_offset += row_stride_a) {
       const uint32_t global_a_offset =
           dim_k * (global_a_row + load_offset) + (k + local_a_col);
       // FIXME: all threads in TB (BM*BN) will do this load, even if this is
@@ -265,7 +271,7 @@ void thread_block_gemm(kernel_arg_t *__UNIFORM__ arg,
           A[global_a_offset];
     }
 #pragma GCC unroll 2
-    for (uint32_t load_offset = 0; load_offset < BK; load_offset += stride_b) {
+    for (uint32_t load_offset = 0; load_offset < BK; load_offset += row_stride_b) {
       const uint32_t global_b_offset =
           dim_n * (k + local_b_row + load_offset) + global_b_col;
       local_b[BN * (local_b_row + load_offset) + local_b_col] =
@@ -279,9 +285,16 @@ void thread_block_gemm(kernel_arg_t *__UNIFORM__ arg,
     // vx_wmma_load(local_a, local_b, warp_x, warp_y, tid_in_warp);
     // FIXME: If multiple warps try to issue to Tensor Core at the same time,
     // does one stall the other?
+    // FIXME: this is wrong!! need separate accumulation register for
+    // WM/WN_ITERS
     if (warp_in_threadblock == 0) {
-      vx_wmma_load(local_a, local_b, 0, 0, tid_in_warp);
-      vx_wmma();
+      for (int wm_iter = 0; wm_iter < WMITER; wm_iter++) {
+        for (int wn_iter = 0; wn_iter < WNITER; wn_iter++) {
+          vx_wmma_load(local_a, local_b, warp_col, warp_row, wn_iter, wm_iter,
+              tid_in_warp);
+          vx_wmma();
+        }
+      }
     }
 
     threadblock_barrier(tid_in_threadblock, threadblock_id_in_cluster,
@@ -289,19 +302,14 @@ void thread_block_gemm(kernel_arg_t *__UNIFORM__ arg,
   }
 
   if (warp_in_threadblock == 0) {
-    write_results(
-        local_warp_results,
-        tid_in_warp,
-        // warp_x,
-        // warp_y,
-        0,
-        0,
-        dim_m,
-        dim_n,
-        C,
-        threadblock_id_x,
-        threadblock_id_y
-        );
+    for (int wm_iter = 0; wm_iter < WMITER; wm_iter++) {
+      for (int wn_iter = 0; wn_iter < WNITER; wn_iter++) {
+        write_results(local_warp_results, tid_in_warp,
+            warp_col, warp_row,
+            wn_iter, wm_iter,
+            dim_m, dim_n, C, threadblock_id_x, threadblock_id_y);
+      }
+    }
   }
 }
 
