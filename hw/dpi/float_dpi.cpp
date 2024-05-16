@@ -347,7 +347,7 @@ void dpi_fmax(bool enable, int dst_fmt, int64_t a, int64_t b, int64_t* result, s
 
 // A is M * K, B is K * M, C is M * M, D is M * M
 #define M 4
-#define K 2
+#define K 2 // FIXME: 4x4x1 / cycle / octet!
 
 // all row major
 float c_A_tile[M][K];
@@ -551,7 +551,7 @@ void dpi_print_results(int wid, int octet, const svBitVecVal* A_tile, const svBi
   }
 
   steps[wid] += 1;
-  if (steps[wid] % 64 == 0) {
+  if (steps[wid] % 32 == 0) {
     steps[wid] = 0;
     std::cout << "warp " << wid << " finished wmma\n";
     std::cout << "A tile" << "\n";

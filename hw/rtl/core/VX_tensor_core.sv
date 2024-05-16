@@ -32,6 +32,10 @@ module VX_tensor_core import VX_gpu_pkg::*; #(
         .execute_if (execute_if)
     );
 
+    // FIXME: when multiple warps are running, step0_0 from multiple warps can
+    // get interleaved before the first warp advances to step0_1, fucking
+    // everything up
+
     VX_commit_if #(
         .NUM_LANES (NUM_LANES)
     ) commit_block_if[BLOCK_SIZE]();
@@ -175,6 +179,7 @@ module VX_tensor_core_warp import VX_gpu_pkg::*; #(
         execute_if.data.PC, 
         execute_if.data.wb, 
         execute_if.data.rd
+        // pid/sop/eop set later
     };
 
     wire [DATAW-1:0] execute_if_data_deq;
@@ -320,8 +325,16 @@ module VX_tensor_octet #(
         end
     end
 
+    wire hmma_ready;
     wire stall = result_valid && ~result_ready;
+    // backpressure from commit
     assign operands_ready = ~stall;
+    // TODO: Below line is to only allow 1 warp to occupy the octet at a time;
+    // currently, dpu is fully-pipelined and allows concurrency between
+    // multiple warps.  This seems to be not a problem though given that the
+    // RF operand read takes >=2 cycles, which should be the end-to-end
+    // latency of the DPU anyways
+    // assign operands_ready = hmma_ready && ~stall;
 
     // A is 4x2 fp32 matrix
     wire [3:0][1:0][31:0] A_tile = {
@@ -359,6 +372,7 @@ module VX_tensor_octet #(
         .stall(stall),
         
         .valid_in(do_hmma),
+        .ready_in(hmma_ready),
         .A_tile(A_tile),
         .B_tile(B_tile),
         .C_tile(C_tile),
