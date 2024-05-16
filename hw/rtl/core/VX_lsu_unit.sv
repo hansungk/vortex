@@ -596,6 +596,31 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
         .commit_out_if (commit_if)
     );
 
+`ifdef PERF_ENABLE
+    wire [`CLOG2(NUM_LANES+1)-1:0] perf_rsp_tmask_valids_per_cycle;
+    wire [`CLOG2(NUM_LANES+1)-1:0] perf_rsp_tmask_total_per_cycle;
+    reg [`PERF_CTR_BITS-1:0] perf_rsp_tmask_valids;
+    reg [`PERF_CTR_BITS-1:0] perf_rsp_tmask_total;
+    reg [`PERF_CTR_BITS-1:0] perf_rsp_fires;
+
+    `POP_COUNT(perf_rsp_tmask_valids_per_cycle, rsp_tmask);
+    assign perf_rsp_tmask_total_per_cycle = NUM_LANES;
+
+    always @(posedge clk) begin
+        if (reset) begin
+            perf_rsp_tmask_valids <= '0;
+            perf_rsp_tmask_total  <= '0;
+            perf_rsp_fires        <= '0;
+        end else begin
+            if (mem_rsp_fire) begin
+                perf_rsp_tmask_valids <= perf_rsp_tmask_valids + perf_rsp_tmask_valids_per_cycle;
+                perf_rsp_tmask_total  <= perf_rsp_tmask_total  + perf_rsp_tmask_total_per_cycle;
+                perf_rsp_fires        <= perf_rsp_fires + 1'b1;
+            end
+        end
+    end
+`endif
+
 `ifdef DBG_SCOPE_LSU
     if (CORE_ID == 0) begin
     `ifdef SCOPE
