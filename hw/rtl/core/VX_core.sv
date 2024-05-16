@@ -48,6 +48,7 @@ module VX_core import VX_gpu_pkg::*; #(
 
     // Status
     output wire             busy,    //stays 1 when busy, 0 when done (termination) detect the negative edge
+    input wire              downstream_mem_busy,
 
     input wire [31:0]       acc_read_in,
     output wire [31:0]      acc_write_out,
@@ -198,6 +199,7 @@ module VX_core import VX_gpu_pkg::*; #(
         .reset          (execute_reset),
 
         .base_dcrs      (base_dcrs),
+        .downstream_mem_busy(downstream_mem_busy),
 
     `ifdef PERF_ENABLE
         .mem_perf_if    (mem_perf_tmp_if),        

@@ -21,6 +21,8 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
    input wire               clk,
     input wire              reset,
 
+    input wire              downstream_mem_busy,
+
    // Dcache interface
     VX_mem_bus_if.master    cache_bus_if [DCACHE_NUM_REQS],
 
@@ -131,7 +133,21 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
 
     // fence: stall the pipeline until all pending requests are sent
     wire is_fence = `INST_LSU_IS_FENCE(execute_if[0].data.op_type);
-    wire fence_wait = is_fence && ~mem_req_empty;
+    wire start_fence = is_fence && ((~mem_req_empty) || downstream_mem_busy);
+    wire end_fence = mem_req_empty && (!downstream_mem_busy);
+    logic fencing;
+
+    always @(posedge clk) begin
+        if (reset) begin
+            fencing <= 1'b0;
+        end else if (start_fence) begin
+            fencing <= 1'b1;
+        end else if (end_fence) begin
+            fencing <= 1'b0;
+        end
+    end
+
+    wire fence_wait = start_fence || fencing;
     
     assign lsu_valid = execute_if[0].valid && ~fence_wait;
     assign execute_if[0].ready = lsu_ready && ~fence_wait;
@@ -264,7 +280,7 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
         wire rd_during_wr = mem_req_rd_fire && mem_rsp_eop_fire && (pkt_raddr == pkt_waddr);
 
         always @(posedge clk) begin
-            if (reset) begin                
+            if (reset) begin
                 pkt_ctr <= '0;
                 pkt_sop <= '0;
                 pkt_eop <= '0;

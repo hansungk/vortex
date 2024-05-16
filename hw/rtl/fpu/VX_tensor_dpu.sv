@@ -1,3 +1,4 @@
+`ifdef EXT_T_ENABLE
 `include "VX_fpu_define.vh"
 
 module VX_tensor_dpu #(
@@ -42,3 +43,4 @@ module VX_tensor_dpu #(
         .data_out ({valid_out, D_tile})
     );
 endmodule
+`endif

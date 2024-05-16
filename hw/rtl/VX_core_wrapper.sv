@@ -131,6 +131,8 @@ module Vortex import VX_gpu_pkg::*; #(
     output wire [31:0]      acc_write_out,
     output wire             acc_write_en,
 
+    input         downstream_mem_busy,
+
     output        finished,
 
     input         traceStall,
@@ -421,6 +423,7 @@ module Vortex import VX_gpu_pkg::*; #(
         .sim_ebreak     (sim_ebreak),
         .sim_wb_value   (sim_wb_value),
         .busy           (busy),
+        .downstream_mem_busy(downstream_mem_busy),
 
         .acc_read_in    (acc_read_in),
         .acc_write_out  (acc_write_out),

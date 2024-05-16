@@ -22,6 +22,7 @@ module VX_execute import VX_gpu_pkg::*; #(
     input wire              reset,    
 
     input base_dcrs_t       base_dcrs,
+    input wire              downstream_mem_busy,
 
     // Dcache interface
     VX_mem_bus_if.master    dcache_bus_if [DCACHE_NUM_REQS],
@@ -92,6 +93,7 @@ module VX_execute import VX_gpu_pkg::*; #(
         `SCOPE_IO_BIND  (0)
         .clk            (clk),
         .reset          (lsu_reset),
+        .downstream_mem_busy (downstream_mem_busy),
         .cache_bus_if   (dcache_bus_if),
         .dispatch_if    (lsu_dispatch_if),
         .commit_if      (lsu_commit_if)

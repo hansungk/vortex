@@ -1,3 +1,4 @@
+`ifdef EXT_T_ENABLE
 `include "VX_fpu_define.vh"
 
 module VX_tensor_core #(
@@ -43,7 +44,11 @@ module VX_tensor_core_warp import VX_gpu_pkg::*; #(
     
     assign dispatch_if.ready = &octet_operands_ready;
 
+`ifdef EXT_T_ENABLE
     for (genvar i = 0; i < 4/*octets*/; ++i) begin
+`else
+    for (genvar i = 0; i < 0; ++i) begin
+`endif
         // lane-to-octet mapping; see figure 13 of the paper
         wire [7:0][31:0] octet_A = {
             dispatch_if.data.rs1_data[16+4*i +: 4], dispatch_if.data.rs1_data[4*i +: 4]
@@ -314,3 +319,4 @@ module VX_tensor_octet #(
         .D_tile(D_out)
     );
 endmodule
+`endif

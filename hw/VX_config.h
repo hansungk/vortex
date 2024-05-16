@@ -180,7 +180,7 @@
 #endif
 
 #ifndef SMEM_LOG_SIZE
-#define SMEM_LOG_SIZE   15
+#define SMEM_LOG_SIZE   17
 #endif
 
 #ifndef IO_BASE_ADDR
