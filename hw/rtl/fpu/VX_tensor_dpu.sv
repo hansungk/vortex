@@ -40,6 +40,7 @@ module VX_tensor_dpu #(
     // ready as soon as valid_out
     assign ready_in = ready_reg || valid_out;
 
+    // fixed-latency model
     VX_shift_register #(
         .DATAW  (1 + $bits(D_tile)),
         .DEPTH  (`LATENCY_HMMA),
