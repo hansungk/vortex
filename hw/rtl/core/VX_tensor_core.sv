@@ -400,5 +400,19 @@ module VX_tensor_octet #(
         .ready_out (result_ready),
         .valid_out (result_valid)
     );
+
+`ifdef PERF_ENABLE
+    logic [`PERF_CTR_BITS-1:0] perf_tensor_dpu_total;
+
+    always @(posedge clk) begin
+        if (reset) begin
+            perf_tensor_dpu_total <= '0;
+        end else begin
+            if (do_hmma) begin
+                perf_tensor_dpu_total <= perf_tensor_dpu_total + 1'b1;
+            end
+        end
+    end
+`endif
 endmodule
 `endif
