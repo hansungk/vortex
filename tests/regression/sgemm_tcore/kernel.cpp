@@ -6,9 +6,6 @@
 #include <vx_spawn.h>
 #include "common.h"
 
-#define USE_TENSOR_CORE 1
-#define TC_SINGLE_WARP 1
-
 #define NUM_LANES 8
 
 // Constraints on parameters:
@@ -23,9 +20,9 @@
 //   (BM*BN) / (TM*TN) == threadblock size >= NT * CORES_PER_CLUSTER
 // * Combining BM * BK >= (BM*BN) / (TM*TN) == threadblock yields
 //   BM <= BK*TM*TN
-#define BM 8
-#define BN 8
-#define BK 8
+#define BM 32
+#define BN 32
+#define BK 32
 #define TCM 8
 #define TCN 8
 #define TCK 8
@@ -34,12 +31,14 @@
 #define WMITER (WM / TCM)
 #define WNITER (WN / TCN)
 #define TM 1
-// #define TN ((TCM * TCN) / NUM_LANES / TM)
-#define TN 1
+#define TN ((TCM * TCN) / NUM_LANES / TM)
+// #define TN 1
 
+#define USE_TENSOR_CORE 1
+#define TC_SINGLE_WARP 0
 // number of loop around the inner 0..TCK..BK loop to simulate perfect-DRAM
 // scenario
-#define BK_LOOP 1
+#define BK_LOOP 8
 #define TRANSPOSE_AS 1
 
 inline constexpr void map_operand_32lanes(const int tid, int &row, int &col) {
@@ -171,6 +170,10 @@ inline void vx_wmma_load(volatile float *smem_A, volatile float *smem_B, const i
     asm volatile("flw  f5, %0" ::"m"(smem_A[((local_k + 5) * smem_A_rows) + (WM * warp_row + TCM * wm_iter) + row]));
     asm volatile("flw  f6, %0" ::"m"(smem_A[((local_k + 6) * smem_A_rows) + (WM * warp_row + TCM * wm_iter) + row]));
     asm volatile("flw  f7, %0" ::"m"(smem_A[((local_k + 7) * smem_A_rows) + (WM * warp_row + TCM * wm_iter) + row]));
+// #pragma GCC unroll 8
+//     for (int i = 0; i < 8; i++) {
+//       asm volatile("flw  f0, %0" ::"m"(smem_A[((local_k + i) * smem_A_rows) + (WM * warp_row + TCM * wm_iter) + row]));
+//     }
   }
 
   asm volatile("flw  f8, %0" ::"m"(smem_B[((local_k + 0) * smem_B_cols) + (WN * warp_col + TCN * wn_iter) + col]));
@@ -427,9 +430,8 @@ void kernel_body(int task_id, kernel_arg_t *__UNIFORM__ arg) {
 
   const uint32_t threads_per_threadblock = (BM * BN) / (TM * TN);
 #ifdef RADIANCE
-  const uint32_t threadblocks_per_core = vx_num_threads() * vx_num_warps() /
-                                         threads_per_threadblock *
-                                         CORES_PER_CLUSTER;
+  const uint32_t threadblocks_per_core = CORES_PER_CLUSTER * vx_num_threads() * vx_num_warps() /
+                                         threads_per_threadblock;
 #else
   const uint32_t threadblocks_per_core =
       vx_num_threads() * vx_num_warps() / threads_per_threadblock;
