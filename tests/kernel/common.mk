@@ -21,6 +21,9 @@ CP = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-objcopy
 SIM_DIR = ../../../sim
 
 CFLAGS += -O3 -mcmodel=medany -fno-exceptions -nostartfiles -fdata-sections -ffunction-sections
+CFLAGS += -ffixed-ft0 -ffixed-ft1 -ffixed-ft2 -ffixed-ft3 -ffixed-ft4 -ffixed-ft5 -ffixed-ft6 -ffixed-ft7
+CFLAGS += -ffixed-fs0 -ffixed-fs1 -ffixed-fs2 -ffixed-fs3 -ffixed-fs4 -ffixed-fs5 -ffixed-fs6 -ffixed-fs7
+CFLAGS += -ffixed-fa0 -ffixed-fa1 -ffixed-fa2 -ffixed-fa3 -ffixed-fa4 -ffixed-fa5 -ffixed-fa6 -ffixed-fa7
 CFLAGS += -I$(VORTEX_KN_PATH)/include -I$(VORTEX_KN_PATH)/../hw
 
 LDFLAGS += -lm -Wl,-Bstatic,--gc-sections,-T,$(VORTEX_KN_PATH)/linker/vx_link$(XLEN).ld,--defsym=STARTUP_ADDR=0x80000000 $(VORTEX_KN_PATH)/libvortexrt.a
