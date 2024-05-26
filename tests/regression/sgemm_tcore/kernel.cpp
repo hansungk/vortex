@@ -308,6 +308,7 @@ void thread_block_gemm(kernel_arg_t *__UNIFORM__ arg,
       constexpr uint32_t row_stride_a = (BM * BN) / ELEM_PER_THREAD / BM;
 #pragma GCC unroll 1
       for (uint32_t load_offset = 0; load_offset < BK; load_offset += row_stride_a) {
+        // @perf: bank conflicts here
         const uint32_t global_a_offset =
             dim_k * (global_a_row + load_offset) + (k + local_as_row);
         local_a[BM * (local_as_row + load_offset) + local_as_col] =
@@ -447,7 +448,8 @@ void kernel_body(int task_id, kernel_arg_t *__UNIFORM__ arg) {
 
   const uint32_t threads_per_threadblock = (BM * BN) / (ELEM_PER_THREAD);
 #ifdef RADIANCE
-  const uint32_t threadblocks_per_core = CORES_PER_CLUSTER * vx_num_threads() * vx_num_warps() /
+  const uint32_t threadblocks_per_core = CORES_PER_CLUSTER * vx_num_threads() *
+                                         vx_num_warps() /
                                          threads_per_threadblock;
 #else
   const uint32_t threadblocks_per_core =
@@ -467,9 +469,8 @@ void kernel_body(int task_id, kernel_arg_t *__UNIFORM__ arg) {
 
   // "static" shared memory allocation.  This would determine threadblock
   // occupancy of a single cluster
-  // FIXME: 4* is unnecessary; being safe for overlaps
   float *sharedmem_per_threadblock =
-      (float *)DEV_SMEM_START_ADDR + (4 * BM * BK) * threadblock_id_in_cluster;
+      (float *)DEV_SMEM_START_ADDR + (2 * BM * BK) * threadblock_id_in_cluster;
   thread_block_gemm(arg, tid_in_threadblock, threadblock_dim_x,
                     threadblock_dim_y, threadblock_id_x, threadblock_id_y,
                     threadblock_id_in_cluster, sharedmem_per_threadblock);
