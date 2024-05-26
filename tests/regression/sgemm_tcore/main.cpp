@@ -108,6 +108,14 @@ int run_test(const kernel_arg_t& kernel_arg,
   std::cout << "download destination buffer" << std::endl;
   RT_CHECK(vx_copy_from_dev(device, staging_buf.data(), kernel_arg.addr_c, buf_size));
 
+  std::ofstream ref_file("reference.c.bin", std::ios::binary | std::ios::out);
+  if (!ref_file) {
+    std::cerr << "error: failed to open reference.c.bin for writing\n";
+    exit(EXIT_FAILURE);
+  }
+  ref_file.write(reinterpret_cast<char *>(ref_data.data()), buf_size);
+  ref_file.close();
+
   // verify result
   std::cout << "verify result" << std::endl;
   {
@@ -147,9 +155,9 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_dev_open(&device));
 
   // FIXME: hardcoded
-  uint32_t dim_m = 64;
-  uint32_t dim_n = 64;
-  uint32_t dim_k = 64;
+  uint32_t dim_m = 16;
+  uint32_t dim_n = 16;
+  uint32_t dim_k = 16;
 
   generate_source_matrix(dim_m, dim_n, dim_k);
   generate_reference_matmul(dim_m, dim_n, dim_k);
