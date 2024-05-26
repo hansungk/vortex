@@ -8,6 +8,13 @@
 
 #define NUM_LANES 8
 
+#define USE_TENSOR_CORE 1
+#define TC_SINGLE_WARP 0
+// number of loop around the inner 0..TCK..BK loop to simulate perfect-DRAM
+// scenario
+#define BK_LOOP 1
+#define TRANSPOSE_AS 1
+
 // Constraints on parameters:
 // * Memory:
 //   (BM + BN) * BK * sizeof(float) <= sharedmem size.
@@ -20,27 +27,24 @@
 //   (BM*BN) / (TM*TN) == threadblock size >= NT * CORES_PER_CLUSTER
 // * Combining BM * BK >= (BM*BN) / (TM*TN) == threadblock yields
 //   BM <= BK*TM*TN
-#define BM 16
-#define BN 16
+#define BM 8
+#define BN 8
 #define BK 8
+#define WM 8
+#define WN 8
 #define TCM 8
 #define TCN 8
 #define TCK 8
-#define WM 8
-#define WN 8
 #define WMITER (WM / TCM)
 #define WNITER (WN / TCN)
+#if USE_TENSOR_CORE == 1
 #define TM 1
 #define TN ((TCM * TCN) / NUM_LANES / TM)
-// #define TN 1
+#else
+#define TM 1
+#define TN 1
+#endif
 #define ELEM_PER_THREAD (WMITER * WNITER * TM * TN)
-
-#define USE_TENSOR_CORE 1
-#define TC_SINGLE_WARP 0
-// number of loop around the inner 0..TCK..BK loop to simulate perfect-DRAM
-// scenario
-#define BK_LOOP 16
-#define TRANSPOSE_AS 1
 
 inline constexpr void map_operand_32lanes(const int tid, int &row, int &col) {
   const int tg = tid / 4;
@@ -137,46 +141,51 @@ inline void vx_wmma() {
 inline void vx_wmma_load(volatile float *smem_A, volatile float *smem_B, const int local_k,
                   const int warp_col, const int warp_row, const int wn_iter,
                   const int wm_iter, const int thread_in_warp) {
-  int tid = thread_in_warp;
-  int tg = tid / 4;
+  const int tid = thread_in_warp;
+  const int tg = tid / 4;
 
   int row = 0;
   int col = 0;
   map_operand(tid, row, col);
 
-  int smem_A_rows = BM;
-  int smem_A_cols = BK;
-  int smem_B_rows = BK;
-  int smem_B_cols = BN;
+  constexpr int smem_A_rows = BM;
+  constexpr int smem_A_cols = BK;
+  constexpr int smem_AS_rows = BK;
+  constexpr int smem_AS_cols = BM;
+  constexpr int smem_B_rows = BK;
+  constexpr int smem_B_cols = BN;
 
   if constexpr (!TRANSPOSE_AS) {
-    int A_offset = (row + WM * warp_row + TCM * wm_iter) * smem_A_cols;
+    int A_offset = (WM * warp_row + TCM * wm_iter + row) * smem_A_cols;
 
     // @perf: bank conflicts
-    asm volatile("flw f0, %0" ::"m"(smem_A[A_offset + (local_k + 0)]));
-    asm volatile("flw f1, %0" ::"m"(smem_A[A_offset + (local_k + 1)]));
-    asm volatile("flw f2, %0" ::"m"(smem_A[A_offset + (local_k + 2)]));
-    asm volatile("flw f3, %0" ::"m"(smem_A[A_offset + (local_k + 3)]));
-    asm volatile("flw f4, %0" ::"m"(smem_A[A_offset + (local_k + 4)]));
-    asm volatile("flw f5, %0" ::"m"(smem_A[A_offset + (local_k + 5)]));
-    asm volatile("flw f6, %0" ::"m"(smem_A[A_offset + (local_k + 6)]));
-    asm volatile("flw f7, %0" ::"m"(smem_A[A_offset + (local_k + 7)]));
+    // f8-f15 stores a single row of A
+    asm volatile("flw  f0, %0" ::"m"(smem_A[A_offset + (local_k + 0)]));
+    asm volatile("flw  f1, %0" ::"m"(smem_A[A_offset + (local_k + 1)]));
+    asm volatile("flw  f2, %0" ::"m"(smem_A[A_offset + (local_k + 2)]));
+    asm volatile("flw  f3, %0" ::"m"(smem_A[A_offset + (local_k + 3)]));
+    asm volatile("flw  f4, %0" ::"m"(smem_A[A_offset + (local_k + 4)]));
+    asm volatile("flw  f5, %0" ::"m"(smem_A[A_offset + (local_k + 5)]));
+    asm volatile("flw  f6, %0" ::"m"(smem_A[A_offset + (local_k + 6)]));
+    asm volatile("flw  f7, %0" ::"m"(smem_A[A_offset + (local_k + 7)]));
   } else {
     // transposed A
-    asm volatile("flw  f0, %0" ::"m"(smem_A[((local_k + 0) * smem_A_rows) + (WM * warp_row + TCM * wm_iter) + row]));
-    asm volatile("flw  f1, %0" ::"m"(smem_A[((local_k + 1) * smem_A_rows) + (WM * warp_row + TCM * wm_iter) + row]));
-    asm volatile("flw  f2, %0" ::"m"(smem_A[((local_k + 2) * smem_A_rows) + (WM * warp_row + TCM * wm_iter) + row]));
-    asm volatile("flw  f3, %0" ::"m"(smem_A[((local_k + 3) * smem_A_rows) + (WM * warp_row + TCM * wm_iter) + row]));
-    asm volatile("flw  f4, %0" ::"m"(smem_A[((local_k + 4) * smem_A_rows) + (WM * warp_row + TCM * wm_iter) + row]));
-    asm volatile("flw  f5, %0" ::"m"(smem_A[((local_k + 5) * smem_A_rows) + (WM * warp_row + TCM * wm_iter) + row]));
-    asm volatile("flw  f6, %0" ::"m"(smem_A[((local_k + 6) * smem_A_rows) + (WM * warp_row + TCM * wm_iter) + row]));
-    asm volatile("flw  f7, %0" ::"m"(smem_A[((local_k + 7) * smem_A_rows) + (WM * warp_row + TCM * wm_iter) + row]));
+    // f8-f15 stores a single row of A
+    asm volatile("flw  f0, %0" ::"m"(smem_A[((local_k + 0) * smem_AS_cols) + (WM * warp_row + TCM * wm_iter) + row]));
+    asm volatile("flw  f1, %0" ::"m"(smem_A[((local_k + 1) * smem_AS_cols) + (WM * warp_row + TCM * wm_iter) + row]));
+    asm volatile("flw  f2, %0" ::"m"(smem_A[((local_k + 2) * smem_AS_cols) + (WM * warp_row + TCM * wm_iter) + row]));
+    asm volatile("flw  f3, %0" ::"m"(smem_A[((local_k + 3) * smem_AS_cols) + (WM * warp_row + TCM * wm_iter) + row]));
+    asm volatile("flw  f4, %0" ::"m"(smem_A[((local_k + 4) * smem_AS_cols) + (WM * warp_row + TCM * wm_iter) + row]));
+    asm volatile("flw  f5, %0" ::"m"(smem_A[((local_k + 5) * smem_AS_cols) + (WM * warp_row + TCM * wm_iter) + row]));
+    asm volatile("flw  f6, %0" ::"m"(smem_A[((local_k + 6) * smem_AS_cols) + (WM * warp_row + TCM * wm_iter) + row]));
+    asm volatile("flw  f7, %0" ::"m"(smem_A[((local_k + 7) * smem_AS_cols) + (WM * warp_row + TCM * wm_iter) + row]));
 // #pragma GCC unroll 8
 //     for (int i = 0; i < 8; i++) {
 //       asm volatile("flw  f0, %0" ::"m"(smem_A[((local_k + i) * smem_A_rows) + (WM * warp_row + TCM * wm_iter) + row]));
 //     }
   }
 
+  // f8-f15 stores a single column of B
   asm volatile("flw  f8, %0" ::"m"(smem_B[((local_k + 0) * smem_B_cols) + (WN * warp_col + TCN * wn_iter) + col]));
   asm volatile("flw  f9, %0" ::"m"(smem_B[((local_k + 1) * smem_B_cols) + (WN * warp_col + TCN * wn_iter) + col]));
   asm volatile("flw f10, %0" ::"m"(smem_B[((local_k + 2) * smem_B_cols) + (WN * warp_col + TCN * wn_iter) + col]));
@@ -295,29 +304,31 @@ void thread_block_gemm(kernel_arg_t *__UNIFORM__ arg,
       // number of rows a full TB can read at a time
       constexpr uint32_t row_stride_a = (BM * BN) / ELEM_PER_THREAD / BK;
 #pragma GCC unroll 1
-      for (uint32_t load_offset = 0; load_offset < BM; load_offset += row_stride_a) {
+      for (uint32_t local_row_offset = 0; local_row_offset < BM;
+           local_row_offset += row_stride_a) {
         const uint32_t global_a_offset =
-            dim_k * (global_a_row + load_offset) + (k + local_a_col);
+            dim_k * (global_a_row + local_row_offset) + (k + local_a_col);
         // NOTE: all threads in TB  will do this load; make sure this is not
         // out-of-bounds of BM*BK
-        local_a[BK * (local_a_row + load_offset) + local_a_col] =
+        local_a[BK * (local_a_row + local_row_offset) + local_a_col] =
             A[global_a_offset];
       }
     } else {
       const uint32_t global_a_row = BM * threadblock_id_y + local_as_col;
-      constexpr uint32_t row_stride_a = (BM * BN) / ELEM_PER_THREAD / BM;
+      constexpr uint32_t row_stride_as = (BM * BN) / ELEM_PER_THREAD / BM;
 #pragma GCC unroll 1
-      for (uint32_t load_offset = 0; load_offset < BK; load_offset += row_stride_a) {
+      for (uint32_t local_row_offset = 0; local_row_offset < BK;
+           local_row_offset += row_stride_as) {
         // @perf: bank conflicts here
         const uint32_t global_a_offset =
-            dim_k * (global_a_row + load_offset) + (k + local_as_row);
-        local_a[BM * (local_as_row + load_offset) + local_as_col] =
+            dim_k * (global_a_row) + (k + local_as_row + local_row_offset);
+        local_a[BM * (local_as_row + local_row_offset) + local_as_col] =
             A[global_a_offset];
       }
     }
 
-  constexpr uint32_t row_stride_b = (BM * BN) / ELEM_PER_THREAD / BN;
-  const uint32_t global_b_col = BN * threadblock_id_x + local_b_col;
+    constexpr uint32_t row_stride_b = (BM * BN) / ELEM_PER_THREAD / BN;
+    const uint32_t global_b_col = BN * threadblock_id_x + local_b_col;
 #pragma GCC unroll 1
     for (uint32_t load_offset = 0; load_offset < BK; load_offset += row_stride_b) {
       const uint32_t global_b_offset =
