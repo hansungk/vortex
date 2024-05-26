@@ -82,7 +82,7 @@ endif
 # CONFIG is supplied from the command line to differentiate ELF files with custom suffixes
 CONFIGEXT = $(if $(CONFIG),.$(CONFIG),)
 
-all: $(PROJECT) kernel.bin kernel.dump kernel.radiance.dump kernel.radiance$(CONFIGEXT).dump
+all: $(PROJECT) kernel.bin kernel.dump kernel.radiance.dump kernel$(CONFIGEXT).dump kernel.radiance$(CONFIGEXT).dump
 
 kernel.dump: kernel.elf
 	$(VX_DP) -D kernel.elf > kernel.dump
@@ -91,6 +91,9 @@ kernel.radiance.dump: kernel.radiance.elf
 	$(VX_DP) -D kernel.radiance.elf > kernel.radiance.dump
 
 ifneq ($(CONFIG),)
+kernel$(CONFIGEXT).dump: kernel$(CONFIGEXT).elf
+	$(VX_DP) -D kernel$(CONFIGEXT).elf > kernel$(CONFIGEXT).dump
+
 kernel.radiance$(CONFIGEXT).dump: kernel.radiance$(CONFIGEXT).elf
 	$(VX_DP) -D kernel.radiance$(CONFIGEXT).elf > kernel.radiance$(CONFIGEXT).dump
 endif
@@ -115,6 +118,9 @@ kernel.radiance.elf: $(VX_SRCS)
 	$(OBJCOPY) --update-section .operand.b=input.b.bin $@
 
 ifneq ($(CONFIG),)
+kernel$(CONFIGEXT).elf: kernel.elf
+	cp $< $@
+
 kernel.radiance$(CONFIGEXT).elf: kernel.radiance.elf
 	cp $< $@
 endif
