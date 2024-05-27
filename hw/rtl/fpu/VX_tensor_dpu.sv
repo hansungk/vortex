@@ -15,11 +15,11 @@ module VX_tensor_dpu #(
     input [3:0][1:0][31:0] A_tile,
     input [1:0][3:0][31:0] B_tile,
     input [3:0][3:0][31:0] C_tile,
-    input [`NW_WIDTH-1:0]  warp_id,
+    input [`NW_WIDTH-1:0]  wid,
 
     output valid_out,
     output [3:0][3:0][31:0] D_tile,
-    output [`NW_WIDTH-1:0]  D_warp_id
+    output [`NW_WIDTH-1:0]  D_wid
 );
     logic [3:0][3:0][31:0] result_hmma;
 
@@ -44,15 +44,15 @@ module VX_tensor_dpu #(
 
     // fixed-latency model
     VX_shift_register #(
-        .DATAW  (1 + $bits(warp_id) + $bits(D_tile)),
+        .DATAW  (1 + $bits(wid) + $bits(D_tile)),
         .DEPTH  (`LATENCY_HMMA),
         .RESETW (1)
     ) shift_reg (
         .clk      (clk),
         .reset    (reset),
         .enable   (~stall),
-        .data_in  ({valid_in,  warp_id,   result_hmma}),
-        .data_out ({valid_out, D_warp_id, D_tile})
+        .data_in  ({valid_in,  wid,   result_hmma}),
+        .data_out ({valid_out, D_wid, D_tile})
     );
 endmodule
 `endif
