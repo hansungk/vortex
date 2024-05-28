@@ -51,7 +51,7 @@ module VX_tensor_dpu #(
         .clk      (clk),
         .reset    (reset),
         .enable   (~stall),
-        .data_in  ({valid_in,  wid,   result_hmma}),
+        .data_in  ({valid_in && ready_in,  wid,   result_hmma}),
         .data_out ({valid_out, D_wid, D_tile})
     );
 endmodule
