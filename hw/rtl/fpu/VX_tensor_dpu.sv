@@ -95,7 +95,7 @@ module VX_tensor_dpu #(
     VX_shift_register #(
         .DATAW  (1 + $bits(wid)/* + $bits(D_tile)*/),
         // .DEPTH  (`LATENCY_HMMA),
-        .DEPTH  (2),
+        .DEPTH  (4),
         .RESETW (1)
     ) shift_reg (
         .clk      (clk),
