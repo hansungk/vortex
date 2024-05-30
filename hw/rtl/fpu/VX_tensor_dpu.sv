@@ -185,18 +185,14 @@ module VX_tensor_threadgroup #(
     logic step_out;
     assign ready_buf = fedp_fire_in && (step_in == 1'b1);
 
-    // FIXME shrink size
-    logic [1:0][3:0][31:0] D_reg, D_reg_n;
+    // latch the first-half result of D_frag
+    logic [3:0][31:0] D_reg, D_reg_n;
     wire  [3:0][31:0] D_half;
     always @(*) begin
         D_reg_n = D_reg;
-
         if (fedp_fire_out) begin
             if (step_out == 1'b0) begin
-                D_reg_n[0][0] = D_half[0];
-                D_reg_n[0][2] = D_half[1];
-                D_reg_n[1][0] = D_half[2];
-                D_reg_n[1][2] = D_half[3];
+                D_reg_n = D_half;
             end
         end
     end
@@ -219,10 +215,10 @@ module VX_tensor_threadgroup #(
         end
     end
 
-    assign D_frag[0][0] = D_reg[0][0];
-    assign D_frag[0][2] = D_reg[0][2];
-    assign D_frag[1][0] = D_reg[1][0];
-    assign D_frag[1][2] = D_reg[1][2];
+    assign D_frag[0][0] = D_reg[0];
+    assign D_frag[0][2] = D_reg[1];
+    assign D_frag[1][0] = D_reg[2];
+    assign D_frag[1][2] = D_reg[3];
     assign D_frag[0][1] = D_half[0];
     assign D_frag[0][3] = D_half[1];
     assign D_frag[1][1] = D_half[2];
