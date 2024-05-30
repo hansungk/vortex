@@ -77,7 +77,7 @@ module VX_tensor_core_warp import VX_gpu_pkg::*; #(
     // octet. E.g. two tgs map lane 0-3 and lane 16-19 -> 16
     // FIXME: not sure this is the right logic.  just filling in what works
     localparam LANE_OFFSET_THREADGROUP = (4 * NUM_OCTETS);
-    localparam REQ_QUEUE_DEPTH = 4;
+    localparam METADATA_QUEUE_DEPTH = 4;
 
     wire [1:0] step = 2'(execute_if.data.op_type);
     wire last_in_pair = (execute_if.data.op_mod == `INST_MOD_BITS'(1));
@@ -220,7 +220,7 @@ module VX_tensor_core_warp import VX_gpu_pkg::*; #(
 
         VX_fifo_queue #(
             .DATAW(DATAW),
-            .DEPTH(REQ_QUEUE_DEPTH)
+            .DEPTH(METADATA_QUEUE_DEPTH)
         ) pending_uops (
             .clk(clk),
             .reset(reset),

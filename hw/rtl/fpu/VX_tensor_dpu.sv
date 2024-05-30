@@ -93,7 +93,7 @@ module VX_tensor_dpu #(
     wire enq = valid_in && ready_in;
     wire deq = valid_out && ready_out;
 
-    assign ready_in  = &(threadgroup_readys);
+    assign ready_in  = &(threadgroup_readys) && !full;
     assign valid_out = &(threadgroup_valids);
 
     // need to pass along warp id's to do multithreading
@@ -109,12 +109,10 @@ module VX_tensor_dpu #(
         .data_out  (D_wid),
         .empty     (empty),
         `UNUSED_PIN(alm_empty),
-        .full      (full), // should be impossible to overflow
+        .full      (full),
         `UNUSED_PIN(alm_full),
         `UNUSED_PIN(size)
     );
-
-    `RUNTIME_ASSERT(reset || !full, ("dpu wid queue is full!"))
 
     // `RUNTIME_ASSERT(reset || (&(threadgroup_valids) == valid_out),
     //                 ("FEDP and metadata queue went out of sync!"))
