@@ -77,6 +77,7 @@ module VX_tensor_core_warp import VX_gpu_pkg::*; #(
     // octet. E.g. two tgs map lane 0-3 and lane 16-19 -> 16
     // FIXME: not sure this is the right logic.  just filling in what works
     localparam LANE_OFFSET_THREADGROUP = (4 * NUM_OCTETS);
+    localparam REQ_QUEUE_DEPTH = 4;
 
     wire [1:0] step = 2'(execute_if.data.op_type);
     wire last_in_pair = (execute_if.data.op_mod == `INST_MOD_BITS'(1));
@@ -219,7 +220,7 @@ module VX_tensor_core_warp import VX_gpu_pkg::*; #(
 
         VX_fifo_queue #(
             .DATAW(DATAW),
-            .DEPTH(8 /* FIXME: arbitrary */)
+            .DEPTH(REQ_QUEUE_DEPTH)
         ) pending_uops (
             .clk(clk),
             .reset(reset),
@@ -234,6 +235,8 @@ module VX_tensor_core_warp import VX_gpu_pkg::*; #(
             `UNUSED_PIN(size)
         );
 
+        // this shouldn't really happen unless there's a big contention over
+        // the commit stage
         `RUNTIME_ASSERT(!(!reset && full), ("tensor core uop queue is full!"));
     end
 
@@ -300,6 +303,8 @@ module VX_tensor_octet #(
     output result_valid,
     input result_ready
 );
+    localparam ISSUE_QUEUE_DEPTH = 4;
+
     // 512 bits/octet * 4 octets per warp
     logic [`NUM_WARPS-1:0][3:0][31:0] A_buffer, A_buffer_n;
     logic [`NUM_WARPS-1:0][3:0][31:0] B_buffer, B_buffer_n;
@@ -351,7 +356,7 @@ module VX_tensor_octet #(
     VX_fifo_queue #(
         .DATAW   ($bits(A_in) + $bits(B_in) + $bits(C_in) +
                   $bits(operands_wid) + $bits(operands_step) + $bits(operands_last_in_pair)),
-        .DEPTH   (8 /* FIXME: arbitrary */)
+        .DEPTH   (ISSUE_QUEUE_DEPTH)
     ) input_buffer (
         .clk   (clk),
         .reset (reset),
@@ -451,17 +456,8 @@ module VX_tensor_octet #(
     end
 
     wire outbuf_ready_in;
-    // backpressure from commit
-    wire stall = ~outbuf_ready_in;
     wire hmma_ready;
-
-    // assign operands_ready = ~stall;
-    // TODO: Below line is to only allow 1 warp to occupy the octet at a time;
-    // currently, dpu is fully-pipelined and allows concurrency between
-    // multiple warps.  This seems to be not a problem though given that the
-    // RF operand read takes >=2 cycles, which should be the end-to-end
-    // latency of the DPU anyways
-    assign operands_ready_buf = hmma_ready && ~stall;
+    assign operands_ready_buf = hmma_ready;
 
     // A is 4x2 fp32 matrix
     wire [3:0][1:0][31:0] A_tile = {
@@ -496,8 +492,6 @@ module VX_tensor_octet #(
         .clk(clk),
         .reset(reset),
 
-        .stall(stall),
-        
         .valid_in(do_hmma),
         .ready_in(hmma_ready),
         .A_tile(A_tile),
@@ -506,12 +500,14 @@ module VX_tensor_octet #(
         .wid(operands_wid_buf),
 
         .valid_out(dpu_valid),
+        .ready_out(outbuf_ready_in),
         .D_tile(D_tile),
         .D_wid(D_wid_dpu)
     );
 
     wire outbuf_empty;
     wire outbuf_full;
+    // backpressure from commit
     assign outbuf_ready_in = ~outbuf_full;
     assign result_valid    = ~outbuf_empty;
 
@@ -525,7 +521,10 @@ module VX_tensor_octet #(
     // TODO: This is probably oversized.
     VX_fifo_queue #(
         .DATAW   ($bits(D_wid) + $bits(D_out)),
-        .DEPTH   (8 /* FIXME: arbitrary */)
+        // depth of this queue should ideally be deeper than the dpu pipeline
+        // latency, since the dpu is fully-pipelined and it can output the
+        // latency-number of outputs in a burst-y way.
+        .DEPTH   (`LATENCY_HMMA + `LATENCY_HMMA)
     ) output_buffer (
         .clk   (clk),
         .reset (reset),

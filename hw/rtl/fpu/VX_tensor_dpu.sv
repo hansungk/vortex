@@ -8,8 +8,6 @@ module VX_tensor_dpu #(
     input clk,
     input reset,
 
-    input stall,
-
     input valid_in,
     output ready_in,
     input [3:0][1:0][31:0] A_tile,
@@ -18,6 +16,7 @@ module VX_tensor_dpu #(
     input [`NW_WIDTH-1:0]  wid,
 
     output valid_out,
+    input  ready_out,
     output [3:0][3:0][31:0] D_tile,
     output [`NW_WIDTH-1:0]  D_wid
 );
@@ -40,10 +39,11 @@ module VX_tensor_dpu #(
     end
 
     // ready as soon as valid_out
-    assign ready_in = ready_reg || valid_out;
+    // assign ready_in = ready_reg || valid_out;
 
-    // fully pipelined; always ready
-    // assign ready_in = 1'b1;
+    // fully pipelined; ready_in is coupled to ready_out by immediately
+    // stalling
+    assign ready_in = ready_out;
 
     // wire        dpu_valid;
     // wire [31:0] dpu_data;
@@ -70,8 +70,8 @@ module VX_tensor_dpu #(
     ) threadgroup_0 (
         .clk   (clk),
         .reset (reset),
-        .valid_in  (valid_in && ready_in),
-        .stall     (stall),
+        .valid_in  (valid_in),
+        .stall     (!ready_out),
         .A_frag    (A_tile[1:0]),
         .B_frag    (B_tile),
         .C_frag    (C_tile[1:0]),
@@ -82,8 +82,8 @@ module VX_tensor_dpu #(
     ) threadgroup_1 (
         .clk   (clk),
         .reset (reset),
-        .valid_in  (valid_in && ready_in),
-        .stall     (stall),
+        .valid_in  (valid_in),
+        .stall     (!ready_out),
         .A_frag    (A_tile[3:2]),
         .B_frag    (B_tile),
         .C_frag    (C_tile[3:2]),
@@ -94,18 +94,16 @@ module VX_tensor_dpu #(
     // fixed-latency queue
     VX_shift_register #(
         .DATAW  (1 + $bits(wid)/* + $bits(D_tile)*/),
-        // .DEPTH  (`LATENCY_HMMA),
-        .DEPTH  (4),
+        .DEPTH  (`LATENCY_HMMA),
         .RESETW (1)
     ) shift_reg (
         .clk      (clk),
         .reset    (reset),
-        .enable   (~stall),
+        .enable   (ready_out),
         .data_in  ({valid_in && ready_in, wid  /*, result_hmma*/}),
         .data_out ({valid_out,            D_wid/*, D_tile     */})
     );
 
-    // FIXME: breaks when stall is on!
     `RUNTIME_ASSERT(reset || (&(threadgroup_valids) == valid_out),
                     ("FEDP and metadata queue went out of sync!"))
 endmodule
@@ -146,7 +144,7 @@ module VX_tensor_threadgroup #(
           .io_in_bits_b_2   (32'h0),
           .io_in_bits_b_3   (32'h0),
           .io_in_bits_c     (C_frag[D_row][D_col]),
-          .io_stall         (1'b0), // FIXME
+          .io_stall         (stall),
           .io_out_valid     (valids[D_row][D_col]),
           .io_out_bits_data (D_frag[D_row][D_col])
         );
@@ -154,8 +152,6 @@ module VX_tensor_threadgroup #(
     end
 
     assign valid_out = (&(valids[0])) && (&(valids[1]));
-
-    `RUNTIME_ASSERT(reset || !stall, ("stall not supported yet in tensor dpu!"))
 endmodule
 
 `endif
