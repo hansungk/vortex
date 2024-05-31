@@ -21,7 +21,7 @@ module VX_tensor_core import VX_gpu_pkg::*; #(
 
     `RESET_RELAY (dispatch_reset, reset);
 
-    VX_dispatch_unit #(
+    VX_dispatch_unit_sane #(
         .BLOCK_SIZE (BLOCK_SIZE),
         .NUM_LANES  (NUM_LANES),
         .OUT_REG    (PARTIAL_BW ? 1 : 0)
@@ -177,9 +177,8 @@ module VX_tensor_core_warp import VX_gpu_pkg::*; #(
 
     localparam DATAW = `UUID_WIDTH + `NW_WIDTH + `NUM_THREADS + `XLEN + 1 + `NR_BITS;
     
-    wire commit_if_ready_override;
-
     wire operand_enq_fire = operands_valid_synced && execute_if.ready;
+    wire commit_if_ready_override;
     wire commit_if_fire = commit_if.valid && commit_if_ready_override;
     wire [DATAW-1:0] execute_if_data_enq = {
         execute_if.data.uuid, 

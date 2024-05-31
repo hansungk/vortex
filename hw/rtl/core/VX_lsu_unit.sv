@@ -49,7 +49,7 @@ module VX_lsu_unit import VX_gpu_pkg::*; #(
 
     `RESET_RELAY (dispatch_reset, reset);
 
-    VX_dispatch_unit #(
+    VX_dispatch_unit_sane #(
         .BLOCK_SIZE (BLOCK_SIZE),
         .NUM_LANES  (NUM_LANES),
         .OUT_REG    (1)
