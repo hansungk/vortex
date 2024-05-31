@@ -4,6 +4,9 @@
 module VX_tensor_dpu #(
     parameter ISW,
     parameter OCTET,
+    // @perf: has big impact on throughput.  A rule of thumb is to set it to
+    // the pipeline length of FEDPs in order to make sure there are enough
+    // entries to fully saturate the pipeline, but this is still rough
     parameter ISSUE_QUEUE_DEPTH = `LATENCY_HMMA
 ) (
     input clk,
@@ -105,7 +108,9 @@ module VX_tensor_dpu #(
     // need to pass along warp id's to do multithreading
     VX_fifo_queue #(
         .DATAW   ($bits(wid)),
-        .DEPTH   (ISSUE_QUEUE_DEPTH + ISSUE_QUEUE_DEPTH)
+        // @perf: seems to require deeper depth than the FEDP issue queues to
+        // not cause stalls.
+        .DEPTH   (2 * ISSUE_QUEUE_DEPTH)
     ) wid_queue (
         .clk   (clk),
         .reset (reset),
@@ -167,7 +172,7 @@ module VX_tensor_threadgroup #(
     // threadgroups, so we need only 1 queue per octet for B
     VX_fifo_queue #(
         .DATAW ($bits(A_frag) + $bits(B_frag) + $bits(C_frag)),
-        .DEPTH   (ISSUE_QUEUE_DEPTH)
+        .DEPTH (ISSUE_QUEUE_DEPTH)
     ) input_buffer (
         .clk       (clk),
         .reset     (reset),

@@ -318,8 +318,6 @@ module VX_tensor_octet #(
     output result_valid,
     input result_ready
 );
-    localparam ISSUE_QUEUE_DEPTH = 4;
-
     // 512 bits/octet * 4 octets per warp
     logic [`NUM_WARPS-1:0][3:0][31:0] A_buffer, A_buffer_n;
     logic [`NUM_WARPS-1:0][3:0][31:0] B_buffer, B_buffer_n;
@@ -471,7 +469,7 @@ module VX_tensor_octet #(
     VX_tensor_dpu #(
         .ISW(ISW),
         .OCTET(OCTET),
-        .ISSUE_QUEUE_DEPTH(4)
+        .ISSUE_QUEUE_DEPTH(4 /*@perf: arbtirary*/)
     ) dpu (
         .clk(clk),
         .reset(reset),
@@ -503,10 +501,9 @@ module VX_tensor_octet #(
     // regular, every-2-cycle commit traffic to ensure the commit pipeline is
     // used more efficiently.
     // FIXME: unnecessary?
-    // TODO: This is probably oversized.
     VX_fifo_queue #(
         .DATAW   ($bits(D_wid) + $bits(D_out)),
-        .DEPTH   (2 /*`LATENCY_HMMA*/)
+        .DEPTH   (2 /* arbitrary */)
     ) output_buffer (
         .clk   (clk),
         .reset (reset),
