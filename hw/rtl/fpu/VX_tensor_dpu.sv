@@ -3,7 +3,8 @@
 
 module VX_tensor_dpu #(
     parameter ISW,
-    parameter OCTET
+    parameter OCTET,
+    parameter ISSUE_QUEUE_DEPTH = `LATENCY_HMMA
 ) (
     input clk,
     input reset,
@@ -62,6 +63,7 @@ module VX_tensor_dpu #(
     logic [1:0] threadgroup_readys;
     // B_tile is shared across the two threadgroups; see Figure 13
     VX_tensor_threadgroup #(
+        .ISSUE_QUEUE_DEPTH(ISSUE_QUEUE_DEPTH)
     ) threadgroup_0 (
         .clk   (clk),
         .reset (reset),
@@ -75,6 +77,7 @@ module VX_tensor_dpu #(
         .D_frag    (D_tile[1:0])
     );
     VX_tensor_threadgroup #(
+        .ISSUE_QUEUE_DEPTH(ISSUE_QUEUE_DEPTH)
     ) threadgroup_1 (
         .clk   (clk),
         .reset (reset),
@@ -99,7 +102,7 @@ module VX_tensor_dpu #(
     // need to pass along warp id's to do multithreading
     VX_fifo_queue #(
         .DATAW   ($bits(wid)),
-        .DEPTH   (`LATENCY_HMMA + `LATENCY_HMMA)
+        .DEPTH   (ISSUE_QUEUE_DEPTH)
     ) wid_queue (
         .clk   (clk),
         .reset (reset),
@@ -121,6 +124,7 @@ endmodule
 // does (m,n,k) = (2,4,2) matmul compute over 2 cycles.
 // matches Figure 10(b) of the paper.
 module VX_tensor_threadgroup #(
+    parameter ISSUE_QUEUE_DEPTH
 ) (
     input clk,
     input reset,
@@ -149,9 +153,18 @@ module VX_tensor_threadgroup #(
     assign ready_in  = !full;
     assign valid_buf = !empty;
 
+    // 'Issue queue' for the FEDP units.
+    // This exists to decouple the execution of the dot-product unit from
+    // the operand arrival.  Operands from execute_if can arrive
+    // intermittently according to the frontend's behavior, and since the dpu
+    // can also stall for a fixed initiation latency, we need to decouple the
+    // two to efficiently feed the dpu.
+    //
+    // TODO: better queue design possible; e.g. B_frag is shared by two
+    // threadgroups, so we need only 1 queue per octet for B
     VX_fifo_queue #(
         .DATAW ($bits(A_frag) + $bits(B_frag) + $bits(C_frag)),
-        .DEPTH   (4)
+        .DEPTH   (ISSUE_QUEUE_DEPTH)
     ) input_buffer (
         .clk       (clk),
         .reset     (reset),
