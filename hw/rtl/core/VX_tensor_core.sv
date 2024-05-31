@@ -78,7 +78,7 @@ module VX_tensor_core_warp import VX_gpu_pkg::*; #(
     // FIXME: not sure this is the right logic.  just filling in what works
     localparam LANE_OFFSET_THREADGROUP = (4 * NUM_OCTETS);
     // this is only a rule of thumb
-    localparam METADATA_QUEUE_DEPTH = `LATENCY_HMMA;
+    localparam METADATA_QUEUE_DEPTH = 2 * `LATENCY_HMMA;
 
     wire [1:0] step = 2'(execute_if.data.op_type);
     wire last_in_pair = (execute_if.data.op_mod == `INST_MOD_BITS'(1));
