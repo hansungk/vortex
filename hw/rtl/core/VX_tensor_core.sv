@@ -90,8 +90,6 @@ module VX_tensor_core_warp import VX_gpu_pkg::*; #(
     logic [`NUM_THREADS-1:0][`XLEN-1:0] wb_data_1;
     wire [`NW_WIDTH-1:0] wb_wid;
     
-    assign execute_if.ready = &octet_operands_ready;
-
 `ifdef EXT_T_ENABLE
     for (genvar i = 0; i < NUM_OCTETS; ++i) begin
 `else
@@ -207,16 +205,23 @@ module VX_tensor_core_warp import VX_gpu_pkg::*; #(
 
     wire [`NUM_WARPS-1:0][DATAW-1:0] execute_if_data_deq;
 
+    wire [`NUM_WARPS-1:0] metadata_queue_fulls;
+    // OR not AND, we don't want any warp full
+    wire metadata_queue_full = |(metadata_queue_fulls);
+
+    assign execute_if.ready = &(octet_operands_ready) && !metadata_queue_full;
+
     for (genvar i = 0; i < `NUM_WARPS; i++) begin
-        // execute_if request queue.
+        // Metadata queue for commit_if.  This simply copies execute_if's
+        // metadata and pops them in conjunction with commit fire.
+        //
         // This has to be separated per-warp, as otherwise requests from
         // multiple warps can be enqueued interleaved, which makes it hard to
         // ensure two consecutive dequeues are associated with the same warp for
-        // commit.
+        // commit. (FIXME: this is not strictly necessary though.)
 
         wire enq = execute_if_fire && (execute_if.data.wid == `NW_WIDTH'(i));
         wire deq =  commit_if_fire && (             wb_wid == `NW_WIDTH'(i));
-        wire full;
 
         VX_fifo_queue #(
             .DATAW(DATAW),
@@ -230,15 +235,15 @@ module VX_tensor_core_warp import VX_gpu_pkg::*; #(
             .data_out(execute_if_data_deq[i]),
             `UNUSED_PIN(empty),
             `UNUSED_PIN(alm_empty),
-            .full(full), // should be impossible to overflow
+            .full(metadata_queue_fulls[i]),
             `UNUSED_PIN(alm_full),
             `UNUSED_PIN(size)
         );
-
-        // this shouldn't really happen unless there's a big contention over
-        // the commit stage
-        `RUNTIME_ASSERT(!(!reset && full), ("tensor core uop queue is full!"));
     end
+
+    // this shouldn't really happen unless there's a big contention over
+    // the commit stage
+    `RUNTIME_ASSERT(!(!reset && metadata_queue_full), ("tensor core uop queue is full!"));
 
     // unlike execute which can be interleaved between warps, commit is
     // serialized and completed one-warp-by-warp, therefore we only need to
@@ -527,13 +532,11 @@ module VX_tensor_octet #(
     // is complete.  This decouples the irregular dpu output traffic from the
     // regular, every-2-cycle commit traffic to ensure the commit pipeline is
     // used more efficiently.
+    // FIXME: unnecessary?
     // TODO: This is probably oversized.
     VX_fifo_queue #(
         .DATAW   ($bits(D_wid) + $bits(D_out)),
-        // depth of this queue should ideally be deeper than the dpu pipeline
-        // latency, since the dpu is fully-pipelined and it can output the
-        // latency-number of outputs in a burst-y way.
-        .DEPTH   (`LATENCY_HMMA + `LATENCY_HMMA)
+        .DEPTH   (`LATENCY_HMMA)
     ) output_buffer (
         .clk   (clk),
         .reset (reset),
