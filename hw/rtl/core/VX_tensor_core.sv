@@ -528,7 +528,7 @@ module VX_tensor_octet #(
             perf_tensor_dpu_total <= '0;
         end else begin
             if (do_hmma) begin
-                perf_tensor_dpu_total <= perf_tensor_dpu_total + 1'b1;
+                perf_tensor_dpu_total <= perf_tensor_dpu_total + 2'd2;
             end
         end
     end

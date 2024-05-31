@@ -24,23 +24,23 @@ module VX_tensor_dpu #(
     output [3:0][3:0][31:0] D_tile,
     output [`NW_WIDTH-1:0]  D_wid
 );
-    logic [3:0][3:0][31:0] result_hmma;
+    // logic [3:0][3:0][31:0] result_hmma;
 
-    always @(*) begin
-        dpi_hmma(valid_in, A_tile, B_tile, C_tile, result_hmma);
-    end
+    // always @(*) begin
+    //     dpi_hmma(valid_in, A_tile, B_tile, C_tile, result_hmma);
+    // end
 
-    logic ready_reg;
-    always @(posedge clk) begin
-        if (reset) begin
-            ready_reg <= '1;
-        end else if (valid_in && ready_in) begin
-            ready_reg <= '0;
-            dpi_print_results(int'(ISW), int'(OCTET), A_tile, B_tile, C_tile, result_hmma);
-        end else if (valid_out && ready_out) begin
-            ready_reg <= '1;
-        end
-    end
+    // logic ready_reg;
+    // always @(posedge clk) begin
+    //     if (reset) begin
+    //         ready_reg <= '1;
+    //     end else if (valid_in && ready_in) begin
+    //         ready_reg <= '0;
+    //         dpi_print_results(int'(ISW), int'(OCTET), A_tile, B_tile, C_tile, result_hmma);
+    //     end else if (valid_out && ready_out) begin
+    //         ready_reg <= '1;
+    //     end
+    // end
 
     // // fixed-latency queue
     // VX_shift_register #(
