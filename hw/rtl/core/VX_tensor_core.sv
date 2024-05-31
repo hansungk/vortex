@@ -251,7 +251,27 @@ module VX_tensor_core_warp import VX_gpu_pkg::*; #(
     logic subcommit, subcommit_n;
 
     wire all_valid = (& octet_results_valid);
+
+// define this to inject artificial commit backpressure for debugging
+`define INJECT_COMMIT_BACKPRESSURE
+`ifndef INJECT_COMMIT_BACKPRESSURE
     assign commit_if.valid = all_valid;
+    assign commit_if_ready_override = commit_if.ready;
+`else
+    logic [1:0] counter;
+    always @(posedge clk) begin
+        if (reset) begin
+            counter <= '0;
+        end else begin
+            if (all_valid) begin
+                counter <= counter + 1'b1;
+            end
+        end
+    end
+
+    assign commit_if.valid = all_valid && (counter == 2'b0);
+    assign commit_if_ready_override = commit_if.ready && (counter == 2'b0);
+`endif
 
     localparam COMMIT_DATAW = `UUID_WIDTH + `NW_WIDTH + `NUM_THREADS + `XLEN + 1 + `NR_BITS + (`NUM_THREADS * `XLEN) + 1 + 1 + 1;
     wire [COMMIT_DATAW-1:0] commit_if_data = {
