@@ -333,46 +333,55 @@ module VX_tensor_octet #(
     wire                 operands_last_in_pair_buf;
     wire [1:0]           operands_step_buf;
 
-    wire inbuf_empty;
-    wire inbuf_full;
-    wire inbuf_ready_in;
-    assign inbuf_ready_in     = !inbuf_full;
-    assign operands_ready     = inbuf_ready_in;
-    assign operands_valid_buf = !inbuf_empty;
+    // wire inbuf_empty;
+    // wire inbuf_full;
+    // wire inbuf_ready_in;
+    // assign inbuf_ready_in     = !inbuf_full;
+    // assign operands_ready     = inbuf_ready_in;
+    // assign operands_valid_buf = !inbuf_empty;
 
-    // wire inbuf_enq = operands_ready && operands_valid && operands_last_in_pair;
-    wire inbuf_enq = operands_ready && operands_valid;
-    wire inbuf_deq = operands_valid_buf && operands_ready_buf;
+    // // wire inbuf_enq = operands_ready && operands_valid && operands_last_in_pair;
+    // wire inbuf_enq = operands_ready && operands_valid;
+    // wire inbuf_deq = operands_valid_buf && operands_ready_buf;
 
-    // the 'issue queue' for the dpu.
-    // This exists to decouple the input of the dot-product unit from
-    // execute_if.ready.  execute_if can arrive intermittently according to
-    // the frontend's behavior, and since the dpu can also stall for a fixed
-    // initiation latency, we need to decouple the two to efficiently feed the
-    // dpu.
-    // This only applies to the last instruction in a pair, since the first
-    // instruction only acts to buffer the operands and can execute
-    // immediately without backpressure.  So we don't enqueue them.
-    VX_fifo_queue #(
-        .DATAW   ($bits(A_in) + $bits(B_in) + $bits(C_in) +
-                  $bits(operands_wid) + $bits(operands_step) + $bits(operands_last_in_pair)),
-        .DEPTH   (ISSUE_QUEUE_DEPTH)
-    ) input_buffer (
-        .clk   (clk),
-        .reset (reset),
-        .push      (inbuf_enq),
-        .pop       (inbuf_deq),
-        .data_in   ({A_in,     B_in,     C_in,     operands_wid,     operands_step,     operands_last_in_pair}),
-        .data_out  ({A_in_buf, B_in_buf, C_in_buf, operands_wid_buf, operands_step_buf, operands_last_in_pair_buf}),
-        .empty     (inbuf_empty),
-        `UNUSED_PIN(alm_empty),
-        .full      (inbuf_full),
-        `UNUSED_PIN(alm_full),
-        `UNUSED_PIN(size)
-    );
+    // // the 'issue queue' for the dpu.
+    // // This exists to decouple the input of the dot-product unit from
+    // // execute_if.ready.  execute_if can arrive intermittently according to
+    // // the frontend's behavior, and since the dpu can also stall for a fixed
+    // // initiation latency, we need to decouple the two to efficiently feed the
+    // // dpu.
+    // // This only applies to the last instruction in a pair, since the first
+    // // instruction only acts to buffer the operands and can execute
+    // // immediately without backpressure.  So we don't enqueue them.
+    // VX_fifo_queue #(
+    //     .DATAW   ($bits(A_in) + $bits(B_in) + $bits(C_in) +
+    //               $bits(operands_wid) + $bits(operands_step) + $bits(operands_last_in_pair)),
+    //     .DEPTH   (ISSUE_QUEUE_DEPTH)
+    // ) input_buffer (
+    //     .clk   (clk),
+    //     .reset (reset),
+    //     .push      (inbuf_enq),
+    //     .pop       (inbuf_deq),
+    //     .data_in   ({A_in,     B_in,     C_in,     operands_wid,     operands_step,     operands_last_in_pair}),
+    //     .data_out  ({A_in_buf, B_in_buf, C_in_buf, operands_wid_buf, operands_step_buf, operands_last_in_pair_buf}),
+    //     .empty     (inbuf_empty),
+    //     `UNUSED_PIN(alm_empty),
+    //     .full      (inbuf_full),
+    //     `UNUSED_PIN(alm_full),
+    //     `UNUSED_PIN(size)
+    // );
 
-    // FIXME: this shouldn't be necessary
-    `RUNTIME_ASSERT(reset || !inbuf_full, ("dpu issue queue is full!"))
+    // // FIXME: this shouldn't be necessary
+    // `RUNTIME_ASSERT(reset || !inbuf_full, ("dpu issue queue is full!"))
+
+    assign A_in_buf = A_in;
+    assign B_in_buf = B_in;
+    assign C_in_buf = C_in;
+    assign operands_step_buf         = operands_step;
+    assign operands_wid_buf          = operands_wid;
+    assign operands_last_in_pair_buf = operands_last_in_pair;
+    assign operands_valid_buf = operands_valid;
+    assign operands_ready = operands_ready_buf;
 
     typedef struct {
       logic [3:0][31:0] A_half;
