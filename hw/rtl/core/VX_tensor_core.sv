@@ -471,7 +471,7 @@ module VX_tensor_octet #(
     VX_tensor_dpu #(
         .ISW(ISW),
         .OCTET(OCTET),
-        .ISSUE_QUEUE_DEPTH(2)
+        .ISSUE_QUEUE_DEPTH(4)
     ) dpu (
         .clk(clk),
         .reset(reset),

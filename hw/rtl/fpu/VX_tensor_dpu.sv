@@ -39,13 +39,6 @@ module VX_tensor_dpu #(
         end
     end
 
-    // ready as soon as valid_out
-    // assign ready_in = ready_reg;
-
-    // fully pipelined; ready_in is coupled to ready_out by immediately
-    // stalling
-    // assign ready_in = ready_out;
-
     // // fixed-latency queue
     // VX_shift_register #(
     //     .DATAW  (1 + $bits(wid)/* + $bits(D_tile)*/),
@@ -59,6 +52,16 @@ module VX_tensor_dpu #(
     //     .data_out ({valid_out,            D_wid/*, D_tile     */})
     // );
 
+    // ready as soon as valid_out
+    // assign ready_in = ready_reg || valid_out;
+
+    // fully pipelined; ready_in is coupled to ready_out by immediately
+    // stalling
+    // assign ready_in = ready_out;
+
+    logic synced_fire;
+    assign synced_fire = valid_in && ready_in;
+
     logic [1:0] threadgroup_valids;
     logic [1:0] threadgroup_readys;
     // B_tile is shared across the two threadgroups; see Figure 13
@@ -67,7 +70,7 @@ module VX_tensor_dpu #(
     ) threadgroup_0 (
         .clk   (clk),
         .reset (reset),
-        .valid_in  (valid_in),
+        .valid_in  (synced_fire),
         .ready_in  (threadgroup_readys[0]),
         .stall     (!ready_out),
         .A_frag    (A_tile[1:0]),
@@ -81,7 +84,7 @@ module VX_tensor_dpu #(
     ) threadgroup_1 (
         .clk   (clk),
         .reset (reset),
-        .valid_in  (valid_in),
+        .valid_in  (synced_fire),
         .ready_in  (threadgroup_readys[1]),
         .stall     (!ready_out),
         .A_frag    (A_tile[3:2]),
@@ -102,7 +105,7 @@ module VX_tensor_dpu #(
     // need to pass along warp id's to do multithreading
     VX_fifo_queue #(
         .DATAW   ($bits(wid)),
-        .DEPTH   (ISSUE_QUEUE_DEPTH)
+        .DEPTH   (ISSUE_QUEUE_DEPTH + ISSUE_QUEUE_DEPTH)
     ) wid_queue (
         .clk   (clk),
         .reset (reset),
@@ -117,8 +120,8 @@ module VX_tensor_dpu #(
         `UNUSED_PIN(size)
     );
 
-    // `RUNTIME_ASSERT(reset || (&(threadgroup_valids) == valid_out),
-    //                 ("FEDP and metadata queue went out of sync!"))
+    `RUNTIME_ASSERT(reset || !(deq && empty),
+                    ("dequeueing from empty warp id queue!"))
 endmodule
 
 // does (m,n,k) = (2,4,2) matmul compute over 2 cycles.
