@@ -341,20 +341,19 @@ void thread_block_gemm(kernel_arg_t *__UNIFORM__ arg,
                         threadblock_dim_y);
 
 #if USE_TENSOR_CORE
-// #pragma GCC unroll 1
+    // @perf: this loop spills to stack a lot because of all the flws in
+    // vx_wmma_load
+#pragma GCC unroll 1
     for (int i = 0; i < BK_LOOP; i++) {
-      // @perf: this loop spills to stack a lot because of all the flws in vx_wmma_load
 #pragma GCC unroll 1
       for (uint32_t local_k = 0; local_k < BK; local_k += TCK) {
         // perform wmma
         // vx_wmma_load(local_a, local_b, warp_x, warp_y, tid_in_warp);
-        // FIXME: If multiple warps try to issue to Tensor Core at the same time,
-        // does one stall the other?
         // FIXME: this is wrong!! need separate accumulation register for
         // WM/WN_ITERS
-#pragma GCC unroll 1
+#pragma GCC unroll 2
         for (int wm_iter = 0; wm_iter < WMITER; wm_iter++) {
-#pragma GCC unroll 1
+#pragma GCC unroll 2
           for (int wn_iter = 0; wn_iter < WNITER; wn_iter++) {
 #if TC_SINGLE_WARP
             if (warp_in_threadblock == 0) {
