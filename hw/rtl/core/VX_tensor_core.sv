@@ -81,6 +81,7 @@ module VX_tensor_core_warp import VX_gpu_pkg::*; #(
     localparam METADATA_QUEUE_DEPTH = 2 * `LATENCY_HMMA;
 
     wire [1:0] step = 2'(execute_if.data.op_type);
+    // op_mod is reused to indicate instruction's id in pair
     wire last_in_pair = (execute_if.data.op_mod == `INST_MOD_BITS'(1));
 
     logic [NUM_OCTETS-1:0] octet_results_valid;
@@ -115,7 +116,6 @@ module VX_tensor_core_warp import VX_gpu_pkg::*; #(
         logic result_valid;
         logic result_ready;
 
-        // op_mod is reused to indicate instruction's id in pair
         VX_tensor_octet #(
             .ISW(ISW),
             .OCTET(i)

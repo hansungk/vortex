@@ -234,6 +234,9 @@ module VX_tensor_threadgroup #(
         end
     end
 
+    // TODO: Instead of latching half-result and constructing a full D tile,
+    // we should be able to send these half fragments down to commit stage
+    // immediately, saving flop space
     assign D_frag[0][0] = D_reg[0];
     assign D_frag[0][2] = D_reg[1];
     assign D_frag[1][0] = D_reg[2];

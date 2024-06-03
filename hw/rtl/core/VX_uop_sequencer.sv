@@ -128,9 +128,8 @@ module VX_uop_sequencer import VX_gpu_pkg::*; (
         if (uop_sequencer_if.valid && use_uop &&
             uop_sequencer_if.data.rd  == `NR_BITS'(1)) begin
             // a little sketchy? but shouldn't create any loop
-            ibuffer_if.data.rd  = ibuffer_if.data.rd  + `NR_BITS'(8);
+            ibuffer_if.data.rd  = ibuffer_if.data.rd  + `NR_BITS'(8); // FIXME: 8 is hardcoded
             ibuffer_if.data.rs3 = ibuffer_if.data.rs3 + `NR_BITS'(8);
-            $display("yoooooooo! uop rd=%d\n", ibuffer_if.data.rd);
         end
     end
 
