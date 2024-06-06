@@ -182,21 +182,14 @@ inline void vx_wmma_load_a(volatile float *smem_A, const int local_k,
     // f8-f15 stores a single row of A
     register volatile float *smem_addr asm("t5");
     smem_addr = &smem_A[((local_k + 0) * smem_AS_cols) + (WM * warp_row + TCM * wm_iter) + row];
-    asm volatile("flw  f0, %0" ::"m"(*smem_addr));
-    smem_addr += smem_AS_cols;
-    asm volatile("flw  f1, %0" ::"m"(*smem_addr));
-    smem_addr += smem_AS_cols;
-    asm volatile("flw  f2, %0" ::"m"(*smem_addr));
-    smem_addr += smem_AS_cols;
-    asm volatile("flw  f3, %0" ::"m"(*smem_addr));
-    smem_addr += smem_AS_cols;
-    asm volatile("flw  f4, %0" ::"m"(*smem_addr));
-    smem_addr += smem_AS_cols;
-    asm volatile("flw  f5, %0" ::"m"(*smem_addr));
-    smem_addr += smem_AS_cols;
-    asm volatile("flw  f6, %0" ::"m"(*smem_addr));
-    smem_addr += smem_AS_cols;
-    asm volatile("flw  f7, %0" ::"m"(*smem_addr));
+    asm volatile("flw  f0, %0(%1)" :: "i"(smem_AS_cols * 0 * sizeof(float)), "r"(smem_addr));
+    asm volatile("flw  f1, %0(%1)" :: "i"(smem_AS_cols * 1 * sizeof(float)), "r"(smem_addr));
+    asm volatile("flw  f2, %0(%1)" :: "i"(smem_AS_cols * 2 * sizeof(float)), "r"(smem_addr));
+    asm volatile("flw  f3, %0(%1)" :: "i"(smem_AS_cols * 3 * sizeof(float)), "r"(smem_addr));
+    asm volatile("flw  f4, %0(%1)" :: "i"(smem_AS_cols * 4 * sizeof(float)), "r"(smem_addr));
+    asm volatile("flw  f5, %0(%1)" :: "i"(smem_AS_cols * 5 * sizeof(float)), "r"(smem_addr));
+    asm volatile("flw  f6, %0(%1)" :: "i"(smem_AS_cols * 6 * sizeof(float)), "r"(smem_addr));
+    asm volatile("flw  f7, %0(%1)" :: "i"(smem_AS_cols * 7 * sizeof(float)), "r"(smem_addr));
 
     // asm volatile("flw  f0, %0" ::"m"(smem_A[((local_k + 0) * smem_AS_cols) + (WM * warp_row + TCM * wm_iter) + row]));
     // asm volatile("flw  f1, %0" ::"m"(smem_A[((local_k + 1) * smem_AS_cols) + (WM * warp_row + TCM * wm_iter) + row]));
@@ -226,21 +219,15 @@ inline void vx_wmma_load_b(volatile float *smem_B, const int local_k,
   // f8-f15 stores a single column of B
   register volatile float *smem_addr asm("t5");
   smem_addr = &smem_B[((local_k + 0) * smem_B_cols) + (WN * warp_col + TCN * wn_iter) + col];
-  asm volatile("flw  f8, %0" ::"m"(*smem_addr));
-  smem_addr += smem_B_cols;
-  asm volatile("flw  f9, %0" ::"m"(*smem_addr));
-  smem_addr += smem_B_cols;
-  asm volatile("flw f10, %0" ::"m"(*smem_addr));
-  smem_addr += smem_B_cols;
-  asm volatile("flw f11, %0" ::"m"(*smem_addr));
-  smem_addr += smem_B_cols;
-  asm volatile("flw f12, %0" ::"m"(*smem_addr));
-  smem_addr += smem_B_cols;
-  asm volatile("flw f13, %0" ::"m"(*smem_addr));
-  smem_addr += smem_B_cols;
-  asm volatile("flw f14, %0" ::"m"(*smem_addr));
-  smem_addr += smem_B_cols;
-  asm volatile("flw f15, %0" ::"m"(*smem_addr));
+  asm volatile("flw  f8, %0(%1)" :: "i"(smem_B_cols * 0 * sizeof(float)), "r"(smem_addr));
+  asm volatile("flw  f9, %0(%1)" :: "i"(smem_B_cols * 1 * sizeof(float)), "r"(smem_addr));
+  asm volatile("flw f10, %0(%1)" :: "i"(smem_B_cols * 2 * sizeof(float)), "r"(smem_addr));
+  asm volatile("flw f11, %0(%1)" :: "i"(smem_B_cols * 3 * sizeof(float)), "r"(smem_addr));
+  asm volatile("flw f12, %0(%1)" :: "i"(smem_B_cols * 4 * sizeof(float)), "r"(smem_addr));
+  asm volatile("flw f13, %0(%1)" :: "i"(smem_B_cols * 5 * sizeof(float)), "r"(smem_addr));
+  asm volatile("flw f14, %0(%1)" :: "i"(smem_B_cols * 6 * sizeof(float)), "r"(smem_addr));
+  asm volatile("flw f15, %0(%1)" :: "i"(smem_B_cols * 7 * sizeof(float)), "r"(smem_addr));
+
   // asm volatile("flw  f8, %0" ::"m"(smem_B[((local_k + 0) * smem_B_cols) + (WN * warp_col + TCN * wn_iter) + col]));
   // asm volatile("flw  f9, %0" ::"m"(smem_B[((local_k + 1) * smem_B_cols) + (WN * warp_col + TCN * wn_iter) + col]));
   // asm volatile("flw f10, %0" ::"m"(smem_B[((local_k + 2) * smem_B_cols) + (WN * warp_col + TCN * wn_iter) + col]));
