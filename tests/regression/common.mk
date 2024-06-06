@@ -107,15 +107,19 @@ kernel.elf: $(VX_SRCS)
 	$(VX_CXX) $(VX_CFLAGS) $(VX_SRCS) $(VX_LDFLAGS) -o $@
 	$(OBJCOPY) --set-section-flags .operand.a=$(OBJCOPY_FLAGS) $@
 	$(OBJCOPY) --set-section-flags .operand.b=$(OBJCOPY_FLAGS) $@
+	$(OBJCOPY) --set-section-flags .args=$(OBJCOPY_FLAGS) $@
 	$(OBJCOPY) --update-section .operand.a=input.a.bin $@
 	$(OBJCOPY) --update-section .operand.b=input.b.bin $@
+	$(OBJCOPY) --update-section .args=args.bin $@
 
 kernel.radiance.elf: $(VX_SRCS)
 	$(VX_CXX) $(VX_CFLAGS) $(VX_SRCS) $(VX_LDFLAGS) -DRADIANCE -o $@
 	$(OBJCOPY) --set-section-flags .operand.a=$(OBJCOPY_FLAGS) $@
 	$(OBJCOPY) --set-section-flags .operand.b=$(OBJCOPY_FLAGS) $@
+	$(OBJCOPY) --set-section-flags .args=$(OBJCOPY_FLAGS) $@
 	$(OBJCOPY) --update-section .operand.a=input.a.bin $@
 	$(OBJCOPY) --update-section .operand.b=input.b.bin $@
+	$(OBJCOPY) --update-section .args=args.bin $@
 
 ifneq ($(CONFIG),)
 kernel$(CONFIGEXT).elf: kernel.elf
