@@ -111,7 +111,7 @@ int main() {
   sp_tiled_matmul_full_spad_ws(spad_A, spad_B, /*spad_D=*/0, spad_C,
       /*I=*/I, /*J=*/J, /*K=*/K, /*pad_I=*/0, /*pad_J=*/0, /*pad_K=*/0,
       /*a_transpose=*/0, /*b_transpose=*/0, /*full_C=*/0, /*low_D=*/0,
-      /*no_bias=*/1, /*repeating_bias=*/0, /*act=*/NO_ACTIVATION);
+      /*acc=*/0, /*act=*/NO_ACTIVATION);
 
   rd_cycles(fence_cycles);
   gemmini_fence();
