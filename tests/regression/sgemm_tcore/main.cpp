@@ -108,14 +108,6 @@ int run_test(const kernel_arg_t& kernel_arg,
   std::cout << "download destination buffer" << std::endl;
   RT_CHECK(vx_copy_from_dev(device, staging_buf.data(), kernel_arg.addr_c, buf_size));
 
-  std::ofstream ref_file("reference.c.bin", std::ios::binary | std::ios::out);
-  if (!ref_file) {
-    std::cerr << "error: failed to open reference.c.bin for writing\n";
-    exit(EXIT_FAILURE);
-  }
-  ref_file.write(reinterpret_cast<char *>(ref_data.data()), buf_size);
-  ref_file.close();
-
   // verify result
   std::cout << "verify result" << std::endl;
   {
@@ -155,12 +147,21 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_dev_open(&device));
 
   // FIXME: hardcoded
-  uint32_t dim_m = 32;
-  uint32_t dim_n = 32;
-  uint32_t dim_k = 32;
+  uint32_t dim_m = 128;
+  uint32_t dim_n = 128;
+  uint32_t dim_k = 128;
 
   generate_source_matrix(dim_m, dim_n, dim_k);
   generate_reference_matmul(dim_m, dim_n, dim_k);
+
+  std::cout << "write reference output" << std::endl;
+  std::ofstream ref_file("reference.c.bin", std::ios::binary | std::ios::out);
+  if (!ref_file) {
+    std::cerr << "error: failed to open reference.c.bin for writing\n";
+    exit(EXIT_FAILURE);
+  }
+  ref_file.write(reinterpret_cast<char *>(ref_data.data()), ref_data.size() * sizeof(ref_data[0]));
+  ref_file.close();
 
   uint32_t src_a_buf_size = src_a_data.size() * sizeof(src_a_data[0]);
   uint32_t src_b_buf_size = src_b_data.size() * sizeof(src_b_data[0]);
