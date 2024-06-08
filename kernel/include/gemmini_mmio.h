@@ -5,7 +5,8 @@
 #endif
 
 #define SMEM_BASE 0xff000000
-#define SMEM_SIZE 0x4000
+//#define SMEM_SIZE 0x4000
+#define SMEM_SIZE 0x10000
 
 #define SMEM_MASK (SMEM_SIZE - 1)
 #define SMEM_ADDR_END (SMEM_BASE + SMEM_SIZE)
@@ -31,10 +32,13 @@
 // 0: k = 0, no accumulation
 // 1: k % 2 = 0, buffer regions 0
 // 2: k % 2 = 1, buffer regions 1
-// 8, 9: memory ops
-// 8: tile-sized move-in (unused)
+// 8, 9, 10, 11: memory ops
+// 8: tile-sized move-in stride
 // 9: tile-sized move-out
+// 10: tile-sized move-in, buffer regions 0
+// 11: tile-sized move-in, buffer regions 1
 #define GEMMINI_CISC_CMD_I(x) asm("csrwi 0xacc, "#x)
+#define GEMMINI_CISC_CMD_R(x) asm("csrw 0xacc, %0" :: "r" (x))
 #define GEMMINI_STATUS() ({uint32_t status; asm volatile ("csrr %0, 0xacc" : "=r" (status)); status;})
 
 // convert normal matrix i,j into tiled smem offset
@@ -61,6 +65,9 @@
     *((volatile uint32_t*) GEMMINI_INST_ADDR) = (0x7B) | (0 << 7) | (3 << 12) | (1 << 15) | (2 << 20) | ((funct) << 25); \
     /* sprintf((char *) PRINT_BUF, "%llx %llx %d\n", rs1, rs2, funct); */ \
 }
+
+#define loop_matmul_skips(skip_lda, skip_ldb, skip_ldd, skip_ex, skip_stc) \
+  (((skip_lda) | ((skip_ldb) << 1) | ((skip_ldd) << 2) | ((skip_ex) << 3) | ((skip_stc) << 4)) << 3)
 
 #define sp_tiled_matmul_full_spad_ws(A_sp_addr_start, B_sp_addr_start, D_sp_addr_start, C_dst_sp_addr_start,\
   I, J, K, pad_I, pad_J, pad_K, a_transpose, b_transpose, full_C, low_D, acc, act, skips) \

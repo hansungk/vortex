@@ -16,23 +16,26 @@
 #define NUM_CLUSTERS 1
 #define NUM_THREADS_IN_CLUSTER 128
 
-#define SMEM_ADDR_0K  ((float * const) 0xff000000)
-#define SMEM_ADDR_4K  ((float * const) 0xff001000)
-#define SMEM_ADDR_8K  ((float * const) 0xff002000)
-#define SMEM_ADDR_12K ((float * const) 0xff003000)
-#define SPAD_ADDR_0K 0x0
-#define SPAD_ADDR_4K 0x80
-#define SPAD_ADDR_8K 0x100
-#define SPAD_ADDR_12K 0x180
+#define SMEM_ADDR_Q0 ((float * const) 0xff000000)
+#define SMEM_ADDR_Q1 ((float * const) 0xff001000)
+#define SMEM_ADDR_Q2 ((float * const) 0xff002000)
+#define SMEM_ADDR_Q3 ((float * const) 0xff003000)
+#define SPAD_ADDR_Q0 0x0
+#define SPAD_ADDR_Q1 0x80
+#define SPAD_ADDR_Q2 0x100
+#define SPAD_ADDR_Q3 0x180
+#define SPAD_ADDR_Q4 0x200
 
-//#define DEBUG_PRINT
-//#define EXT_ACCUMULATE
 #define HARDCODE
 #define REGBLOCK
+#define OFFLOAD_ACCUMULATE
+#define REMATERIALIZE
 #define DBUF
+//#define CISC
+
+//#define DEBUG_PRINT
 //#define DETAILED_PERF
 //#define ACTIVATE
-#define CISC
 
 #define rd_cycles_force(x) asm volatile ("csrr %0, mcycle" : "=r" (x))
 #ifdef DETAILED_PERF
@@ -40,7 +43,11 @@
 #else
   #define rd_cycles(x)
 #endif
-#define HW_TID() ({uint32_t gtid; asm volatile ("csrr %0, mhartid" : "=r" (gtid)); gtid;})
+#ifdef REMATERIALIZE
+  #define HW_TID() ({uint32_t gtid; asm volatile ("csrr %0, mhartid" : "=r" (gtid)); gtid;})
+#else
+  #define HW_TID() hw_tid
+#endif
 #define PRINTF(...) sprintf(PRINT_BUF, __VA_ARGS__)
 // #define PRINTF(...) vx_printf(__VA_ARGS__)
 #define SWISH(beta, x) ((x) / (1 + exp(-(beta) * (x))))
@@ -58,10 +65,11 @@ void thread_block_matmul_gemmini(kernel_arg_t *__UNIFORM__ arg,
   const float * const B = (const float * const) arg->addr_b;
   float * const C = (float * const) arg->addr_c;
 
-  if (HW_TID() == 0) {
-    gemmini_config_ld(0);
+  if (tid_in_threadblock % NUM_THREADS_IN_CLUSTER == 0) {
     gemmini_extended_config_ex(WEIGHT_STATIONARY, 0, 0, 1, 0, 0);
-    gemmini_config_st(0);
+    // gemmini_extended_config_ex(dataflow, act & 3, 0, 1, a_transpose, b_transpose);
+
+    // gemmini_extended_config_st(stride_C * sizeof_C, act & 3, scale);
     PRINTF("start\n");
   }
 
@@ -100,17 +108,26 @@ void thread_block_matmul_gemmini(kernel_arg_t *__UNIFORM__ arg,
   constexpr uint32_t i1_iters = (DIM * DIM * (TILE_K / DIM)) / num_threads_in_cluster; // num of iters before striding
 
   const uint32_t num_tile_rows_per_tb = num_tiles_m / NUM_CLUSTERS;
+
+  if (HW_TID() == 0) {
+    gemmini_extended3_config_ld(dim_k * sizeof(elem_t), MVIN_SCALE_IDENTITY, false, 0);
+    gemmini_extended3_config_ld(dim_n * sizeof(elem_t), MVIN_SCALE_IDENTITY, false, 1);
+    // gemmini_extended3_config_ld(repeating_bias ? 0 : (stride_D * sizeof_D), D_scale_factor, low_D, 2);
+    gemmini_extended_config_st(dim_n * sizeof(elem_t), 0, MVIN_SCALE_IDENTITY);
+    // gemmini_extended_config_st(stride_C * sizeof_C, act & 3, scale);
+  }
+
   for (uint32_t tile_i = num_tile_rows_per_tb * threadblock_id;
                 tile_i < num_tile_rows_per_tb * (threadblock_id + 1);
                 tile_i += 1) {
     __asm__("i_loop:");
     for (int tile_j = 0; tile_j < num_tiles_n; tile_j += 1) {
       __asm__("j_loop:");
-      float * const smem_c_tile_start = SMEM_ADDR_4K;
-      #ifndef EXT_ACCUMULATE
-      float * const smem_acc_tile_start = SMEM_ADDR_0K + HW_TID();
+      float * const smem_c_tile_start = SMEM_ADDR_Q1;
+      #ifdef OFFLOAD_ACCUMULATE
+      float * const smem_acc_tile_start = SMEM_ADDR_Q0 + HW_TID();
       #else
-      float * const smem_acc_tile_start = SMEM_ADDR_8K + hw_tid;
+      float * const smem_acc_tile_start = SMEM_ADDR_Q2 + hw_tid;
       #endif
 
       __asm__("k_loop:");
@@ -132,11 +149,11 @@ void thread_block_matmul_gemmini(kernel_arg_t *__UNIFORM__ arg,
         const float * const dram_a_tile_start = A + tile_i * TILE_M * dim_k + tile_k * TILE_K + runtime_const_a;
         const float * const dram_b_tile_start = B + tile_k * TILE_K * dim_n + tile_j * TILE_N + runtime_const_b;
         #ifdef DBUF
-        float * const smem_a_tile_start = ((tile_k & 1) ? SMEM_ADDR_4K : SMEM_ADDR_0K) + HW_TID();
-        float * const smem_b_tile_start = ((tile_k & 1) ? SMEM_ADDR_12K : SMEM_ADDR_8K) + HW_TID();
+        float * const smem_a_tile_start = ((tile_k & 1) ? SMEM_ADDR_Q1 : SMEM_ADDR_Q0) + HW_TID();
+        float * const smem_b_tile_start = ((tile_k & 1) ? SMEM_ADDR_Q3 : SMEM_ADDR_Q2) + HW_TID();
         #else
-        float * const smem_a_tile_start = SMEM_ADDR_0K + HW_TID();
-        float * const smem_b_tile_start = SMEM_ADDR_12K + HW_TID();
+        float * const smem_a_tile_start = SMEM_ADDR_Q0 + HW_TID();
+        float * const smem_b_tile_start = SMEM_ADDR_Q3 + HW_TID();
         #endif
 
         {
@@ -175,7 +192,6 @@ void thread_block_matmul_gemmini(kernel_arg_t *__UNIFORM__ arg,
           smem_b_tile_start[7 * num_threads_in_cluster + hw_tid] = \
             dram_b_tile_start[every_iter * 1 + every_2iters_b * 3];
         #else
-          __asm__("load_ab:");
           float v0 = dram_a_tile_start[every_iter * 0 + every_2iters_a * 0];
           float v1 = dram_a_tile_start[every_iter * 1 + every_2iters_a * 0];
           float v2 = dram_a_tile_start[every_iter * 0 + every_2iters_a * 1];
@@ -185,7 +201,6 @@ void thread_block_matmul_gemmini(kernel_arg_t *__UNIFORM__ arg,
           smem_a_tile_start[2 * num_threads_in_cluster] = v2;
           smem_a_tile_start[3 * num_threads_in_cluster] = v3;
 
-          __asm__("load_ab1:");
           v0 = dram_b_tile_start[every_iter * 0 + every_2iters_b * 0];
           v1 = dram_b_tile_start[every_iter * 1 + every_2iters_b * 0];
           v2 = dram_b_tile_start[every_iter * 0 + every_2iters_b * 1];
@@ -195,7 +210,6 @@ void thread_block_matmul_gemmini(kernel_arg_t *__UNIFORM__ arg,
           smem_b_tile_start[2 * num_threads_in_cluster] = v2;
           smem_b_tile_start[3 * num_threads_in_cluster] = v3;
 
-          __asm__("load_ab2:");
           v0 = dram_a_tile_start[every_iter * 0 + every_2iters_a * 2];
           v1 = dram_a_tile_start[every_iter * 1 + every_2iters_a * 2];
           v2 = dram_a_tile_start[every_iter * 0 + every_2iters_a * 3];
@@ -205,7 +219,6 @@ void thread_block_matmul_gemmini(kernel_arg_t *__UNIFORM__ arg,
           smem_a_tile_start[6 * num_threads_in_cluster] = v2;
           smem_a_tile_start[7 * num_threads_in_cluster] = v3;
 
-          __asm__("load_ab3:");
           v0 = dram_b_tile_start[every_iter * 0 + every_2iters_b * 2];
           v1 = dram_b_tile_start[every_iter * 1 + every_2iters_b * 2];
           v2 = dram_b_tile_start[every_iter * 0 + every_2iters_b * 3];
@@ -214,8 +227,6 @@ void thread_block_matmul_gemmini(kernel_arg_t *__UNIFORM__ arg,
           smem_b_tile_start[5 * num_threads_in_cluster] = v1;
           smem_b_tile_start[6 * num_threads_in_cluster] = v2;
           smem_b_tile_start[7 * num_threads_in_cluster] = v3;
-
-          __asm__("end_loadab:");
         #endif
         }
         #else
@@ -223,8 +234,8 @@ void thread_block_matmul_gemmini(kernel_arg_t *__UNIFORM__ arg,
 
         const float * const dram_a_tile_start = A + tile_i * TILE_M * dim_k + tile_k * TILE_K;
         const float * const dram_b_tile_start = B + tile_k * TILE_K * dim_n + tile_j * TILE_N;
-        float * const smem_a_tile_start = SMEM_ADDR_0K;
-        float * const smem_b_tile_start = SMEM_ADDR_12K;
+        float * const smem_a_tile_start = SMEM_ADDR_Q0;
+        float * const smem_b_tile_start = SMEM_ADDR_Q3;
 
         /* for (uint32_t thread_i = 0, j1 = 0, i1 = 0;
           thread_i < a_elems_per_thread;
@@ -281,7 +292,6 @@ void thread_block_matmul_gemmini(kernel_arg_t *__UNIFORM__ arg,
         // cluster wide barrier to wait for A and B loads to complete
         threadblock_barrier(/*barrier_id=*/0, /*count=*/NUM_WARPS);
         rd_cycles(marker3);
-        __asm__("gemmini:");
         if (HW_TID() == 0) {
           #ifdef DBUF
             gemmini_fence();
@@ -290,8 +300,8 @@ void thread_block_matmul_gemmini(kernel_arg_t *__UNIFORM__ arg,
           #ifndef DBUF
           #error MUST ENABLE DBUF
           #endif
-          #ifdef EXT_ACCUMULATE
-          #error MUST DISABLE EXT ACCUMULATE
+          #ifndef OFFLOAD_ACCUMULATE
+          #error MUST OFFLOAD ACCUMULATE
           #endif
           if (tile_k == 0) {
             GEMMINI_CISC_CMD_I(0);
@@ -303,14 +313,14 @@ void thread_block_matmul_gemmini(kernel_arg_t *__UNIFORM__ arg,
           #else
           sp_tiled_matmul_full_spad_ws(
             #ifdef DBUF
-              (tile_k & 1) ? SPAD_ADDR_4K : SPAD_ADDR_0K, (tile_k & 1) ? SPAD_ADDR_12K : SPAD_ADDR_8K,
+              (tile_k & 1) ? SPAD_ADDR_Q1 : SPAD_ADDR_Q0, (tile_k & 1) ? SPAD_ADDR_Q3 : SPAD_ADDR_Q2,
             #else
-              SPAD_ADDR_0K, SPAD_ADDR_12K,
+              SPAD_ADDR_Q0, SPAD_ADDR_Q3,
             #endif
-            /*spad_D=*/0, /*spad_C=*/SPAD_ADDR_4K,
+            /*spad_D=*/0, /*spad_C=*/SPAD_ADDR_Q1,
             /*I=*/TILE_M / DIM, /*J=*/TILE_N / DIM, /*K=*/TILE_K / DIM, /*pad_I=*/0, /*pad_J=*/0, /*pad_K=*/0,
             /*a_transpose=*/0, /*b_transpose=*/0, /*full_C=*/0, /*low_D=*/0,
-            #ifdef EXT_ACCUMULATE
+            #ifndef OFFLOAD_ACCUMULATE
             /*acc=*/0, /*act=*/NO_ACTIVATION, /*skips=*/0x38U)
             #else
             /*acc=*/tile_k != 0, /*act=*/NO_ACTIVATION, /*skips=*/0xB8U)
@@ -321,13 +331,14 @@ void thread_block_matmul_gemmini(kernel_arg_t *__UNIFORM__ arg,
           gemmini_fence();
           #endif
         }
-        __asm__("end_gemmini:");
         rd_cycles(marker4);
-        // threadblock_barrier(/*barrier_id=*/0, /*count=*/NUM_WARPS);
+        #ifndef DBUF
+        threadblock_barrier(/*barrier_id=*/0, /*count=*/NUM_WARPS);
+        #endif
         rd_cycles(marker5);
 
         // accumulate C matrix
-        #ifdef EXT_ACCUMULATE
+        #ifndef OFFLOAD_ACCUMULATE
         __asm__("accumulate:");
         if (tile_k == 0) {
           #pragma GCC ivdep
@@ -383,7 +394,7 @@ void thread_block_matmul_gemmini(kernel_arg_t *__UNIFORM__ arg,
 
       }
 
-      #ifndef EXT_ACCUMULATE
+      #ifdef OFFLOAD_ACCUMULATE
       threadblock_barrier(/*barrier_id=*/0, /*count=*/NUM_WARPS);
       rd_cycles(marker6);
       __asm__("mvout_spad_ser:");
@@ -476,13 +487,12 @@ void thread_block_matmul_gemmini(kernel_arg_t *__UNIFORM__ arg,
       #endif
 
       #else
-
       float * const dram_c_tile_start = C + tile_i * TILE_M * dim_n + tile_j * TILE_N;
       #pragma clang loop unroll(disable)
       for (int thread_i = 0; thread_i < c_elems_per_thread; thread_i++) {
         uint32_t elem_offset = hw_tid + num_threads_in_cluster * thread_i;
         dram_c_tile_start[elem_offset / TILE_N * dim_n + elem_offset % TILE_N] = \
-          *(SMEM_ADDR_8K + SMEM_MAT_OFFSET(elem_offset / TILE_N, elem_offset % TILE_N, TILE_N));
+          *(SMEM_ADDR_Q2 + SMEM_MAT_OFFSET(elem_offset / TILE_N, elem_offset % TILE_N, TILE_N));
       }
       #endif
       __asm__("end_mvout_dram:");
@@ -513,7 +523,7 @@ void thread_block_matmul_gemmini(kernel_arg_t *__UNIFORM__ arg,
           PRINTF("first barrier:        %d\n", marker3 - marker2);
           PRINTF("gemmini cycles:       %d\n", marker4 - marker3);
           PRINTF("second barrier:       %d\n", marker5 - marker4);
-          #ifdef EXT_ACCUMULATE
+          #ifndef OFFLOAD_ACCUMULATE
           PRINTF("accumulation cycles:  %d\n", marker6 - marker5);
           #else
           PRINTF("smem mvout cycles:    %d %d-%d\n", marker7 - marker6, marker7, marker6);

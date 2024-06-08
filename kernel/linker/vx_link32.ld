@@ -10,8 +10,8 @@ ENTRY(_start)
 
 MEMORY {
   DRAM0    (rwx): ORIGIN = 0x80000000, LENGTH = 512M
-  DRAM1    (rwx): ORIGIN = 0xa0000000, LENGTH = 32K
-  DRAM2    (rwx): ORIGIN = 0xa1000000, LENGTH = 32K
+  DRAM1    (rwx): ORIGIN = 0xa0000000, LENGTH = 16M
+  DRAM2    (rwx): ORIGIN = 0xa1000000, LENGTH = 16M
 }
 
 SECTIONS
@@ -69,6 +69,7 @@ SECTIONS
     /* .gnu.warning sections are handled specially by elf.em.  */
     *(.gnu.warning)
   }
+
   .fini           :
   {
     KEEP (*(SORT_NONE(.fini)))
@@ -128,6 +129,7 @@ SECTIONS
     KEEP (*(.init_array EXCLUDE_FILE (*crtbegin.o *crtbegin?.o *crtend.o *crtend?.o ) .ctors))
     PROVIDE_HIDDEN (__init_array_end = .);
   }
+
   .fini_array    :
   {
     PROVIDE_HIDDEN (__fini_array_start = .);
@@ -135,6 +137,18 @@ SECTIONS
     KEEP (*(.fini_array EXCLUDE_FILE (*crtbegin.o *crtbegin?.o *crtend.o *crtend?.o ) .dtors))
     PROVIDE_HIDDEN (__fini_array_end = .);
   }
+
+  .htif_pad : {
+    . = ALIGN(0x1000);
+  }
+
+  . = ALIGN(0x1000);
+  .tohost : {
+    *(.tohost)
+    /* . += 0x100; */
+  }
+
+  . = ALIGN(0x1000);
   .ctors          :
   {
     /* gcc uses crtbegin.o to find the start of
@@ -216,6 +230,8 @@ SECTIONS
 		            MAX(__DATA_BEGIN__ + 0x800, __BSS_END__ - 0x800));
   _end = .; PROVIDE (end = .);
   . = DATA_SEGMENT_END (.);
+
+
   /* Stabs debugging sections.  */
   .stab          0 : { *(.stab) }
   .stabstr       0 : { *(.stabstr) }

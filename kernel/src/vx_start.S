@@ -150,3 +150,4 @@ vx_wspawn_wait:
 	.weak __dso_handle
 __dso_handle:
 	.long	0
+
