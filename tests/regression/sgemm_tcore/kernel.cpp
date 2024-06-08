@@ -532,7 +532,7 @@ inline void global_dmem_load(const uint32_t dim_n, const uint32_t dim_k,
   }
 }
 
-void thread_block_gemm(kernel_arg_t *__UNIFORM__ arg,
+inline void thread_block_gemm(kernel_arg_t *__UNIFORM__ arg,
                               const uint32_t tid_in_threadblock,
                               const uint32_t threads_per_threadblock,
                               const uint32_t threadblock_dim_x,
