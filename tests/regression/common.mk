@@ -49,7 +49,7 @@ VX_CP  = $(LLVM_VORTEX)/bin/llvm-objcopy
 #VX_CP  = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-objcopy
 
 VX_CFLAGS += -v -O3 -std=c++17
-VX_CFLAGS += -mcmodel=medany -fno-rtti -fno-exceptions -nostartfiles -fdata-sections -ffunction-sections
+VX_CFLAGS += -mcmodel=medany -fno-rtti -fno-exceptions -nostartfiles -fdata-sections -ffunction-sections -mllvm -inline-threshold=8192
 VX_CFLAGS += -I$(VORTEX_KN_PATH)/include -I$(VORTEX_KN_PATH)/../hw -I$(GEMMINI_SW_PATH)
 VX_CFLAGS += -DNDEBUG -DLLVM_VORTEX
 
