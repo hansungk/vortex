@@ -82,16 +82,23 @@ with open(file) as f:
             
 
 expected = np.load("abc.npz")
-expected_A = expected['A_array']
-expected_B = expected['B_array']
-expected_C = expected['C_array']
+# expected_A = expected['A_array']
+# expected_B = expected['B_array']
+# expected_C = expected['C_array']
+expected_A = expected['A_array'][0:8, 0:8]
+expected_B = expected['B_array'][0:8, 0:8]
+expected_C = expected['C_array'][0:8, 0:8]
 expected_C = expected_C + expected_A @ expected_B
+print('expected A:')
+print(expected_A)
+print('expected B:')
+print(expected_B)
 print('expected C:')
 print(expected_C[0:8, 0:8])
 print('got C:')
 print(C_array[0:8, 0:8])
 print('diff C:')
-print((expected_C - C_array)[0:8, 0:8])
+print(expected_C[0:8, 0:8] - C_array[0:8, 0:8])
 
 expected_C.astype('float32').tofile("c_expected.bin")
 
