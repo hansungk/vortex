@@ -50,7 +50,7 @@ inline void threadblock_barrier(unsigned int barrier_id, unsigned int count) {
 void thread_block_matmul_gemmini(kernel_arg_t *__UNIFORM__ arg,
                                  const uint32_t threadblock_id,
                                  const uint32_t tid_in_threadblock) {
-  __asm__("matmul_start:");
+  asm volatile ("matmul_start_%=:" :: );
   const float * const A = (const float * const) arg->addr_a;
   const float * const B = (const float * const) arg->addr_b;
   float * const C = (float * const) arg->addr_c;
