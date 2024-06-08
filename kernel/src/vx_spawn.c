@@ -170,7 +170,7 @@ static void __attribute__ ((noinline)) spawn_tasks_cluster_all_cb() {
   vx_tmc_zero();
 }
 
-static void __attribute__ ((noinline)) spawn_tasks_all_cb() {  
+static void __attribute__ ((noinline)) spawn_tasks_all_cb() {
   // activate all threads
   vx_tmc(-1);
 
@@ -254,6 +254,7 @@ void vx_spawn_tasks_cluster(int num_tasks, vx_spawn_tasks_cb callback, void *arg
     vx_wspawn_wait();
   }
 
+  // TODO: this is incomplete
   // TODO: Instead of launching an additional wave just to work on remaining
   // threads, handle this in the last wave amongst other full warps.
   if (rem_threads_in_last_warp != 0 && core_id_in_cluster == 0) {
