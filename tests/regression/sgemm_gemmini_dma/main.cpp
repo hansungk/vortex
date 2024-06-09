@@ -193,8 +193,8 @@ int main(int argc, char *argv[]) {
   {
     std::cout << "upload kernel argument" << std::endl;
     auto buf_ptr = staging_buf.data();
-    kernel_arg.addr_a = (uint64_t) 0x20000;
-    kernel_arg.addr_b = (uint64_t) 0x28000;
+    kernel_arg.addr_a = (uint64_t) 0xa0000000ULL;
+    kernel_arg.addr_b = (uint64_t) 0xa1000000ULL;
     kernel_arg.addr_c = (uint64_t) 0xc0000000ULL;
     memcpy(buf_ptr, &kernel_arg, sizeof(kernel_arg_t));
 
