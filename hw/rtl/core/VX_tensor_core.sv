@@ -232,7 +232,7 @@ module VX_tensor_core_warp import VX_gpu_pkg::*; #(
 
     // this shouldn't really happen unless there's a big contention over
     // the commit stage
-    `RUNTIME_ASSERT(!(!reset && metadata_queue_full), ("tensor core uop queue is full!"));
+    `RUNTIME_ASSERT(!(!reset && metadata_queue_full), ("tensor core uop queue is full!"))
 
     // unlike execute which can be interleaved between warps, commit is
     // serialized and completed one-warp-by-warp, therefore we only need to
