@@ -25,6 +25,7 @@
 
 `ifdef SYNTHESIS
 `define GPR_RESET
+`define GPR_DUPLICATED
 `define LSU_DUP_DISABLE
 `define ICACHE_DISABLE
 `define DCACHE_DISABLE
