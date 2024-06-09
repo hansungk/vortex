@@ -152,7 +152,7 @@ module Vortex import VX_gpu_pkg::*; #(
       if (reset) begin
         busy_prev <= 1'b0;
         finished_reg <= 1'b0;
-        intr_counter <= 4'h0;
+        intr_counter <= 4'h8;
       end else begin
         // Vortex core's busy signal goes up some cycles after the reset,
         // so we can't simply use ~busy as finished because of the initial
@@ -165,8 +165,8 @@ module Vortex import VX_gpu_pkg::*; #(
 
         if (~msip_1d && interrupts_msip) begin
           // rising edge
-          intr_counter <= 4'h6;
-        end else begin
+          intr_counter <= 4'h7;
+        end else if (intr_counter <= 4'h7) begin
           intr_counter <= intr_counter > 0 ? intr_counter - 4'h1 : 4'h0;
         end
       end
@@ -310,7 +310,6 @@ module Vortex import VX_gpu_pkg::*; #(
 
     logic [3:0] reset_start_counter;
     logic core_reset;
-    logic dcr_reset;
 
     always @(posedge clock) begin
       if (reset) begin
@@ -323,8 +322,7 @@ module Vortex import VX_gpu_pkg::*; #(
     end
     // Delay reset signal by a few cycles to make time for resetting the DCR
     // (device configuration registers).
-    assign core_reset = reset || (reset_start_counter != 4'h0); // || intr_reset;
-    assign dcr_reset = !reset && (reset_start_counter != 4'h0);
+    assign core_reset = reset || (reset_start_counter != 4'h0) || intr_reset;
 
     // A small FSM that tries to set DCR "properly" in the same order as
     // defined in VX_types.vh.
@@ -500,6 +498,12 @@ module Vortex import VX_gpu_pkg::*; #(
     always @(*) begin
         if (busy === 1'b0) begin
             $display("---------------- no more active warps ----------------");
+            `ifdef SIMULATION
+            if ($time >= 60000) begin
+              $display("simulation has probably ended. exiting");
+              @(posedge clock) $finish();
+            end
+            `endif
             // TODO: lane assumed to be 4
             // `ifndef SYNTHESIS
             // for (integer j = 0; j < `NUM_WARPS; j++) begin

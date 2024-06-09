@@ -207,7 +207,7 @@
 `define UNUSED_ARG(x)   /* verilator lint_off UNUSED */ \
                         x \
                         /* verilator lint_on UNUSED */
-`define TRACE(level, args) dpi_trace(level, $sformatf args)
+`define TRACE(level, args) $display args
 `endif
 `endif
 

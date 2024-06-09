@@ -572,6 +572,28 @@ module VX_mem_scheduler #(
             `TRACE(1, (", ibuf_idx=%0d, batch_idx=%0d (#%0d)\n", ibuf_raddr, rsp_batch_idx, mem_rsp_dbg_uuid));
         end
     end
+`else
+    always @(posedge clk) begin
+        if (req_valid && req_ready) begin
+            if (req_rw) begin
+                `TRACE(1, ("%d: %s-core-req-wr: valid=%b, addr=", $time, INST_ID, req_mask));
+                `TRACE_ARRAY1D(1, req_addr, NUM_REQS);
+                `TRACE(1, (", byteen="));
+                `TRACE_ARRAY1D(1, req_byteen, NUM_REQS);
+                `TRACE(1, (", data="));
+                `TRACE_ARRAY1D(1, req_data, NUM_REQS);
+            end else begin
+                `TRACE(1, ("%d: %s-core-req-rd: valid=%b, addr=", $time, INST_ID, req_mask));
+                `TRACE_ARRAY1D(1, req_addr, NUM_REQS);
+            end
+            `TRACE(1, (", tag=0x%0h, tag_only=0x%0h\n", req_tag, req_tag[TAG_ONLY_WIDTH-1:0]));
+        end
+        if (rsp_valid && rsp_ready) begin
+            `TRACE(1, ("%d: %s-rsp: valid=%b, sop=%b, eop=%b, data=", $time, INST_ID, rsp_mask, rsp_sop, rsp_eop));
+            `TRACE_ARRAY1D(1, rsp_data, NUM_REQS);
+            `TRACE(1, (", tag=0x%0h, tag_only=0x%0h\n", rsp_tag, rsp_tag[TAG_ONLY_WIDTH-1:0]));
+        end
+    end
 `endif
   
 endmodule
