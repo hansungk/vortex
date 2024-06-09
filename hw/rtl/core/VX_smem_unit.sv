@@ -66,6 +66,7 @@ module VX_smem_unit import VX_gpu_pkg::*; #(
         .req_valid  (smem_req_valid),
         .req_rw     (smem_req_rw),
         .req_byteen (smem_req_byteen),
+        // FIXME: synthesis complains undriven when USE_EXTERNAL_SMEM
         .req_addr   (smem_req_addr),
         .req_data   (smem_req_data),        
         .req_tag    (smem_req_tag),

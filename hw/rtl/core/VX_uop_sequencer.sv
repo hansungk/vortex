@@ -14,10 +14,9 @@ module VX_uop_sequencer import VX_gpu_pkg::*; (
     localparam UOP_TABLE_SIZE = 64;
     localparam UPC_BITS = `CLOG2(UOP_TABLE_SIZE);
 
-    localparam NEXT   = 2'b00;
-    localparam FINISH = 2'b01;
-
     localparam UBR_BITS = 2;
+    localparam NEXT   = UBR_BITS'(2'b00);
+    localparam FINISH = UBR_BITS'(2'b01);
 
     // uop metadata (sequencing, next state), execution metadata (EX_TYPE, OP_TYPE, OP_MOD), wb, use pc, use imm, pc, imm, rd, rs1, rs2, rs3
     localparam UOP_TABLE_WIDTH = UBR_BITS + UPC_BITS + `EX_BITS + `INST_OP_BITS + `INST_MOD_BITS + 1 + 1 + 1 + `XLEN + `XLEN + (`NR_BITS * 4);
@@ -122,7 +121,17 @@ module VX_uop_sequencer import VX_gpu_pkg::*; (
     // passthrough when !use_uop
     assign ibuffer_if.valid = use_uop ? 1'b1 : uop_sequencer_if.valid;
     assign uop_sequencer_if.ready = use_uop ? (uop_fire && ubr == FINISH) : ibuffer_if.ready;
-    assign ibuffer_if.data = use_uop ? ibuffer_output : uop_sequencer_if.data;
+
+    always @(*) begin
+        ibuffer_if.data = use_uop ? ibuffer_output : uop_sequencer_if.data;
+
+        if (uop_sequencer_if.valid && use_uop &&
+            uop_sequencer_if.data.rd  == `NR_BITS'(1)) begin
+            // a little sketchy? but shouldn't create any loop
+            ibuffer_if.data.rd  = ibuffer_if.data.rd  + `NR_BITS'(8); // FIXME: 8 is hardcoded
+            ibuffer_if.data.rs3 = ibuffer_if.data.rs3 + `NR_BITS'(8);
+        end
+    end
 
     always @(posedge clk) begin
         if (uop_start) begin

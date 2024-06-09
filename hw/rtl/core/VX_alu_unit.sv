@@ -42,7 +42,7 @@ module VX_alu_unit #(
 
     `RESET_RELAY (dispatch_reset, reset);
 
-    VX_dispatch_unit #(
+    VX_dispatch_unit_sane #(
         .BLOCK_SIZE (BLOCK_SIZE),
         .NUM_LANES  (NUM_LANES),
         .OUT_REG    (PARTIAL_BW ? 1 : 0)

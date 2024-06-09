@@ -347,7 +347,7 @@ void dpi_fmax(bool enable, int dst_fmt, int64_t a, int64_t b, int64_t* result, s
 
 // A is M * K, B is K * M, C is M * M, D is M * M
 #define M 4
-#define K 2
+#define K 2 // FIXME: 4x4x1 / cycle / octet!
 
 // all row major
 float c_A_tile[M][K];
@@ -357,6 +357,15 @@ float c_D_tile[M][M];
 
 // code assumes that svBitVecVal is basically a uint32_t
 static_assert(sizeof(svBitVecVal) == 4);
+
+void clear_float_array(float* c_tile, int rows, int cols) {
+  for (int i = 0; i < rows; i += 1) {
+    for (int j = 0; j < cols; j += 1) {
+      int index = i * cols + j;
+      c_tile[index] = 0.0f;
+    }
+  }
+}
 
 void fill_float_array(const svBitVecVal* sv_tile, float* c_tile, int rows, int cols) {
   
@@ -396,6 +405,11 @@ void dpi_hmma(bool enable, const svBitVecVal* A_tile, const svBitVecVal* B_tile,
   if (!enable) {
     return;
   }
+  clear_float_array(&c_A_tile[0][0], M, K);
+  clear_float_array(&c_B_tile[0][0], K, M);
+  clear_float_array(&c_C_tile[0][0], M, M);
+  clear_float_array(&c_D_tile[0][0], M, M);
+
   // std::cout << "A: " << std::endl;
   fill_float_array(A_tile, &c_A_tile[0][0], M, K);
   // std::cout << "B: " << std::endl;
@@ -551,7 +565,7 @@ void dpi_print_results(int wid, int octet, const svBitVecVal* A_tile, const svBi
   }
 
   steps[wid] += 1;
-  if (steps[wid] % 64 == 0) {
+  if (steps[wid] % 32 == 0) {
     steps[wid] = 0;
     std::cout << "warp " << wid << " finished wmma\n";
     std::cout << "A tile" << "\n";

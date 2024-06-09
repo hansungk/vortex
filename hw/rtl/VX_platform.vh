@@ -14,7 +14,7 @@
 `ifndef VX_PLATFORM_VH
 `define VX_PLATFORM_VH
 
-// synthesis only
+// enable synthesizable build if SIMULATION not explicitly defined
 `ifndef SIMULATION
 `define SYNTHESIS
 `define NDEBUG
