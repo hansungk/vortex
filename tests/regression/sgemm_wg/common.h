@@ -3,7 +3,7 @@
 
 #include <cstdint>
 
-#define KERNEL_ARG_DEV_MEM_ADDR 0x7fff0000
+#define KERNEL_ARG_DEV_MEM_ADDR 0x9fff0000
 #define DEV_SMEM_START_ADDR 0xff000000
 
 typedef struct {

@@ -10,6 +10,7 @@ ENTRY(_start)
 
 MEMORY {
   DRAM0    (rwx): ORIGIN = 0x80000000, LENGTH = 512M
+  DRAMARG  (rwx): ORIGIN = 0x9fff0000, LENGTH = 8K
   DRAM1    (rwx): ORIGIN = 0xa0000000, LENGTH = 16M
   DRAM2    (rwx): ORIGIN = 0xa1000000, LENGTH = 16M
 }
@@ -275,6 +276,10 @@ SECTIONS
   .gnu.attributes 0 : { KEEP (*(.gnu.attributes)) }
   /DISCARD/ : { *(.note.GNU-stack) *(.gnu_debuglink) *(.gnu.lto_*) }
 
+  .args : {
+    *(.args)
+    . += 8K;
+  }> DRAMARG
   .operand.a : {
     *(.operand.a)
     . += 32K;

@@ -49,7 +49,7 @@ VX_CP  = $(LLVM_VORTEX)/bin/llvm-objcopy
 #VX_CP  = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-objcopy
 
 VX_CFLAGS += -v -O3 -std=c++17
-VX_CFLAGS += -mcmodel=medany -fno-rtti -fno-exceptions -nostartfiles -fdata-sections -ffunction-sections
+VX_CFLAGS += -mcmodel=medany -fno-rtti -fno-exceptions -nostartfiles -fdata-sections -ffunction-sections -mllvm -inline-threshold=8192
 VX_CFLAGS += -I$(VORTEX_KN_PATH)/include -I$(VORTEX_KN_PATH)/../hw -I$(GEMMINI_SW_PATH)
 VX_CFLAGS += -DNDEBUG -DLLVM_VORTEX
 
@@ -83,7 +83,7 @@ endif
 # CONFIG is supplied from the command line to differentiate ELF files with custom suffixes
 CONFIGEXT = $(if $(CONFIG),.$(CONFIG),)
 
-all: $(PROJECT) kernel.bin kernel.dump kernel.radiance.dump kernel.radiance$(CONFIGEXT).dump
+all: $(PROJECT) kernel.bin kernel.dump kernel.radiance.dump kernel$(CONFIGEXT).dump kernel.radiance$(CONFIGEXT).dump
 
 kernel.dump: kernel.elf
 	$(VX_DP) -D kernel.elf > kernel.dump
@@ -92,6 +92,9 @@ kernel.radiance.dump: kernel.radiance.elf
 	$(VX_DP) -D kernel.radiance.elf > kernel.radiance.dump
 
 ifneq ($(CONFIG),)
+kernel$(CONFIGEXT).dump: kernel$(CONFIGEXT).elf
+	$(VX_DP) -D kernel$(CONFIGEXT).elf > kernel$(CONFIGEXT).dump
+
 kernel.radiance$(CONFIGEXT).dump: kernel.radiance$(CONFIGEXT).elf
 	$(VX_DP) -D kernel.radiance$(CONFIGEXT).elf > kernel.radiance$(CONFIGEXT).dump
 endif
@@ -99,19 +102,30 @@ endif
 kernel.bin: kernel.elf kernel.radiance.elf
 	$(VX_CP) -O binary kernel.elf kernel.bin
 
-kernel.elf: $(VX_SRCS)
-	$(VX_CXX) $(VX_CFLAGS) $(VX_SRCS) $(VX_LDFLAGS) -o kernel.elf
-
-OBJCOPY ?= "riscv32-unknown-elf-objcopy"
+OBJCOPY ?= $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-objcopy
 OBJCOPY_FLAGS ?= "LOAD,ALLOC,DATA,CONTENTS"
-kernel.radiance.elf: kernel.elf
-	$(VX_CXX) $(VX_CFLAGS) $(VX_SRCS) $(VX_LDFLAGS) -DRADIANCE -o kernel.radiance.elf
-	$(OBJCOPY) --set-section-flags .operand.a=$(OBJCOPY_FLAGS) kernel.radiance.elf
-	$(OBJCOPY) --set-section-flags .operand.b=$(OBJCOPY_FLAGS) kernel.radiance.elf
-	$(OBJCOPY) --update-section .operand.a=input.a.bin kernel.radiance.elf
-	$(OBJCOPY) --update-section .operand.b=input.b.bin kernel.radiance.elf
+kernel.elf: $(VX_SRCS)
+	$(VX_CXX) $(VX_CFLAGS) $(VX_SRCS) $(VX_LDFLAGS) -o $@
+	$(OBJCOPY) --set-section-flags .operand.a=$(OBJCOPY_FLAGS) $@
+	$(OBJCOPY) --set-section-flags .operand.b=$(OBJCOPY_FLAGS) $@
+	$(OBJCOPY) --set-section-flags .args=$(OBJCOPY_FLAGS) $@
+	$(OBJCOPY) --update-section .operand.a=input.a.bin $@
+	$(OBJCOPY) --update-section .operand.b=input.b.bin $@
+	$(OBJCOPY) --update-section .args=args.bin $@
+
+kernel.radiance.elf: $(VX_SRCS)
+	$(VX_CXX) $(VX_CFLAGS) $(VX_SRCS) $(VX_LDFLAGS) -DRADIANCE -o $@
+	$(OBJCOPY) --set-section-flags .operand.a=$(OBJCOPY_FLAGS) $@
+	$(OBJCOPY) --set-section-flags .operand.b=$(OBJCOPY_FLAGS) $@
+	$(OBJCOPY) --set-section-flags .args=$(OBJCOPY_FLAGS) $@
+	$(OBJCOPY) --update-section .operand.a=input.a.bin $@
+	$(OBJCOPY) --update-section .operand.b=input.b.bin $@
+	$(OBJCOPY) --update-section .args=args.bin $@
 
 ifneq ($(CONFIG),)
+kernel$(CONFIGEXT).elf: kernel.elf
+	cp $< $@
+
 kernel.radiance$(CONFIGEXT).elf: kernel.radiance.elf
 	cp $< $@
 endif

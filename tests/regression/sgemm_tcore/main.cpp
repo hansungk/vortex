@@ -12,7 +12,7 @@
      if (0 == _ret)                                             \
        break;                                                   \
      printf("Error: '%s' returned %d!\n", #_expr, (int)_ret);   \
-     cleanup();                                                       \
+	 cleanup();			                                              \
      exit(-1);                                                  \
    } while (false)
 
@@ -58,9 +58,9 @@ static void parse_args(int argc, char **argv) {
 
 void cleanup() {
   if (device) {
-    vx_mem_free(device, kernel_arg.addr_a);
-    vx_mem_free(device, kernel_arg.addr_b);
-    vx_mem_free(device, kernel_arg.addr_c);
+    // vx_mem_free(device, kernel_arg.addr_a);
+    // vx_mem_free(device, kernel_arg.addr_b);
+    // vx_mem_free(device, kernel_arg.addr_c);
     vx_dev_close(device);
   }
 }
@@ -147,12 +147,21 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_dev_open(&device));
 
   // FIXME: hardcoded
-  uint32_t dim_m = 64;
-  uint32_t dim_n = 64;
-  uint32_t dim_k = 64;
+  uint32_t dim_m = 128;
+  uint32_t dim_n = 128;
+  uint32_t dim_k = 128;
 
   generate_source_matrix(dim_m, dim_n, dim_k);
   generate_reference_matmul(dim_m, dim_n, dim_k);
+
+  std::cout << "write reference output" << std::endl;
+  std::ofstream ref_file("reference.c.bin", std::ios::binary | std::ios::out);
+  if (!ref_file) {
+    std::cerr << "error: failed to open reference.c.bin for writing\n";
+    exit(EXIT_FAILURE);
+  }
+  ref_file.write(reinterpret_cast<char *>(ref_data.data()), ref_data.size() * sizeof(ref_data[0]));
+  ref_file.close();
 
   uint32_t src_a_buf_size = src_a_data.size() * sizeof(src_a_data[0]);
   uint32_t src_b_buf_size = src_b_data.size() * sizeof(src_b_data[0]);
@@ -166,9 +175,12 @@ int main(int argc, char *argv[]) {
 
   // allocate device memory
   std::cout << "allocate device memory" << std::endl;
-  RT_CHECK(vx_mem_alloc(device, src_a_buf_size, VX_MEM_TYPE_GLOBAL, &kernel_arg.addr_a));
-  RT_CHECK(vx_mem_alloc(device, src_b_buf_size, VX_MEM_TYPE_GLOBAL, &kernel_arg.addr_b));
-  RT_CHECK(vx_mem_alloc(device, dst_buf_size, VX_MEM_TYPE_GLOBAL, &kernel_arg.addr_c));
+  // RT_CHECK(vx_mem_alloc(device, src_a_buf_size, VX_MEM_TYPE_GLOBAL, &kernel_arg.addr_a));
+  // RT_CHECK(vx_mem_alloc(device, src_b_buf_size, VX_MEM_TYPE_GLOBAL, &kernel_arg.addr_b));
+  // RT_CHECK(vx_mem_alloc(device, dst_buf_size, VX_MEM_TYPE_GLOBAL, &kernel_arg.addr_c));
+  kernel_arg.addr_a = 0xa0000000;
+  kernel_arg.addr_b = 0xa1000000;
+  kernel_arg.addr_c = 0xc0000000;
 
   kernel_arg.dim_m = dim_m;
   kernel_arg.dim_n = dim_n;
@@ -193,10 +205,8 @@ int main(int argc, char *argv[]) {
   {
     std::cout << "upload kernel argument" << std::endl;
     auto buf_ptr = staging_buf.data();
-    kernel_arg.addr_a = (uint64_t) 0xa0000000ULL;
-    kernel_arg.addr_b = (uint64_t) 0xa1000000ULL;
-    kernel_arg.addr_c = (uint64_t) 0xc0000000ULL;
     memcpy(buf_ptr, &kernel_arg, sizeof(kernel_arg_t));
+    RT_CHECK(vx_copy_to_dev(device, KERNEL_ARG_DEV_MEM_ADDR, staging_buf.data(), sizeof(kernel_arg_t)));
 
     std::cout << "uploading argument buffer to device, device mem address="
               << std::hex << KERNEL_ARG_DEV_MEM_ADDR << ", size=" << std::dec
@@ -209,8 +219,6 @@ int main(int argc, char *argv[]) {
     file.write(reinterpret_cast<char *>(staging_buf.data()),
                sizeof(kernel_arg_t));
     file.close();
-
-    RT_CHECK(vx_copy_to_dev(device, KERNEL_ARG_DEV_MEM_ADDR, staging_buf.data(), sizeof(kernel_arg_t)));
   }
 
   // upload source buffer
