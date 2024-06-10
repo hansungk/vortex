@@ -41,6 +41,7 @@
 #define PRINTF(...) sprintf(PRINT_BUF, __VA_ARGS__)
 // #define PRINTF(...) vx_printf(__VA_ARGS__)
 #define SWISH(beta, x) ((x) / (1 + exp(-(beta) * (x))))
+#define POWER
 
 inline void threadblock_barrier(unsigned int barrier_id, unsigned int count) {
   vx_fence();
@@ -139,16 +140,21 @@ void thread_block_matmul_gemmini(kernel_arg_t *__UNIFORM__ arg,
     threadblock_barrier(/*barrier_id=*/0, /*count=*/NUM_WARPS);
     rd_cycles_force(marker1);
     if (HW_TID() == 0) {
-      PRINTF("\ncomplete\n");
-      PRINTF("total cycles:         %d\n", marker1 - marker0);
-      for (int i = 0; i < dim_m; i += 8) {
-        for (int j = 0; j < dim_n; j += 8) {
-          PRINTF("%d %d ", (int) (C[i * dim_n + j]), (int) (C[i * dim_n + j + 4]));
+      #ifdef POWER
+        PRINTF("\nstart %d end %d\n", marker0, marker1);
+      #else
+        PRINTF("\ncomplete\n");
+        PRINTF("total cycles:         %d\n", marker1 - marker0);
+        for (int i = 0; i < dim_m; i += 8) {
+          for (int j = 0; j < dim_n; j += 8) {
+            PRINTF("%d %d ", (int) (C[i * dim_n + j]), (int) (C[i * dim_n + j + 4]));
+          }
+          PRINTF("\n");
         }
-        PRINTF("\n");
-      }
+      #endif
     }
   }
+  threadblock_barrier(/*barrier_id=*/0, /*count=*/NUM_WARPS);
   vx_tmc(0);
 }
 

@@ -32,6 +32,7 @@
 #define REMATERIALIZE
 #define DBUF
 //#define CISC
+#define POWER
 
 //#define DEBUG_PRINT
 //#define DETAILED_PERF
@@ -504,6 +505,11 @@ void thread_block_matmul_gemmini(kernel_arg_t *__UNIFORM__ arg,
   if (threadblock_id == NUM_CLUSTERS - 1) {
     threadblock_barrier(/*barrier_id=*/0, /*count=*/NUM_WARPS);
     rd_cycles_force(marker9);
+    #ifdef POWER
+    if (HW_TID() == 0) {
+        PRINTF("\nstart %d end %d\n", marker0, marker9);
+    }
+    #else
     if (HW_TID() == 0) {
       PRINTF("\ncomplete\n");
       PRINTF("total cycles:         %d\n", marker9 - marker0);
@@ -541,7 +547,9 @@ void thread_block_matmul_gemmini(kernel_arg_t *__UNIFORM__ arg,
         PRINTF("\n");
       }
     }
+    #endif
   }
+  threadblock_barrier(/*barrier_id=*/0, /*count=*/NUM_WARPS);
   vx_tmc(0);
 }
 
