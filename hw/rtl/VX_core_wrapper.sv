@@ -495,28 +495,34 @@ module Vortex import VX_gpu_pkg::*; #(
     //     .busy(busy)
     // );
 
-    always @(*) begin
-        if (busy === 1'b0) begin
-            $display("---------------- no more active warps ----------------");
-            `ifdef SIMULATION
-            if ($time >= 60000) begin
-              $display("simulation has probably ended. exiting");
-              @(posedge clock) $finish();
+    always @(posedge clock) begin
+        if (!reset) begin
+            if (finished) begin
+                `ifdef SIMULATION
+                    $display("---------------- core%2d has no more active warps ----------------", CORE_ID);
+                    $display("simulation has ended. exiting");
+                    $finish();
+                `endif
+                // `ifdef SIMULATION
+                // if ($time >= 60000) begin
+                //   $display("simulation has probably ended. exiting");
+                //   @(posedge clock) $finish();
+                // end
+                // `endif
+                // TODO: lane assumed to be 4
+                // `ifndef SYNTHESIS
+                // for (integer j = 0; j < `NUM_WARPS; j++) begin
+                //     $display("warp %2d", j);
+                //     for (integer k = 0; k < `NUM_REGS; k += 1)
+                //         $display("x%2d: %08x  %08x  %08x  %08x", k,
+                //             pipeline.issue.gpr_stage.iports[/*thread*/0].dp_ram1.not_out_reg.reg_dump.ram[j * `NUM_REGS + k],
+                //             pipeline.issue.gpr_stage.iports[/*thread*/1].dp_ram1.not_out_reg.reg_dump.ram[j * `NUM_REGS + k],
+                //             pipeline.issue.gpr_stage.iports[/*thread*/2].dp_ram1.not_out_reg.reg_dump.ram[j * `NUM_REGS + k],
+                //             pipeline.issue.gpr_stage.iports[/*thread*/3].dp_ram1.not_out_reg.reg_dump.ram[j * `NUM_REGS + k]);
+                //     end
+                // `endif
+                // @(posedge clock) $finish();
             end
-            `endif
-            // TODO: lane assumed to be 4
-            // `ifndef SYNTHESIS
-            // for (integer j = 0; j < `NUM_WARPS; j++) begin
-            //     $display("warp %2d", j);
-            //     for (integer k = 0; k < `NUM_REGS; k += 1)
-            //         $display("x%2d: %08x  %08x  %08x  %08x", k,
-            //             pipeline.issue.gpr_stage.iports[/*thread*/0].dp_ram1.not_out_reg.reg_dump.ram[j * `NUM_REGS + k],
-            //             pipeline.issue.gpr_stage.iports[/*thread*/1].dp_ram1.not_out_reg.reg_dump.ram[j * `NUM_REGS + k],
-            //             pipeline.issue.gpr_stage.iports[/*thread*/2].dp_ram1.not_out_reg.reg_dump.ram[j * `NUM_REGS + k],
-            //             pipeline.issue.gpr_stage.iports[/*thread*/3].dp_ram1.not_out_reg.reg_dump.ram[j * `NUM_REGS + k]);
-            //     end
-            // `endif
-            // @(posedge clock) $finish();
         end
     end
 
