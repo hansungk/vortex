@@ -5,324 +5,11 @@
 #include <vx_print.h>
 #include <vx_spawn.h>
 #include "common.h"
-
-#define NUM_LANES 8
-
-// number of loop around the inner 0..TCK..BK loop to simulate perfect-DRAM
-// scenario
-#define BK_LOOP 1
-#define TRANSPOSE_AS 1
-// GMEM_COALESCED sets bank conflict-free accesses for
-// 1: GMEM loads of A matrix
-// 0: SMEM stores of A matrix
-#define GMEM_COALESCED_A 1
+#include "util.hpp"
 
 #define DOUBLE_BUFFER 1
-
-// Constraints on parameters:
-// * Memory:
-//   (BM + BN) * BK * sizeof(float) <= sharedmem size.
-//   BM * BK == BN * BK >= threadblock size >= NT * CORES_PER_CLUSTER
-//     When larger, the kernel runs a sequential loop to read into sharedmem;
-//     but smaller case is not handled.
-// * Compute:
-//   ( M* N) / (TM*TN) == grid size >= NC*NW*NT
-//   (BM*BN) / (TM*TN) == threadblock size < NT * NW * CORES_PER_CLUSTER
-//   (BM*BN) / (TM*TN) == threadblock size >= NT * CORES_PER_CLUSTER
-// * Combining BM * BK >= (BM*BN) / (TM*TN) == threadblock yields
-//   BM <= BK*TM*TN
-#define BM 32
-#define BN 32
-#define BK 32
-#define WM 16
-#define WN 8
-#define TCM 8
-#define TCN 8
-#define TCK 8
-#define WMITER (WM / TCM)
-#define WNITER (WN / TCN)
+#undef ELEM_PER_THREAD
 #define ELEM_PER_THREAD (WMITER * WNITER * ((TCM * TCN) / NUM_LANES) / (DOUBLE_BUFFER ? 2 : 1))
-
-// FIXME: NUM_THREADS and NUM_WARPS hardcoded
-#if ((BM * BN / ELEM_PER_THREAD) > (CORES_PER_CLUSTER * 8 * 8))
-#error "threadblock size too big for cluster"
-#endif
-
-inline constexpr void map_operand_32lanes(const int tid, int &row, int &col) {
-  const int tg = tid / 4;
-
-  // A (row major)
-  // Figure 7(a) in paper
-  // row  0~ 3: threadgroups 0 and 2
-  // row  4~ 7: threadgroups 4 and 6
-  // row  8~11: threadgroups 1 and 3
-  // row 12~15: threadgroups 5 and 7
-  row = tid % 4;
-  row += (tg * 8) % 16;
-  row += (tg / 4) * 4;
-
-  // B (column major)
-  // NOTE: Matrix B mapping in Figure 7(a) is incorrect; below is the
-  // corrected mapping:
-  // col  0~ 3: threadgroups 0 and 1
-  // col  4~ 7: threadgroups 4 and 5
-  // col  8~11: threadgroups 2 and 3
-  // col 12~15: threadgroups 6 and 7
-  col = tid % 4;
-  col += ((tg % 4) / 2) * 8;
-  col += (tg / 4) * 4;
-}
-
-inline constexpr void map_operand_8lanes(const int tid, int &row, int &col) {
-  const int tg = tid / 4;
-
-  // A (row major)
-  // row  0~ 3: threadgroup 0
-  // row  4~ 7: threadgroup 1
-  row = tid % 4;
-  row += tg * 4;
-
-  // B (column major)
-  // col  0~ 3: threadgroup 0
-  // col  4~ 7: threadgroup 1
-  col = tid % 4;
-  col += tg * 4;
-}
-
-inline constexpr void map_operand(const int tid, int &row, int &col) {
-  if constexpr (NUM_LANES == 32) {
-    map_operand_32lanes(tid, row, col);
-  } else if constexpr (NUM_LANES == 8) {
-    map_operand_8lanes(tid, row, col);
-  } else {
-    // FIXME: not allowed
-  }
-}
-
-inline constexpr void map_c_32lanes(const int tid, int &row, int &col) {
-  const int tg = tid / 4;
-
-  // C
-  // Figure 7(b), left
-  col = ((tg % 4) / 2) * 8;
-  row = (tg * 8) % 16;
-  row += (tg / 4) * 4;
-
-  // Figure 7(b), right
-  row += (tid % 4) % 2;
-  col += ((tid % 4) / 2) * 2;
-}
-
-inline constexpr void map_c_8lanes(const int tid, int &row, int &col) {
-  const int tg = tid / 4;
-
-  // C
-  col = 0;
-  row = tg * 4;
-
-  // Figure 7(b), right
-  row += (tid % 4) % 2;
-  col += ((tid % 4) / 2) * 2;
-}
-
-inline constexpr void map_c(const int tid, int &row, int &col) {
-  if constexpr (NUM_LANES == 32) {
-    map_c_32lanes(tid, row, col);
-  } else if constexpr (NUM_LANES == 8) {
-    map_c_8lanes(tid, row, col);
-  } else {
-    // FIXME: not allowed
-  }
-}
-
-inline void vx_wmma(const int dest_reg) {
-  if (dest_reg == 0) {
-    asm volatile (".insn r %0, 0, 0, x0, x0, x0" :: "i"(RISCV_CUSTOM3));
-  } else {
-    asm volatile (".insn r %0, 0, 0, x1, x0, x0" :: "i"(RISCV_CUSTOM3));
-  }
-}
-
-// `local_k` is assumed to be multiple of TCK
-inline void vx_wmma_load_a(volatile float *smem_A, const int local_k,
-                  const int warp_row, const int wm_iter, const int thread_in_warp) {
-  const int tid = thread_in_warp;
-  const int tg = tid / 4;
-
-  // TODO: this is duplicately computed between vx_wmma_load_a and vx_wmma_load_b
-  int row = 0;
-  int col = 0;
-  map_operand(tid, row, col);
-
-  constexpr int smem_A_rows = BM;
-  constexpr int smem_A_cols = BK;
-  constexpr int smem_AS_rows = BK;
-  constexpr int smem_AS_cols = BM;
-
-  if constexpr (!TRANSPOSE_AS) {
-    int A_offset = (WM * warp_row + TCM * wm_iter + row) * smem_A_cols;
-
-    // @perf: bank conflicts
-    // f8-f15 stores a single row of A
-    asm volatile("flw  f0, %0" ::"m"(smem_A[A_offset + (local_k + 0)]));
-    asm volatile("flw  f1, %0" ::"m"(smem_A[A_offset + (local_k + 1)]));
-    asm volatile("flw  f2, %0" ::"m"(smem_A[A_offset + (local_k + 2)]));
-    asm volatile("flw  f3, %0" ::"m"(smem_A[A_offset + (local_k + 3)]));
-    asm volatile("flw  f4, %0" ::"m"(smem_A[A_offset + (local_k + 4)]));
-    asm volatile("flw  f5, %0" ::"m"(smem_A[A_offset + (local_k + 5)]));
-    asm volatile("flw  f6, %0" ::"m"(smem_A[A_offset + (local_k + 6)]));
-    asm volatile("flw  f7, %0" ::"m"(smem_A[A_offset + (local_k + 7)]));
-  } else {
-    // transposed A
-    // f8-f15 stores a single row of A
-    volatile float *smem_addr;
-    smem_addr = &smem_A[((local_k + 0) * smem_AS_cols) + (WM * warp_row + TCM * wm_iter) + row];
-    asm volatile("flw  f0, %0(%1)" :: "i"(smem_AS_cols * 0 * sizeof(float)), "r"(smem_addr));
-    asm volatile("flw  f1, %0(%1)" :: "i"(smem_AS_cols * 1 * sizeof(float)), "r"(smem_addr));
-    asm volatile("flw  f2, %0(%1)" :: "i"(smem_AS_cols * 2 * sizeof(float)), "r"(smem_addr));
-    asm volatile("flw  f3, %0(%1)" :: "i"(smem_AS_cols * 3 * sizeof(float)), "r"(smem_addr));
-    asm volatile("flw  f4, %0(%1)" :: "i"(smem_AS_cols * 4 * sizeof(float)), "r"(smem_addr));
-    asm volatile("flw  f5, %0(%1)" :: "i"(smem_AS_cols * 5 * sizeof(float)), "r"(smem_addr));
-    asm volatile("flw  f6, %0(%1)" :: "i"(smem_AS_cols * 6 * sizeof(float)), "r"(smem_addr));
-    asm volatile("flw  f7, %0(%1)" :: "i"(smem_AS_cols * 7 * sizeof(float)), "r"(smem_addr));
-
-    // asm volatile("flw  f0, %0" ::"m"(smem_A[((local_k + 0) * smem_AS_cols) + (WM * warp_row + TCM * wm_iter) + row]));
-    // asm volatile("flw  f1, %0" ::"m"(smem_A[((local_k + 1) * smem_AS_cols) + (WM * warp_row + TCM * wm_iter) + row]));
-    // asm volatile("flw  f2, %0" ::"m"(smem_A[((local_k + 2) * smem_AS_cols) + (WM * warp_row + TCM * wm_iter) + row]));
-    // asm volatile("flw  f3, %0" ::"m"(smem_A[((local_k + 3) * smem_AS_cols) + (WM * warp_row + TCM * wm_iter) + row]));
-    // asm volatile("flw  f4, %0" ::"m"(smem_A[((local_k + 4) * smem_AS_cols) + (WM * warp_row + TCM * wm_iter) + row]));
-    // asm volatile("flw  f5, %0" ::"m"(smem_A[((local_k + 5) * smem_AS_cols) + (WM * warp_row + TCM * wm_iter) + row]));
-    // asm volatile("flw  f6, %0" ::"m"(smem_A[((local_k + 6) * smem_AS_cols) + (WM * warp_row + TCM * wm_iter) + row]));
-    // asm volatile("flw  f7, %0" ::"m"(smem_A[((local_k + 7) * smem_AS_cols) + (WM * warp_row + TCM * wm_iter) + row]));
-  }
-}
-
-// `local_k` is assumed to be multiple of TCK
-inline void vx_wmma_load_b(volatile float *smem_B, const int local_k,
-                           const int warp_col, const int wn_iter,
-                           const int thread_in_warp) {
-  const int tid = thread_in_warp;
-  const int tg = tid / 4;
-
-  int row = 0;
-  int col = 0;
-  map_operand(tid, row, col);
-
-  constexpr int smem_B_rows = BK;
-  constexpr int smem_B_cols = BN;
-
-  // f8-f15 stores a single column of B
-  volatile float *smem_addr;
-  smem_addr = &smem_B[((local_k + 0) * smem_B_cols) + (WN * warp_col + TCN * wn_iter) + col];
-  asm volatile("flw  f8, %0(%1)" :: "i"(smem_B_cols * 0 * sizeof(float)), "r"(smem_addr));
-  asm volatile("flw  f9, %0(%1)" :: "i"(smem_B_cols * 1 * sizeof(float)), "r"(smem_addr));
-  asm volatile("flw f10, %0(%1)" :: "i"(smem_B_cols * 2 * sizeof(float)), "r"(smem_addr));
-  asm volatile("flw f11, %0(%1)" :: "i"(smem_B_cols * 3 * sizeof(float)), "r"(smem_addr));
-  asm volatile("flw f12, %0(%1)" :: "i"(smem_B_cols * 4 * sizeof(float)), "r"(smem_addr));
-  asm volatile("flw f13, %0(%1)" :: "i"(smem_B_cols * 5 * sizeof(float)), "r"(smem_addr));
-  asm volatile("flw f14, %0(%1)" :: "i"(smem_B_cols * 6 * sizeof(float)), "r"(smem_addr));
-  asm volatile("flw f15, %0(%1)" :: "i"(smem_B_cols * 7 * sizeof(float)), "r"(smem_addr));
-
-  // asm volatile("flw  f8, %0" ::"m"(smem_B[((local_k + 0) * smem_B_cols) + (WN * warp_col + TCN * wn_iter) + col]));
-  // asm volatile("flw  f9, %0" ::"m"(smem_B[((local_k + 1) * smem_B_cols) + (WN * warp_col + TCN * wn_iter) + col]));
-  // asm volatile("flw f10, %0" ::"m"(smem_B[((local_k + 2) * smem_B_cols) + (WN * warp_col + TCN * wn_iter) + col]));
-  // asm volatile("flw f11, %0" ::"m"(smem_B[((local_k + 3) * smem_B_cols) + (WN * warp_col + TCN * wn_iter) + col]));
-  // asm volatile("flw f12, %0" ::"m"(smem_B[((local_k + 4) * smem_B_cols) + (WN * warp_col + TCN * wn_iter) + col]));
-  // asm volatile("flw f13, %0" ::"m"(smem_B[((local_k + 5) * smem_B_cols) + (WN * warp_col + TCN * wn_iter) + col]));
-  // asm volatile("flw f14, %0" ::"m"(smem_B[((local_k + 6) * smem_B_cols) + (WN * warp_col + TCN * wn_iter) + col]));
-  // asm volatile("flw f15, %0" ::"m"(smem_B[((local_k + 7) * smem_B_cols) + (WN * warp_col + TCN * wn_iter) + col]));
-}
-
-inline void initialize_C(const int dest_reg) {
-  // initialize C to zeros
-  if (dest_reg == 0) {
-    asm volatile("fmv.w.x f16, x0");
-    asm volatile("fmv.w.x f17, x0");
-    asm volatile("fmv.w.x f18, x0");
-    asm volatile("fmv.w.x f19, x0");
-    asm volatile("fmv.w.x f20, x0");
-    asm volatile("fmv.w.x f21, x0");
-    asm volatile("fmv.w.x f22, x0");
-    asm volatile("fmv.w.x f23, x0");
-  } else {
-    asm volatile("fmv.w.x f24, x0");
-    asm volatile("fmv.w.x f25, x0");
-    asm volatile("fmv.w.x f26, x0");
-    asm volatile("fmv.w.x f27, x0");
-    asm volatile("fmv.w.x f28, x0");
-    asm volatile("fmv.w.x f29, x0");
-    asm volatile("fmv.w.x f30, x0");
-    asm volatile("fmv.w.x f31, x0");
-  }
-}
-
-inline void write_results(const int thread_in_warp, const int warp_col,
-                          const int warp_row, const int wn_iter,
-                          const int wm_iter, const int dim_n,
-                          float *C, const int threadblock_id_x,
-                          const int threadblock_id_y) {
-  int tid = thread_in_warp;
-  int tg = tid / 4;
-
-  // these are [0, TCM/TCN)
-  int tid_row = 0;
-  int tid_col = 0;
-  map_c(tid, tid_row, tid_col);
-
-  int local_row = (WM * warp_row + TCM * wm_iter) + tid_row;
-  int local_col = (WN * warp_col + TCN * wn_iter) + tid_col;
-
-  float *global_offset_C = C +
-                           (BM * threadblock_id_y) * dim_n +
-                           BN * threadblock_id_x;
-
-  // @perf: this likely causes a lot of gmem bank conflicts
-  if (wm_iter == 0) {
-    volatile float *gmem_addr;
-    volatile float *gmem_addr_tmp;
-    gmem_addr = &global_offset_C[dim_n * (local_row + 0) + (local_col + 0)];
-    asm volatile ("fsw f16, %0" :: "m"(*(gmem_addr + 0)));
-    asm volatile ("fsw f17, %0" :: "m"(*(gmem_addr + 1)));
-    gmem_addr_tmp = gmem_addr + (2 * dim_n);
-    asm volatile ("fsw f18, %0" :: "m"(*(gmem_addr_tmp + 0)));
-    asm volatile ("fsw f19, %0" :: "m"(*(gmem_addr_tmp + 1)));
-    gmem_addr += 4;
-    asm volatile ("fsw f20, %0" :: "m"(*(gmem_addr + 0)));
-    asm volatile ("fsw f21, %0" :: "m"(*(gmem_addr + 1)));
-    gmem_addr_tmp = gmem_addr + (2 * dim_n);
-    asm volatile ("fsw f22, %0" :: "m"(*(gmem_addr_tmp + 0)));
-    asm volatile ("fsw f23, %0" :: "m"(*(gmem_addr_tmp + 1)));
-    // asm volatile ("fsw f16, %0" :: "m"(global_offset_C[dim_n * (local_row + 0) + (local_col + 0)]));
-    // asm volatile ("fsw f17, %0" :: "m"(global_offset_C[dim_n * (local_row + 0) + (local_col + 1)]));
-    // asm volatile ("fsw f18, %0" :: "m"(global_offset_C[dim_n * (local_row + 2) + (local_col + 0)]));
-    // asm volatile ("fsw f19, %0" :: "m"(global_offset_C[dim_n * (local_row + 2) + (local_col + 1)]));
-    // asm volatile ("fsw f20, %0" :: "m"(global_offset_C[dim_n * (local_row + 0) + (local_col + 4)]));
-    // asm volatile ("fsw f21, %0" :: "m"(global_offset_C[dim_n * (local_row + 0) + (local_col + 5)]));
-    // asm volatile ("fsw f22, %0" :: "m"(global_offset_C[dim_n * (local_row + 2) + (local_col + 4)]));
-    // asm volatile ("fsw f23, %0" :: "m"(global_offset_C[dim_n * (local_row + 2) + (local_col + 5)]));
-  } else {
-    volatile float *gmem_addr;
-    volatile float *gmem_addr_tmp;
-    gmem_addr = &global_offset_C[dim_n * (local_row + 0) + (local_col + 0)];
-    gmem_addr_tmp = gmem_addr + (2 * dim_n);
-    asm volatile ("fsw f24, %0" :: "m"(*(gmem_addr + 0)));
-    asm volatile ("fsw f25, %0" :: "m"(*(gmem_addr + 1)));
-    asm volatile ("fsw f26, %0" :: "m"(*(gmem_addr_tmp + 0)));
-    asm volatile ("fsw f27, %0" :: "m"(*(gmem_addr_tmp + 1)));
-    gmem_addr += 4;
-    gmem_addr_tmp = gmem_addr + (2 * dim_n);
-    asm volatile ("fsw f28, %0" :: "m"(*(gmem_addr + 0)));
-    asm volatile ("fsw f29, %0" :: "m"(*(gmem_addr + 1)));
-    asm volatile ("fsw f30, %0" :: "m"(*(gmem_addr_tmp + 0)));
-    asm volatile ("fsw f31, %0" :: "m"(*(gmem_addr_tmp + 1)));
-  }
-}
-
-inline void threadblock_barrier(const uint32_t barrier_id, const uint32_t count) {
-  vx_fence();
-  vx_barrier(barrier_id, count);
-  // vx_barrier(0, count);
-}
 
 inline void global_dmem_load(const uint32_t dim_n, const uint32_t dim_k,
                              const uint32_t k, const float *A, const float *B,
@@ -535,11 +222,11 @@ inline void global_dmem_load(const uint32_t dim_n, const uint32_t dim_k,
 inline void thread_block_gemm(kernel_arg_t *__UNIFORM__ arg,
                               const uint32_t tid_in_threadblock,
                               const uint32_t threads_per_threadblock,
-                              const uint32_t threadblock_dim_x,
                               const uint32_t threadblock_dim_y,
                               /*const uint32_t threadblock_id_x,
                               const uint32_t threadblock_id_y,*/
-                              // const uint32_t threadblock_id_in_cluster,
+                              const uint32_t threadblocks_per_cluster,
+                              const uint32_t threadblock_id_in_cluster,
                               float *sharedmem_per_threadblock) {
   const float *A = (const float *)arg->addr_a;
   const float *B = (const float *)arg->addr_b;
@@ -574,10 +261,17 @@ inline void thread_block_gemm(kernel_arg_t *__UNIFORM__ arg,
   volatile float *local_a_buf = local_b + local_b_elems;
   volatile float *local_b_buf = local_a_buf + local_a_elems;
 
+  // divide rows (M) by the number of threadblocks
+  // FIXME: doesn't work with multiple clusters
+  const uint32_t dim_m_range = (dim_m / threadblocks_per_cluster);
+  const uint32_t dim_m_start = dim_m_range * threadblock_id_in_cluster;
+  const uint32_t block_m_start = dim_m_start / BM;
+  const uint32_t block_m_end = (dim_m_start + dim_m_range) / BM;
+
   if (warpgroup_id == 0) {
     // producer code: GMEM->SMEM data movement
 #pragma GCC unroll 1
-    for (uint32_t block_m = 0; (block_m * BM) < dim_m; block_m++) {
+    for (uint32_t block_m = block_m_start; block_m < block_m_end; block_m++) {
 #pragma GCC unroll 1
       for (uint32_t block_n = 0; (block_n * BN) < dim_n; block_n++) {
         if constexpr (DOUBLE_BUFFER) {
@@ -585,14 +279,14 @@ inline void thread_block_gemm(kernel_arg_t *__UNIFORM__ arg,
           global_dmem_load(dim_n, dim_k, 0 /*k*/, A, B, local_a, local_b,
                            tid_in_warpgroup, block_n, block_m);
 
-          threadblock_barrier(0/*threadblock_id_in_cluster*/, threadblock_dim_y);
+          threadblock_barrier(threadblock_id_in_cluster, threadblock_dim_y);
         }
 
         // NOTE: this *should* be signed integer to trigger arithmetic
         // right-shift
         int32_t k_index = 0;
 #pragma GCC unroll 1
-        for (uint32_t k = 0; k < (8 * dim_k) - BK; k += BK) {
+        for (uint32_t k = 0; k < (dim_k) - BK; k += BK) {
           volatile float *local_a_produce;
           volatile float *local_b_produce;
           if constexpr (DOUBLE_BUFFER) {
@@ -616,18 +310,18 @@ inline void thread_block_gemm(kernel_arg_t *__UNIFORM__ arg,
                            local_a_produce, local_b_produce, tid_in_warpgroup,
                            block_n, block_m);
 
-          threadblock_barrier(0/*threadblock_id_in_cluster*/, threadblock_dim_y);
+          threadblock_barrier(threadblock_id_in_cluster, threadblock_dim_y);
         }
 
         // sync with final consumer stage in the k-loop
-        threadblock_barrier(0/*threadblock_id_in_cluster*/, threadblock_dim_y);
+        threadblock_barrier(threadblock_id_in_cluster, threadblock_dim_y);
       }
     }
   } else {
     // consumer code: SMEM->RF and compute
 
 #pragma GCC unroll 1
-    for (uint32_t block_m = 0; (block_m * BM) < dim_m; block_m++) {
+    for (uint32_t block_m = block_m_start; block_m < block_m_end; block_m++) {
 #pragma GCC unroll 1
       for (uint32_t block_n = 0; (block_n * BN) < dim_n; block_n++) {
         // clear out C
@@ -635,13 +329,13 @@ inline void thread_block_gemm(kernel_arg_t *__UNIFORM__ arg,
         initialize_C(1);
 
         // sync with initial producer stage in the k-loop
-        threadblock_barrier(0/*threadblock_id_in_cluster*/, threadblock_dim_y);
+        threadblock_barrier(threadblock_id_in_cluster, threadblock_dim_y);
 
         // NOTE: this *should* be signed integer to trigger arithmetic
         // right-shift
         int32_t k_index = 0;
 #pragma GCC unroll 1
-        for (uint32_t k = 0; k < (8 * dim_k); k += BK) {
+        for (uint32_t k = 0; k < (dim_k); k += BK) {
           volatile float *local_a_consume;
           volatile float *local_b_consume;
           if constexpr (DOUBLE_BUFFER) {
@@ -684,7 +378,7 @@ inline void thread_block_gemm(kernel_arg_t *__UNIFORM__ arg,
             }
           }
 
-          threadblock_barrier(0/*threadblock_id_in_cluster*/, threadblock_dim_y);
+          threadblock_barrier(threadblock_id_in_cluster, threadblock_dim_y);
         }
 
 #pragma GCC unroll 1
@@ -706,19 +400,27 @@ void kernel_body(int task_id, kernel_arg_t *__UNIFORM__ arg) {
   // @perf: All threads are running these compute whose result is mostly same
   // across the threadblock
 
-  const uint32_t threads_per_threadblock = (BM * BN) / (ELEM_PER_THREAD);
 #ifdef RADIANCE
-  const uint32_t threadblocks_per_core = CORES_PER_CLUSTER * vx_num_threads() *
-                                         vx_num_warps() /
-                                         threads_per_threadblock;
+  constexpr uint32_t cores_per_cluster = CORES_PER_CLUSTER;
 #else
-  const uint32_t threadblocks_per_core =
-      vx_num_threads() * vx_num_warps() / threads_per_threadblock;
+  constexpr uint32_t cores_per_cluster = 1;
 #endif
-  const uint32_t threadblock_dim_x = vx_num_threads();
-  const uint32_t threadblock_dim_y = vx_num_warps() / threadblocks_per_core;
+
+  uint32_t threads_per_threadblock = (BM * BN) / (ELEM_PER_THREAD);
+  const uint32_t hw_threads_per_cluster =
+      cores_per_cluster * vx_num_threads() * vx_num_warps();
+  // cap maximum threadblock size to # of HW threads in cluster, to prevent
+  // multiple "wave" invocations which slows down the kernel
+  if (threads_per_threadblock > hw_threads_per_cluster) {
+    threads_per_threadblock = hw_threads_per_cluster;
+  }
+  const uint32_t threadblocks_per_cluster =
+      hw_threads_per_cluster / threads_per_threadblock;
+
+  const uint32_t threadblock_dim_y = vx_num_warps() / threadblocks_per_cluster;
   const int threadblock_id = task_id / threads_per_threadblock;
-  const int threadblock_id_in_cluster = threadblock_id % threadblocks_per_core;
+  const int threadblock_id_in_cluster =
+      threadblock_id % threadblocks_per_cluster;
   const int tid_in_threadblock = task_id % threads_per_threadblock;
 
   const uint32_t dim_m = arg->dim_m;
@@ -726,26 +428,35 @@ void kernel_body(int task_id, kernel_arg_t *__UNIFORM__ arg) {
   const uint32_t dim_n_in_blocks = dim_n / BN;
   const int threadblock_id_x = threadblock_id % dim_n_in_blocks;
   const int threadblock_id_y = threadblock_id / dim_n_in_blocks;
+  const uint32_t problem_size = (dim_m * dim_n) / (ELEM_PER_THREAD);
+  const uint32_t num_threadblocks = problem_size / threads_per_threadblock;
 
   // "static" shared memory allocation.  This would determine threadblock
   // occupancy of a single cluster
   float *sharedmem_per_threadblock =
-      (float *)DEV_SMEM_START_ADDR + (2 * BM * BK) * threadblock_id_in_cluster;
+      (float *)DEV_SMEM_START_ADDR +
+      2 /*double-buffering*/ * (2 * BM * BK) * threadblock_id_in_cluster;
 
-  const int warp_id = vx_warp_id();
   thread_block_gemm(arg, tid_in_threadblock, threads_per_threadblock,
-                    threadblock_dim_x, threadblock_dim_y, /*threadblock_id_x,
-                    threadblock_id_y,*/ /*threadblock_id_in_cluster, */
+                    threadblock_dim_y,
+                    /*threadblock_id_x, threadblock_id_y,*/
+                    threadblocks_per_cluster,
+                    // threadblock_id,
+                    threadblock_id_in_cluster,
                     sharedmem_per_threadblock);
 }
 
 int main() {
   kernel_arg_t *arg = (kernel_arg_t *)KERNEL_ARG_DEV_MEM_ADDR;
 
-  const uint32_t threads_per_cluster =
+  const uint32_t problem_size = (arg->dim_m * arg->dim_n) / (ELEM_PER_THREAD);
+  const uint32_t hw_threads_per_cluster =
       CORES_PER_CLUSTER * vx_num_threads() * vx_num_warps();
-  // const uint32_t grid_size = arg->dim_m * arg->dim_n / ELEM_PER_THREAD;
-  const uint32_t grid_size = threads_per_cluster;
+  // prevent launching more threads than the necessary problem size
+  // TODO: this does not take into account multiple clusters
+  const uint32_t grid_size = (problem_size > hw_threads_per_cluster)
+                                 ? hw_threads_per_cluster
+                                 : problem_size;
 
 #ifdef RADIANCE
   vx_spawn_tasks_cluster(grid_size, (vx_spawn_tasks_cb)kernel_body, arg);
