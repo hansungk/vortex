@@ -199,6 +199,20 @@ void vx_spawn_tasks_cluster(int num_tasks, vx_spawn_tasks_cb callback, void *arg
   const int cluster_id = core_id / CORES_PER_CLUSTER;
   const int core_id_in_cluster = core_id % CORES_PER_CLUSTER;
 
+  // try to fill up full clusters first
+  const int num_threads_in_cluster = CORES_PER_CLUSTER * NW * NT;
+  const int num_used_clusters =
+      (num_tasks + (num_threads_in_cluster - 1)) / num_threads_in_cluster;
+  if (cluster_id >= num_used_clusters) {
+      return; // terminate extra clusters
+  }
+  // fill up the last cluster with remaining tasks
+  const int num_full_clusters = num_tasks / num_threads_in_cluster;
+  int num_tasks_this_cluster = num_threads_in_cluster;
+  if (cluster_id >= num_full_clusters) {
+      num_tasks_this_cluster = num_tasks % num_threads_in_cluster;
+  }
+
   // Distribute threads equally across as many cores as possible, even if they
   // don't fill up NW*NT in a single core.  This makes sure the warps get evenly
   // distributed in a single cluster
@@ -208,14 +222,12 @@ void vx_spawn_tasks_cluster(int num_tasks, vx_spawn_tasks_cb callback, void *arg
   if (core_id >= num_active_cores)
     return; // terminate extra cores
 
-  // FIXME: assumes num_tasks is divisible by num_cluster
-  const int num_tasks_this_cluster = num_tasks / num_cluster;
-  const int num_full_warps = num_tasks_this_cluster / NT;
+  const int num_full_warps_this_cluster = num_tasks_this_cluster / NT;
   const int rem_threads_in_last_warp = num_tasks_this_cluster % NT;
   // const int num_warps = (num_tasks_this_cluster + (NT - 1)) / NT;
 
-  int num_warps_this_core = num_full_warps / CORES_PER_CLUSTER;
-  const int num_warps_in_last_row = num_full_warps % CORES_PER_CLUSTER;
+  int num_warps_this_core = num_full_warps_this_cluster / CORES_PER_CLUSTER;
+  const int num_warps_in_last_row = num_full_warps_this_cluster % CORES_PER_CLUSTER;
   if (core_id_in_cluster < num_warps_in_last_row) {
     num_warps_this_core++;
   }

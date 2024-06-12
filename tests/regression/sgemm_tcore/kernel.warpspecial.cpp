@@ -1,36 +1,15 @@
+#define RISCV_CUSTOM3   0x7B
+
 #include <stdint.h>
 #include <vx_intrinsics.h>
 #include <vx_print.h>
 #include <vx_spawn.h>
 #include "common.h"
 #include "util.hpp"
-#include "include/gemmini.h"
-#include "gemmini_mmio.h"
 
-#define GEMMINI_DMA 1
-#if SMEM_SIZE == 0x4000
-#define SMEM_ADDR_Q0 ((float * const) 0xff000000)
-#define SMEM_ADDR_Q1 ((float * const) 0xff001000)
-#define SMEM_ADDR_Q2 ((float * const) 0xff002000)
-#define SMEM_ADDR_Q3 ((float * const) 0xff003000)
-#define SPAD_ADDR_Q0 0x0
-#define SPAD_ADDR_Q1 0x80
-#define SPAD_ADDR_Q2 0x100
-#define SPAD_ADDR_Q3 0x180
-#define BOUND_INST 0x400040004ULL
-#elif SMEM_SIZE == 0x10000
-#define SMEM_ADDR_Q0 ((float * const) 0xff000000)
-#define SMEM_ADDR_Q1 ((float * const) 0xff004000)
-#define SMEM_ADDR_Q2 ((float * const) 0xff008000)
-#define SMEM_ADDR_Q3 ((float * const) 0xff00c000)
-#define SPAD_ADDR_Q0 0x0
-#define SPAD_ADDR_Q1 0x200
-#define SPAD_ADDR_Q2 0x400
-#define SPAD_ADDR_Q3 0x600
-#define BOUND_INST 0x800080008ULL
-#else
-#error Unsupported smem size
-#endif
+#define DOUBLE_BUFFER 1
+#undef ELEM_PER_THREAD
+#define ELEM_PER_THREAD (WMITER * WNITER * ((TCM * TCN) / NUM_LANES) / (DOUBLE_BUFFER ? 2 : 1))
 
 // FIXME: NUM_THREADS and NUM_WARPS hardcoded
 #if ((BM * BN / ELEM_PER_THREAD) > (CORES_PER_CLUSTER * 8 * 8))
@@ -50,7 +29,8 @@ inline void global_dmem_load(const uint32_t dim_n, const uint32_t dim_k,
   const uint32_t local_b_row = tid_in_threadblock / BN;
   const uint32_t local_b_col = tid_in_threadblock % BN;
 
-  constexpr uint32_t threads_in_threadblock = (BM * BN) / ELEM_PER_THREAD;
+  constexpr uint32_t threads_in_warpgroup =
+      (BM * BN) / ELEM_PER_THREAD / (DOUBLE_BUFFER ? 2 : 1); // FIXME
 
   // Data move from GMEM to SMEM
   //
@@ -59,34 +39,70 @@ inline void global_dmem_load(const uint32_t dim_n, const uint32_t dim_k,
   //
   // TODO: Sharedmem swizzling is important here
   if constexpr (!TRANSPOSE_AT_PRODUCE) {
-    // FIXME: !TRANSPOSE_AS code is old
+    // if !TRANSPOSE_AT_PRODUCE, we only support coalesced GMEM loads
+    static_assert(TRANSPOSE_AT_PRODUCE || GMEM_COALESCED_A);
 
     const uint32_t global_a_row = BM * threadblock_id_y + local_a_row;
     // number of rows a full TB can read at a time
-    constexpr uint32_t row_stride_a = threads_in_threadblock / BK;
+    constexpr uint32_t row_stride_a = threads_in_warpgroup / BK;
     const float *global_a = A + dim_k * global_a_row + (k + local_a_col);
     volatile float *local_a_tmp = local_a + BK * local_a_row + local_a_col;
 
+    static_assert(
+        row_stride_a * 8 <= BM,
+        "manual loop unrolling condition not met; consider increasing BM");
+    static_assert(
+        (BM % (row_stride_a * 8)) == 0,
+        "manual loop unrolling condition not met; BM should be power-of-two");
+
 #pragma GCC unroll 1
     for (uint32_t local_row_offset = 0; local_row_offset < BM;
-         local_row_offset += row_stride_a) {
+         local_row_offset += row_stride_a * 8) {
       // const uint32_t global_a_offset =
       //     dim_k * (global_a_row + local_row_offset) + (k + local_a_col);
       // local_a[BK * (local_a_row + local_row_offset) + local_a_col] =
       //     A[global_a_offset];
-      *local_a_tmp = *global_a;
+      //
+      // *local_a_tmp = *global_a;
+      // global_a += dim_k * row_stride_a;
+      // local_a_tmp += BK * row_stride_a;
 
+      asm volatile ("flw ft0, (%0)"   :: "r"(global_a));
       global_a += dim_k * row_stride_a;
-      local_a_tmp += BK * row_stride_a;
+      asm volatile ("flw ft1, (%0)"   :: "r"(global_a));
+      global_a += dim_k * row_stride_a;
+      asm volatile ("flw ft2, (%0)"   :: "r"(global_a));
+      global_a += dim_k * row_stride_a;
+      asm volatile ("flw ft3, (%0)"   :: "r"(global_a));
+      global_a += dim_k * row_stride_a;
+      asm volatile ("flw ft4, (%0)"   :: "r"(global_a));
+      global_a += dim_k * row_stride_a;
+      asm volatile ("flw ft5, (%0)"   :: "r"(global_a));
+      global_a += dim_k * row_stride_a;
+      asm volatile ("flw ft6, (%0)"   :: "r"(global_a));
+      global_a += dim_k * row_stride_a;
+      asm volatile ("flw ft7, (%0)"   :: "r"(global_a));
+      global_a += dim_k * row_stride_a;
+
+      // stride along columns
+      // bank conflicts
+      asm volatile ("fsw ft0, %0(%1)" :: "i"(BK * row_stride_a * 0 * sizeof(float)), "r"(local_a_tmp));
+      asm volatile ("fsw ft1, %0(%1)" :: "i"(BK * row_stride_a * 1 * sizeof(float)), "r"(local_a_tmp));
+      asm volatile ("fsw ft2, %0(%1)" :: "i"(BK * row_stride_a * 2 * sizeof(float)), "r"(local_a_tmp));
+      asm volatile ("fsw ft3, %0(%1)" :: "i"(BK * row_stride_a * 3 * sizeof(float)), "r"(local_a_tmp));
+      local_a_tmp += BK * row_stride_a * 4;
+      asm volatile ("fsw ft4, %0(%1)" :: "i"(BK * row_stride_a * 0 * sizeof(float)), "r"(local_a_tmp));
+      asm volatile ("fsw ft5, %0(%1)" :: "i"(BK * row_stride_a * 1 * sizeof(float)), "r"(local_a_tmp));
+      asm volatile ("fsw ft6, %0(%1)" :: "i"(BK * row_stride_a * 2 * sizeof(float)), "r"(local_a_tmp));
+      asm volatile ("fsw ft7, %0(%1)" :: "i"(BK * row_stride_a * 3 * sizeof(float)), "r"(local_a_tmp));
+      local_a_tmp += BK * row_stride_a * 4;
     }
   } else {
     if constexpr (!GMEM_COALESCED_A) {
-      constexpr uint32_t row_stride_as = threads_in_threadblock / BM;
+      constexpr uint32_t row_stride_as = threads_in_warpgroup / BM;
       const uint32_t global_a_row = BM * threadblock_id_y + local_as_col;
+      // NOTE that GMEM reads are transposed
       const float *global_a = A + dim_k * global_a_row + (k + local_as_row);
-      // FIXME experimenting with global coalescing
-      // const uint32_t global_a_row = BM * threadblock_id_y + local_as_row;
-      // const float *global_a = A + dim_k * global_a_row + (k + local_as_col);
       volatile float *local_a_tmp = local_a + BM * local_as_row + local_as_col;
 
       static_assert(
@@ -137,7 +153,7 @@ inline void global_dmem_load(const uint32_t dim_n, const uint32_t dim_k,
         local_a_tmp += BM * row_stride_as * 8;
       }
     } else {
-      constexpr uint32_t row_stride_a = threads_in_threadblock / BK;
+      constexpr uint32_t row_stride_a = threads_in_warpgroup / BK;
       const uint32_t global_a_row = BM * threadblock_id_y + local_a_row;
       const float *global_a = A + dim_k * global_a_row + (k + local_a_col);
       // NOTE that SMEM writes are transposed
@@ -177,6 +193,7 @@ inline void global_dmem_load(const uint32_t dim_n, const uint32_t dim_k,
         global_a += dim_k * row_stride_a;
 
         // stride along columns
+        // bank conflicts
         asm volatile ("fsw ft0, %0(%1)" :: "i"(row_stride_a * 0 * sizeof(float)), "r"(local_a_tmp));
         asm volatile ("fsw ft1, %0(%1)" :: "i"(row_stride_a * 1 * sizeof(float)), "r"(local_a_tmp));
         asm volatile ("fsw ft2, %0(%1)" :: "i"(row_stride_a * 2 * sizeof(float)), "r"(local_a_tmp));
@@ -190,7 +207,7 @@ inline void global_dmem_load(const uint32_t dim_n, const uint32_t dim_k,
     }
   }
 
-  constexpr uint32_t row_stride_b = threads_in_threadblock / BN;
+  constexpr uint32_t row_stride_b = threads_in_warpgroup / BN;
   const uint32_t global_b_col = BN * threadblock_id_x + local_b_col;
   const float *global_b = B + dim_n * (k + local_b_row) + global_b_col;
   volatile float *local_b_tmp = local_b + BN * local_b_row + local_b_col;
@@ -271,14 +288,17 @@ inline void thread_block_gemm(kernel_arg_t *__UNIFORM__ arg,
   const uint32_t local_b_row = tid_in_threadblock / BN;
   const uint32_t local_b_col = tid_in_threadblock % BN;
 
-  // no double-buffering
-  const uint32_t threads_per_warpgroup = threads_per_threadblock;
-  const uint32_t warp_id_in_warpgroup = tid_in_threadblock / NUM_LANES;
-  const uint32_t warp_row = warp_id_in_warpgroup / (BN / WN);
-  const uint32_t warp_col = warp_id_in_warpgroup % (BN / WN);
+  const uint32_t threads_per_warpgroup = threads_per_threadblock / (DOUBLE_BUFFER ? 2 : 1);
+  const uint32_t warpgroup_id = tid_in_threadblock / threads_per_warpgroup;
+  const uint32_t tid_in_warpgroup = tid_in_threadblock % threads_per_warpgroup; // FIXME
+  const uint32_t warp_in_warpgroup = tid_in_warpgroup / NUM_LANES;
+  // FIXME: warp_row / BN should be warp-specialized?
+  const uint32_t warp_row = warp_in_warpgroup / (BN / WN);
+  const uint32_t warp_col = warp_in_warpgroup % (BN / WN);
   const uint32_t tid_in_warp = tid_in_threadblock % NUM_LANES;
 
   volatile float *local_a = sharedmem_per_threadblock;
+  // const size_t local_a_elems = threadblock_dim_x * threadblock_dim_y;
   constexpr size_t local_a_elems = (BM * BK);
   volatile float *local_b = sharedmem_per_threadblock + local_a_elems;
   constexpr size_t local_b_elems = (BK * BN);
@@ -286,189 +306,135 @@ inline void thread_block_gemm(kernel_arg_t *__UNIFORM__ arg,
   volatile float *local_a_buf = local_b + local_b_elems;
   volatile float *local_b_buf = local_a_buf + local_a_elems;
 
-  constexpr uint32_t skips =
-      loop_matmul_skips(/*skip_lda=*/0, /*skip_ldb=*/0, /*skip_ldd=*/1,
-                        /*skip_ex=*/1, /*skip_stc=*/1);
-
-#if (GEMMINI_DMA == 1)
-  if (tid_in_threadblock == 0) {
-    gemmini_extended_config_ex(WEIGHT_STATIONARY, 0, 0, 1, 0, 0);
-    // gemmini_extended_config_ex(dataflow, act & 3, 0, 1, a_transpose,
-    // b_transpose);
-
-    gemmini_extended3_config_ld(dim_k * sizeof(elem_t), MVIN_SCALE_IDENTITY,
-                                false, 0);
-    gemmini_extended3_config_ld(dim_n * sizeof(elem_t), MVIN_SCALE_IDENTITY,
-                                false, 1);
-    gemmini_extended_config_st(dim_n * sizeof(elem_t), 0, MVIN_SCALE_IDENTITY);
-
-    gemmini_fence();
-  }
-#endif
-
   // divide rows (M) by the number of threadblocks
+  // FIXME: doesn't work with multiple clusters
   const uint32_t dim_m_range = (dim_m / threadblocks_per_cluster);
   const uint32_t dim_m_start = dim_m_range * threadblock_id_in_cluster;
   const uint32_t block_m_start = dim_m_start / BM;
   const uint32_t block_m_end = (dim_m_start + dim_m_range) / BM;
 
+  if (warpgroup_id == 0) {
+    // producer code: GMEM->SMEM data movement
 #pragma GCC unroll 1
-  for (uint32_t block_m = block_m_start; block_m < block_m_end; block_m++) {
+    for (uint32_t block_m = block_m_start; block_m < block_m_end; block_m++) {
 #pragma GCC unroll 1
-    for (uint32_t block_n = 0; (block_n * BN) < dim_n; block_n++) {
-      // clear out C
-      initialize_C(0);
-      initialize_C(1);
+      for (uint32_t block_n = 0; (block_n * BN) < dim_n; block_n++) {
+        if constexpr (DOUBLE_BUFFER) {
+          // initiate software pipeline
+          global_dmem_load(dim_n, dim_k, 0 /*k*/, A, B, local_a, local_b,
+                           tid_in_warpgroup, block_n, block_m);
 
-      if constexpr (GEMMINI_DMA) {
-        // pipeline initiation
-        if (tid_in_threadblock == 0) {
-          // configure dma gmem address to load from
-          // FIXME: block_k is wrong
-          ROCC_INSTRUCTION_RS1_RS2(
-              XCUSTOM_ACC,
-              (uint64_t)(A + block_m * BM * dim_k + /*block_k:*/0 * BK),
-              (uint64_t)(B + /*block_k:*/0 * BK * dim_n + block_n * BN),
-              k_LOOP_WS_CONFIG_ADDRS_AB)
-          // GEMMINI_CISC(8) does k_LOOP_WS_CONFIG_STRIDES_AB
-          GEMMINI_CISC_CMD_R((dim_n << 16) | (dim_k << 8) | 8);
-          gemmini_fence();
-
-          GEMMINI_CISC_CMD_I(12);
-          gemmini_fence();
-
-#if 0
-          // sp_tiled_matmul_full_spad_ws includes CONFIG_BOUNDS
-          // FIXME: block_k is 0 for two times
-          sp_tiled_matmul_full_spad_ws(
-#if 1
-              SPAD_ADDR_Q0, SPAD_ADDR_Q1,
-#else
-              (/*block_k:*/ 0 & 1) ? SPAD_ADDR_Q2 : SPAD_ADDR_Q0,
-              (/*block_k:*/ 0 & 1) ? SPAD_ADDR_Q3 : SPAD_ADDR_Q1,
-#endif
-              /*spad_D=*/0, /*spad_C=*/SPAD_ADDR_Q3,
-              /*I=*/BM / DIM, /*J=*/BN / DIM, /*K=*/BK / DIM, /*pad_I=*/0,
-              /*pad_J=*/0, /*pad_K=*/0,
-              /*a_transpose=*/0, /*b_transpose=*/0, /*full_C=*/0, /*low_D=*/0,
-              /*acc=*/0, /*act=*/NO_ACTIVATION, /*skips=*/skips)
-          gemmini_fence();
-#endif
+          threadblock_barrier(threadblock_id_in_cluster, threadblock_dim_y);
         }
 
+        // NOTE: this *should* be signed integer to trigger arithmetic
+        // right-shift
+        int32_t k_index = 0;
+#pragma GCC unroll 1
+        for (uint32_t k = 0; k < (dim_k) - BK; k += BK) {
+          volatile float *local_a_produce;
+          volatile float *local_b_produce;
+          if constexpr (DOUBLE_BUFFER) {
+            const uint32_t mask_odd = (k_index & 1) << 31 >> 31;
+            const uint32_t mask_even = ((k_index & 1) ^ 1) << 31 >> 31;
+            // local_a_produce = (k_index % 2) ? local_a : local_a_buf;
+            // local_b_produce = (k_index % 2) ? local_b : local_b_buf;
+            local_a_produce = reinterpret_cast<volatile float *>(
+                (mask_odd & reinterpret_cast<uintmax_t>(local_a)) |
+                (mask_even & reinterpret_cast<uintmax_t>(local_a_buf)));
+            local_b_produce = reinterpret_cast<volatile float *>(
+                (mask_odd & reinterpret_cast<uintmax_t>(local_b)) |
+                (mask_even & reinterpret_cast<uintmax_t>(local_b_buf)));
+          } else {
+            local_a_produce = local_a;
+            local_b_produce = local_b;
+          }
+          k_index++;
+
+          global_dmem_load(dim_n, dim_k, k + BK /*runahead*/, A, B,
+                           local_a_produce, local_b_produce, tid_in_warpgroup,
+                           block_n, block_m);
+
+          threadblock_barrier(threadblock_id_in_cluster, threadblock_dim_y);
+        }
+
+        // sync with final consumer stage in the k-loop
         threadblock_barrier(threadblock_id_in_cluster, threadblock_dim_y);
       }
+    }
+  } else {
+    // consumer code: SMEM->RF and compute
 
 #pragma GCC unroll 1
-      for (uint32_t block_k = 0; (block_k * BK) < (dim_k); block_k++) {
+    for (uint32_t block_m = block_m_start; block_m < block_m_end; block_m++) {
+#pragma GCC unroll 1
+      for (uint32_t block_n = 0; (block_n * BN) < dim_n; block_n++) {
+        // clear out C
+        initialize_C(0);
+        initialize_C(1);
 
-        // producer code: GMEM->SMEM memory movement
-        // ---------------------------------------------------------------------
-        //
-        // this is either done using DMA or SIMT cores depending on GEMMINI_DMA
-
-#if (GEMMINI_DMA == 1)
-        if (tid_in_threadblock == 0) {
-          // configure dma gmem address to load from
-          // FIXME: block_k is wrong
-          ROCC_INSTRUCTION_RS1_RS2(
-              XCUSTOM_ACC,
-              (uint64_t)(A + block_m * BM * dim_k + (block_k + 1/*runahead*/) * BK),
-              (uint64_t)(B + (block_k + 1/*runahead*/) * BK * dim_n + block_n * BN),
-              k_LOOP_WS_CONFIG_ADDRS_AB)
-          // GEMMINI_CISC(8) does k_LOOP_WS_CONFIG_STRIDES_AB
-          GEMMINI_CISC_CMD_R((dim_n << 16) | (dim_k << 8) | 8);
-          // gemmini_fence();
-
-          // TODO: branch is probably slow
-          if (block_k & 1) {
-            GEMMINI_CISC_CMD_I(12);
-          } else { // block_k == 0 is here
-            GEMMINI_CISC_CMD_I(13);
-          }
-
-          // configure loop iteration bounds
-          // FIXME: shouldn't be necessary
-          // ROCC_INSTRUCTION_RS1_RS2(XCUSTOM_ACC, 0, BOUND_INST,
-          // k_LOOP_WS_CONFIG_BOUNDS) ROCC_INSTRUCTION_RS1_RS2(XCUSTOM_ACC,
-          // SPAD_ADDR_Q0, SPAD_ADDR_Q1, k_LOOP_WS_CONFIG_SPAD_AB)
-          // ROCC_INSTRUCTION_RS1_RS2(
-          //     XCUSTOM_ACC,
-          //     ((uint64_t)(/*a_spad_id:*/ 0) << 18) |
-          //         ((uint64_t)(/*b_spad_id:*/ 0) << 16) |
-          //         ((uint64_t)(/*act:0*/ 0) << 8) | ((/*low_D:*/ 0) << 2) |
-          //         ((/*full_C:*/ 0) << 1) | (/*ex_accumulate:*/ 0),
-          //     ((uint64_t)(/*C_spad_addr:*/ A) << 32) | 0x200U | (skips) |
-          //         ((/*is_resadd*/ 0) << 2) | ((/*B_transpose:*/ 0) << 1) |
-          //         (/*A_transpose:*/ 1),
-          //     k_LOOP_WS)
-          // gemmini_fence();
-
-          // sp_tiled_matmul_full_spad_ws includes CONFIG_BOUNDS
-          // FIXME: block_k is 0 for two times
-//           sp_tiled_matmul_full_spad_ws(
-// #if 1
-//               SPAD_ADDR_Q2,
-//               SPAD_ADDR_Q3,
-// #else
-//               (/*block_k:*/ 0 & 1) ? SPAD_ADDR_Q2 : SPAD_ADDR_Q0,
-//               (/*block_k:*/ 0 & 1) ? SPAD_ADDR_Q3 : SPAD_ADDR_Q1,
-// #endif
-//               /*spad_D=*/0, /*spad_C=*/SPAD_ADDR_Q1,
-//               /*I=*/BM / DIM, /*J=*/BN / DIM, /*K=*/BK / DIM, /*pad_I=*/0,
-//               /*pad_J=*/0, /*pad_K=*/0,
-//               /*a_transpose=*/1, /*b_transpose=*/0, /*full_C=*/0, /*low_D=*/0,
-//               /*acc=*/0, /*act=*/NO_ACTIVATION, /*skips=*/skips)
-//               gemmini_fence();
-        }
-#else
-        global_dmem_load(dim_n, dim_k, block_k * BK, A, B, local_a, local_b,
-                         tid_in_threadblock, block_n, block_m);
-
+        // sync with initial producer stage in the k-loop
         threadblock_barrier(threadblock_id_in_cluster, threadblock_dim_y);
-#endif
 
-        // consumer code: SMEM->RF and compute
-        // ----------------------------------------------------------------------
-        // @perf: this loop spills to stack a lot because of all the flws in
+        // NOTE: this *should* be signed integer to trigger arithmetic
+        // right-shift
+        int32_t k_index = 0;
 #pragma GCC unroll 1
-        for (int i = 0; i < BK_LOOP; i++) {
-#pragma GCC unroll 4
-          for (uint32_t local_k = 0; local_k < BK; local_k += TCK) {
+        for (uint32_t k = 0; k < (dim_k); k += BK) {
+          volatile float *local_a_consume;
+          volatile float *local_b_consume;
+          if constexpr (DOUBLE_BUFFER) {
+            // local_a_consume = (k_index % 2) ? local_a_buf : local_a;
+            // local_b_consume = (k_index % 2) ? local_b_buf : local_b;
+            // FIXME: swap multiply with bitshifts
+            const uint32_t mask_odd = (k_index & 1) << 31 >> 31;
+            const uint32_t mask_even = ((k_index & 1) ^ 1) << 31 >> 31;
+            local_a_consume = reinterpret_cast<volatile float *>(
+                (mask_odd & reinterpret_cast<uintmax_t>(local_a_buf)) |
+                (mask_even & reinterpret_cast<uintmax_t>(local_a)));
+            local_b_consume = reinterpret_cast<volatile float *>(
+                (mask_odd & reinterpret_cast<uintmax_t>(local_b_buf)) |
+                (mask_even & reinterpret_cast<uintmax_t>(local_b)));
+          } else {
+            local_a_consume = local_a;
+            local_b_consume = local_b;
+          }
+          k_index++;
+
+          // @perf: this loop spills to stack a lot because of all the flws in
+#pragma GCC unroll 1
+          for (int i = 0; i < BK_LOOP; i++) {
 #pragma GCC unroll 2
-            for (int wn_iter = 0; wn_iter < WNITER; wn_iter++) {
-              // SMEM -> RF
-              vx_wmma_load_b(local_b, local_k, warp_col, wn_iter, tid_in_warp);
+            for (uint32_t local_k = 0; local_k < BK; local_k += TCK) {
 #pragma GCC unroll 2
-              for (int wm_iter = 0; wm_iter < WMITER; wm_iter++) {
+              for (int wn_iter = 0; wn_iter < WNITER; wn_iter++) {
                 // SMEM -> RF
-                vx_wmma_load_a(local_a, local_k, warp_row, wm_iter,
+                vx_wmma_load_b(local_b_consume, local_k, warp_col, wn_iter,
                                tid_in_warp);
-                // perform mma
-                vx_wmma(wm_iter);
+#pragma GCC unroll 2
+                for (int wm_iter = 0; wm_iter < WMITER; wm_iter++) {
+                  // SMEM -> RF
+                  vx_wmma_load_a(local_a_consume, local_k, warp_row, wm_iter,
+                                 tid_in_warp);
+                  // perform mma
+                  vx_wmma(wm_iter);
+                }
               }
             }
           }
+
+          threadblock_barrier(threadblock_id_in_cluster, threadblock_dim_y);
         }
 
-        if constexpr (GEMMINI_DMA) {
-          // Call gemmini fence at the end of the loop to overlap dma & wmma.
-          // Hopefully by this time, dma would have finished so that this is a
-          // no-op
-          if (tid_in_threadblock == 0) {
-            gemmini_fence();
+#pragma GCC unroll 1
+        for (int wm_iter = 0; wm_iter < WMITER; wm_iter++) {
+#pragma GCC unroll 1
+          for (int wn_iter = 0; wn_iter < WNITER; wn_iter++) {
+            if (warpgroup_id == 1) {
+              write_results(tid_in_warp, warp_col, warp_row, wn_iter, wm_iter,
+                            dim_n, C, block_n, block_m);
+            }
           }
-        }
-
-        threadblock_barrier(threadblock_id_in_cluster, threadblock_dim_y);
-      }
-
-#pragma GCC unroll 2
-      for (int wm_iter = 0; wm_iter < WMITER; wm_iter++) {
-#pragma GCC unroll 2
-        for (int wn_iter = 0; wn_iter < WNITER; wn_iter++) {
-          write_results(tid_in_warp, warp_col, warp_row, wn_iter, wm_iter,
-                        dim_n, C, block_n, block_m);
         }
       }
     }
@@ -513,7 +479,8 @@ void kernel_body(int task_id, kernel_arg_t *__UNIFORM__ arg) {
   // "static" shared memory allocation.  This would determine threadblock
   // occupancy of a single cluster
   float *sharedmem_per_threadblock =
-      (float *)DEV_SMEM_START_ADDR + (2 * BM * BK) * threadblock_id_in_cluster;
+      (float *)DEV_SMEM_START_ADDR +
+      2 /*double-buffering*/ * (2 * BM * BK) * threadblock_id_in_cluster;
 
   thread_block_gemm(arg, tid_in_threadblock, threads_per_threadblock,
                     threadblock_dim_y,
