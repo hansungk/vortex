@@ -10,7 +10,15 @@
 
 #define SMEM_MASK (SMEM_SIZE - 1)
 #define SMEM_ADDR_END (SMEM_BASE + SMEM_SIZE)
-#define GEMMINI_CTRL (SMEM_BASE + SMEM_SIZE + 0x3000)
+
+static size_t gemmini_tile_idx = 0;
+
+inline void use_gemmini(size_t i) {
+  gemmini_tile_idx = i;
+}
+
+#define GEMMINI_CTRL (SMEM_BASE + SMEM_SIZE + 0x3000 + 0x100 * (gemmini_tile_idx))
+#define GEMMINI_CISC_IMM(x, i) ((x) + 32 * (i))
 
 #define SPAD_BASE 0x0
 #define SPAD_ROW_SIZE (DIM * sizeof(elem_t))
@@ -37,7 +45,10 @@
 // 9: tile-sized move-out
 // 10: tile-sized move-in, buffer regions 0
 // 11: tile-sized move-in, buffer regions 1
-#define GEMMINI_CISC_CMD_I(x) asm("csrwi 0xacc, "#x)
+// bits [4:0] is the opcode
+// bits [7:5] is the target gemmini id, zero-indexed
+// #define GEMMINI_CISC_CMD_I(x) asm("csrwi 0xacc, %0" :: "i" (x))
+#define GEMMINI_CISC_CMD_I(x) asm("csrw 0xacc, %0" :: "r" (x))
 #define GEMMINI_CISC_CMD_R(x) asm("csrw 0xacc, %0" :: "r" (x))
 #define GEMMINI_STATUS() ({uint32_t status; asm volatile ("csrr %0, 0xacc" : "=r" (status)); status;})
 
