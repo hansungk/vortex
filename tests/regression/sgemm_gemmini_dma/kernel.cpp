@@ -33,7 +33,8 @@
 // #define BOUND_INST 0x400040004ULL
 
 #define NUM_CLUSTERS 1
-#define NUM_THREADS_IN_CLUSTER 128
+#define NUM_THREADS_IN_CLUSTER 256 \
+// (NUM_CORES * NUM_WARPS * NUM_THREADS)
 
 #define rd_cycles_force(x) asm volatile ("csrr %0, mcycle" : "=r" (x))
 #define rd_cycles(x) rd_cycles_force(x)
@@ -41,7 +42,7 @@
 #define PRINTF(...) sprintf(PRINT_BUF, __VA_ARGS__)
 // #define PRINTF(...) vx_printf(__VA_ARGS__)
 #define SWISH(beta, x) ((x) / (1 + exp(-(beta) * (x))))
-#define POWER
+//#define POWER
 
 inline void threadblock_barrier(unsigned int barrier_id, unsigned int count) {
   vx_fence();
@@ -168,7 +169,7 @@ void kernel_body(int task_id, kernel_arg_t *__UNIFORM__ arg) {
 int main() {
   kernel_arg_t *arg = (kernel_arg_t *)KERNEL_ARG_DEV_MEM_ADDR;
 
-  const uint32_t num_threads_in_cluster = vx_num_threads() * vx_num_warps() * CORES_PER_CLUSTER;
+  const uint32_t num_threads_in_cluster = NUM_THREADS_IN_CLUSTER;
   const uint32_t grid_size = num_threads_in_cluster * NUM_CLUSTERS;
 #ifdef RADIANCE
   vx_spawn_tasks_cluster(grid_size, (vx_spawn_tasks_cb)kernel_body, arg);
