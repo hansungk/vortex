@@ -322,7 +322,7 @@ module Vortex import VX_gpu_pkg::*; #(
     end
     // Delay reset signal by a few cycles to make time for resetting the DCR
     // (device configuration registers).
-    assign core_reset = reset || (reset_start_counter != 4'h0) || intr_reset;
+    assign core_reset = reset || (reset_start_counter != 4'h0); // || intr_reset;
 
     // A small FSM that tries to set DCR "properly" in the same order as
     // defined in VX_types.vh.

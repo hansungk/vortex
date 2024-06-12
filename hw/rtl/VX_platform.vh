@@ -23,20 +23,21 @@
 `define SV_DPI
 `endif // SIMULATION
 
-`ifdef SYNTHESIS
 `define GPR_RESET
+`define GPR_DUPLICATED
+`define GBAR_ENABLE
+`define GBAR_CLUSTER_ENABLE
 `define LSU_DUP_DISABLE
 `define ICACHE_DISABLE
 `define DCACHE_DISABLE
-`define GBAR_ENABLE
-`define GBAR_CLUSTER_ENABLE
-`define FPU_FPNEW
+
 `define NUM_BARRIERS 8
-`define NUM_CORES 2
+`define NUM_CORES 4
 `define NUM_THREADS 8
 `define NUM_WARPS 8
-`define EXT_T_DISABLE
 
+`ifdef SYNTHESIS
+`define FPU_FPNEW
 `define FIRESIM
 `endif // SYNTHESIS
 
@@ -206,7 +207,7 @@
 `define UNUSED_ARG(x)   /* verilator lint_off UNUSED */ \
                         x \
                         /* verilator lint_on UNUSED */
-`define TRACE(level, args) $display args
+`define TRACE(level, args) $write args
 `endif
 `endif
 
