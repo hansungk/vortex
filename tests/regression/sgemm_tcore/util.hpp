@@ -35,7 +35,15 @@
 // number of loop around the inner 0..TCK..BK loop to simulate perfect-DRAM
 // scenario
 #define BK_LOOP 1
-#define TRANSPOSE_AS 1
+// whether to transpose smem A tile at GMEM->SMEM (produce), or SMEM->RF
+// (consume).  This is because the tensor core expects the A tile to be stored
+// in column-major order in SMEM.
+//
+// For correctness, only one of either should be 1.  To model the case where
+// the entire A matrix is already stored transposed in GMEM ("TN" kernel), set
+// both to 0.
+#define TRANSPOSE_AT_PRODUCE 0
+#define TRANSPOSE_AT_CONSUME 0
 // GMEM_COALESCED sets bank conflict-free accesses for
 // 1: GMEM loads of A matrix
 // 0: SMEM stores of A matrix
@@ -171,7 +179,7 @@ inline void vx_wmma_load_a(volatile float *smem_A, const int local_k,
   constexpr int smem_AS_rows = BK;
   constexpr int smem_AS_cols = BM;
 
-  if constexpr (!TRANSPOSE_AS) {
+  if constexpr (TRANSPOSE_AT_CONSUME) {
     // int A_offset = (WM * warp_row + TCM * wm_iter + row) * smem_A_cols;
 
     // @perf: bank conflicts
@@ -195,7 +203,7 @@ inline void vx_wmma_load_a(volatile float *smem_A, const int local_k,
     // asm volatile("flw  f6, %0" ::"m"(smem_A[A_offset + (local_k + 6)]));
     // asm volatile("flw  f7, %0" ::"m"(smem_A[A_offset + (local_k + 7)]));
   } else {
-    // transposed A
+    // read smem A tile as-is; bank-conflict-free AS load
     // f8-f15 stores a single row of A
     volatile float *smem_addr;
     smem_addr = &smem_A[((local_k + 0) * smem_AS_cols) + (WM * warp_row + TCM * wm_iter) + row];

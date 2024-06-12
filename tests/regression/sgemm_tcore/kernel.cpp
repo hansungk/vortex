@@ -28,7 +28,7 @@ inline void global_dmem_load(const uint32_t dim_n, const uint32_t dim_k,
   // neighboring threads to ensure GMEM coalescing.
   //
   // TODO: Sharedmem swizzling is important here
-  if constexpr (!TRANSPOSE_AS) {
+  if constexpr (!TRANSPOSE_AT_PRODUCE) {
     // FIXME: !TRANSPOSE_AS code is old
 
     const uint32_t global_a_row = BM * threadblock_id_y + local_a_row;
