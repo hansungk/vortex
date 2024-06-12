@@ -381,8 +381,8 @@ inline void thread_block_gemm(kernel_arg_t *__UNIFORM__ arg,
         int32_t k_index = 0;
 #pragma GCC unroll 1
         for (uint32_t k = 0; k < (dim_k); k += BK) {
-          volatile float *local_a_consume;
-          volatile float *local_b_consume;
+          const volatile float *local_a_consume;
+          const volatile float *local_b_consume;
           if constexpr (DOUBLE_BUFFER) {
             // local_a_consume = (k_index % 2) ? local_a_buf : local_a;
             // local_b_consume = (k_index % 2) ? local_b_buf : local_b;

@@ -147,7 +147,7 @@ inline void vx_wmma(const int dest_reg) {
 }
 
 // `local_k` is assumed to be multiple of TCK
-inline void vx_wmma_load_a(volatile float *smem_A, const int local_k,
+inline void vx_wmma_load_a(volatile const float *smem_A, const int local_k,
                   const int warp_row, const int wm_iter, const int thread_in_warp) {
   const int tid = thread_in_warp;
   const int tg = tid / 4;
@@ -167,7 +167,7 @@ inline void vx_wmma_load_a(volatile float *smem_A, const int local_k,
 
     // @perf: bank conflicts
     // f8-f15 stores a single row of A
-    volatile float *smem_addr;
+    const volatile float *smem_addr;
     smem_addr = &smem_A[(WM * warp_row + TCM * wm_iter + row) * smem_A_cols + local_k];
     asm volatile("flw  f0, %0(%1)" ::"i"(0 * sizeof(float)), "r"(smem_addr));
     asm volatile("flw  f1, %0(%1)" ::"i"(1 * sizeof(float)), "r"(smem_addr));
@@ -188,7 +188,7 @@ inline void vx_wmma_load_a(volatile float *smem_A, const int local_k,
   } else {
     // read smem A tile as-is; bank-conflict-free AS load
     // f8-f15 stores a single row of A
-    volatile float *smem_addr;
+    const volatile float *smem_addr;
     smem_addr = &smem_A[((local_k + 0) * smem_AS_cols) + (WM * warp_row + TCM * wm_iter) + row];
     asm volatile("flw  f0, %0(%1)" :: "i"(smem_AS_cols * 0 * sizeof(float)), "r"(smem_addr));
     asm volatile("flw  f1, %0(%1)" :: "i"(smem_AS_cols * 1 * sizeof(float)), "r"(smem_addr));
@@ -211,7 +211,7 @@ inline void vx_wmma_load_a(volatile float *smem_A, const int local_k,
 }
 
 // `local_k` is assumed to be multiple of TCK
-inline void vx_wmma_load_b(volatile float *smem_B, const int local_k,
+inline void vx_wmma_load_b(const volatile float *smem_B, const int local_k,
                            const int warp_col, const int wn_iter,
                            const int thread_in_warp) {
   const int tid = thread_in_warp;
@@ -225,7 +225,7 @@ inline void vx_wmma_load_b(volatile float *smem_B, const int local_k,
   constexpr int smem_B_cols = BN;
 
   // f8-f15 stores a single column of B
-  volatile float *smem_addr;
+  const volatile float *smem_addr;
   smem_addr = &smem_B[((local_k + 0) * smem_B_cols) + (WN * warp_col + TCN * wn_iter) + col];
   asm volatile("flw  f8, %0(%1)" :: "i"(smem_B_cols * 0 * sizeof(float)), "r"(smem_addr));
   asm volatile("flw  f9, %0(%1)" :: "i"(smem_B_cols * 1 * sizeof(float)), "r"(smem_addr));
