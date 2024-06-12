@@ -147,9 +147,9 @@ int main(int argc, char *argv[]) {
   RT_CHECK(vx_dev_open(&device));
 
   // FIXME: hardcoded
-  uint32_t dim_m = 128;
-  uint32_t dim_n = 128;
-  uint32_t dim_k = 128;
+  uint32_t dim_m = 64;
+  uint32_t dim_n = 64;
+  uint32_t dim_k = 64;
 
   generate_source_matrix(dim_m, dim_n, dim_k);
   generate_reference_matmul(dim_m, dim_n, dim_k);
