@@ -20,9 +20,9 @@
 //   (BM*BN) / (TM*TN) == threadblock size >= NT * CORES_PER_CLUSTER
 // * Combining BM * BK >= (BM*BN) / (TM*TN) == threadblock yields
 //   BM <= BK*TM*TN
-#define BM 32
-#define BN 32
-#define BK 32
+#define BM 64
+#define BN 64
+#define BK 64
 #define WM 16
 #define WN 8
 #define TCM 8
@@ -42,29 +42,12 @@
 // For correctness, only one of either should be 1.  To model the case where
 // the entire A matrix is already stored transposed in GMEM ("TN" kernel), set
 // both to 0.
-#define TRANSPOSE_AT_PRODUCE 0
+#define TRANSPOSE_AT_PRODUCE 1
 #define TRANSPOSE_AT_CONSUME 0
 // GMEM_COALESCED sets bank conflict-free accesses for
 // 1: GMEM loads of A matrix
 // 0: SMEM stores of A matrix
 #define GMEM_COALESCED_A 1
-#define GEMMINI_DMA 0
-#if SMEM_SIZE != 0x4000
-#error Currently only supports 16K spad
-#endif
-#define SMEM_ADDR_Q0 ((float * const) 0xff000000)
-#define SMEM_ADDR_Q1 ((float * const) 0xff001000)
-#define SMEM_ADDR_Q2 ((float * const) 0xff002000)
-#define SMEM_ADDR_Q3 ((float * const) 0xff003000)
-#define SPAD_ADDR_Q0 0x0
-#define SPAD_ADDR_Q1 0x80
-#define SPAD_ADDR_Q2 0x100
-#define SPAD_ADDR_Q3 0x180
-
-// FIXME: NUM_THREADS and NUM_WARPS hardcoded
-#if ((BM * BN / ELEM_PER_THREAD) > (CORES_PER_CLUSTER * 8 * 8))
-#error "threadblock size too big for cluster"
-#endif
 
 inline constexpr void map_operand_32lanes(const int tid, int &row, int &col) {
   const int tg = tid / 4;
