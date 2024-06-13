@@ -8,8 +8,6 @@
 #include "include/gemmini.h"
 #include "gemmini_mmio.h"
 
-#define NUM_LANES 8
-
 #define SMEM_ADDR_Q0 ((float * const) 0xff000000)
 #define SMEM_ADDR_Q1 ((float * const) 0xff001000)
 #define SMEM_ADDR_Q2 ((float * const) 0xff002000)
@@ -52,7 +50,7 @@
 #define TCK 8
 #define WMITER (WM / TCM)
 #define WNITER (WN / TCN)
-#define ELEM_PER_THREAD (WMITER * WNITER * ((TCM * TCN) / NUM_LANES) / (DOUBLE_BUFFER ? 2 : 1))
+#define ELEM_PER_THREAD (WMITER * WNITER * ((TCM * TCN) / NUM_THREADS) / (DOUBLE_BUFFER ? 2 : 1))
 
 // FIXME: NUM_THREADS and NUM_WARPS hardcoded
 #if ((BM * BN / ELEM_PER_THREAD) > (CORES_PER_CLUSTER * 8 * 8))
@@ -101,9 +99,9 @@ inline constexpr void map_operand_8lanes(const int tid, int &row, int &col) {
 }
 
 inline constexpr void map_operand(const int tid, int &row, int &col) {
-  if constexpr (NUM_LANES == 32) {
+  if constexpr (NUM_THREADS == 32) {
     map_operand_32lanes(tid, row, col);
-  } else if constexpr (NUM_LANES == 8) {
+  } else if constexpr (NUM_THREADS == 8) {
     map_operand_8lanes(tid, row, col);
   } else {
     // FIXME: not allowed
@@ -137,9 +135,9 @@ inline constexpr void map_c_8lanes(const int tid, int &row, int &col) {
 }
 
 inline constexpr void map_c(const int tid, int &row, int &col) {
-  if constexpr (NUM_LANES == 32) {
+  if constexpr (NUM_THREADS == 32) {
     map_c_32lanes(tid, row, col);
-  } else if constexpr (NUM_LANES == 8) {
+  } else if constexpr (NUM_THREADS == 8) {
     map_c_8lanes(tid, row, col);
   } else {
     // FIXME: not allowed
@@ -571,12 +569,12 @@ inline void thread_block_gemm(kernel_arg_t *__UNIFORM__ arg,
   const uint32_t threads_per_warpgroup = threads_per_threadblock / 1;
   const uint32_t warpgroup_id = tid_in_threadblock / threads_per_warpgroup;
   const uint32_t tid_in_warpgroup = tid_in_threadblock % threads_per_warpgroup; // FIXME
-  const uint32_t warp_in_warpgroup = tid_in_warpgroup / NUM_LANES;
+  const uint32_t warp_in_warpgroup = tid_in_warpgroup / NUM_THREADS;
 
   // FIXME: warp_row / BN should be warp-specialized?
   const uint32_t warp_row = warp_in_warpgroup / (BN / WN);
   const uint32_t warp_col = warp_in_warpgroup % (BN / WN);
-  const uint32_t tid_in_warp = tid_in_threadblock % NUM_LANES;
+  const uint32_t tid_in_warp = tid_in_threadblock % NUM_THREADS;
 
   volatile float *local_a = sharedmem_per_threadblock;
   // const size_t local_a_elems = threadblock_dim_x * threadblock_dim_y;

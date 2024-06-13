@@ -6,8 +6,6 @@
 #include "include/gemmini.h"
 #include "gemmini_mmio.h"
 
-#define NUM_LANES 8
-
 // Constraints on parameters:
 // * Memory:
 //   (BM + BN) * BK * sizeof(float) <= sharedmem size.
@@ -30,7 +28,7 @@
 #define TCK 8
 #define WMITER (WM / TCM)
 #define WNITER (WN / TCN)
-#define ELEM_PER_THREAD (WMITER * WNITER * (TCM * TCN) / NUM_LANES)
+#define ELEM_PER_THREAD (WMITER * WNITER * (TCM * TCN) / NUM_THREADS)
 
 // number of loop around the inner 0..TCK..BK loop to simulate perfect-DRAM
 // scenario
@@ -91,9 +89,9 @@ inline constexpr void map_operand_8lanes(const int tid, int &row, int &col) {
 }
 
 inline constexpr void map_operand(const int tid, int &row, int &col) {
-  if constexpr (NUM_LANES == 32) {
+  if constexpr (NUM_THREADS == 32) {
     map_operand_32lanes(tid, row, col);
-  } else if constexpr (NUM_LANES == 8) {
+  } else if constexpr (NUM_THREADS == 8) {
     map_operand_8lanes(tid, row, col);
   } else {
     // FIXME: not allowed
@@ -127,9 +125,9 @@ inline constexpr void map_c_8lanes(const int tid, int &row, int &col) {
 }
 
 inline constexpr void map_c(const int tid, int &row, int &col) {
-  if constexpr (NUM_LANES == 32) {
+  if constexpr (NUM_THREADS == 32) {
     map_c_32lanes(tid, row, col);
-  } else if constexpr (NUM_LANES == 8) {
+  } else if constexpr (NUM_THREADS == 8) {
     map_c_8lanes(tid, row, col);
   } else {
     // FIXME: not allowed

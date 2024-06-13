@@ -7,7 +7,7 @@
 #include "include/gemmini.h"
 #include "gemmini_mmio.h"
 
-#define GEMMINI_DMA 1
+#define GEMMINI_DMA 0
 #if SMEM_SIZE == 0x4000
 #define SMEM_ADDR_Q0 ((float * const) 0xff000000)
 #define SMEM_ADDR_Q1 ((float * const) 0xff001000)
@@ -273,10 +273,10 @@ inline void thread_block_gemm(kernel_arg_t *__UNIFORM__ arg,
 
   // no double-buffering
   const uint32_t threads_per_warpgroup = threads_per_threadblock;
-  const uint32_t warp_id_in_warpgroup = tid_in_threadblock / NUM_LANES;
+  const uint32_t warp_id_in_warpgroup = tid_in_threadblock / NUM_THREADS;
   const uint32_t warp_row = warp_id_in_warpgroup / (BN / WN);
   const uint32_t warp_col = warp_id_in_warpgroup % (BN / WN);
-  const uint32_t tid_in_warp = tid_in_threadblock % NUM_LANES;
+  const uint32_t tid_in_warp = tid_in_threadblock % NUM_THREADS;
 
   volatile float *local_a = sharedmem_per_threadblock;
   constexpr size_t local_a_elems = (BM * BK);
