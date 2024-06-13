@@ -32,8 +32,7 @@
 // #define SPAD_ADDR_Q3 0x180
 // #define BOUND_INST 0x400040004ULL
 
-#define NUM_CLUSTERS 1
-#define NUM_THREADS_IN_CLUSTER 256 \
+#define NUM_THREADS_IN_CLUSTER 256
 // (NUM_CORES * NUM_WARPS * NUM_THREADS)
 
 #define rd_cycles_force(x) asm volatile ("csrr %0, mcycle" : "=r" (x))
@@ -47,6 +46,88 @@
 inline void threadblock_barrier(unsigned int barrier_id, unsigned int count) {
   vx_fence();
   vx_barrier(barrier_id, count);
+}
+
+inline void gemm_in_gemmini(const uint32_t gemmini_i, const uint32_t dim_m,
+                            const uint32_t dim_n, const uint32_t dim_k,
+                            const float *A, const float *B, float *C,
+                            const uint32_t threadblock_id) {
+  uint32_t marker0, marker1;
+  rd_cycles_force(marker0);
+
+  const uint32_t num_tiles_m = dim_m / TILE_M;
+  const uint32_t num_tiles_n = dim_n / TILE_N;
+  const uint32_t num_tiles_k = dim_k / TILE_K;
+
+  const uint32_t num_tile_rows_per_tb = num_tiles_m / NUM_CLUSTERS;
+
+  use_gemmini(gemmini_i);
+  if (HW_TID() == 0) {
+    gemmini_extended3_config_ld(dim_k * sizeof(elem_t), MVIN_SCALE_IDENTITY, false, 0);
+    gemmini_extended3_config_ld(dim_n * sizeof(elem_t), MVIN_SCALE_IDENTITY, false, 1);
+    gemmini_extended_config_st(dim_n * sizeof(elem_t), 0, MVIN_SCALE_IDENTITY);
+  }
+  for (uint32_t tile_i = num_tile_rows_per_tb * threadblock_id;
+       tile_i < num_tile_rows_per_tb * (threadblock_id + 1);
+       tile_i += 1) {
+    for (int tile_j = 0; tile_j < num_tiles_n; tile_j += 1) {
+      if (HW_TID() == 0) {
+        for (int tile_k = 0; tile_k < num_tiles_k; tile_k += 1) {
+          ROCC_INSTRUCTION_RS1_RS2(XCUSTOM_ACC,
+                                   (uint64_t) (A + tile_i * TILE_M * dim_k + tile_k * TILE_K),
+                                   (uint64_t) (B + tile_k * TILE_K * dim_n + tile_j * TILE_N),
+                                   k_LOOP_WS_CONFIG_ADDRS_AB)
+          GEMMINI_CISC_CMD_R((dim_n) << 16 | (dim_k << 8) | GEMMINI_CISC_IMM(8, gemmini_i));
+          /* DMA move-in */
+          if (tile_k & 1) {
+            GEMMINI_CISC_CMD_I(GEMMINI_CISC_IMM(11, gemmini_i));
+          } else {
+            GEMMINI_CISC_CMD_I(GEMMINI_CISC_IMM(10, gemmini_i));
+          }
+          /* compute in-SMEM */
+          if (tile_k == 0) {
+            gemmini_fence();
+            GEMMINI_CISC_CMD_I(GEMMINI_CISC_IMM(0, gemmini_i));
+          } else if (tile_k & 1) {
+            gemmini_fence();
+            GEMMINI_CISC_CMD_I(GEMMINI_CISC_IMM(2, gemmini_i));
+          } else {
+            gemmini_fence();
+            GEMMINI_CISC_CMD_I(GEMMINI_CISC_IMM(1, gemmini_i));
+          }
+        }
+        gemmini_fence();
+        gemmini_fence();
+        gemmini_fence();
+        gemmini_fence();
+        GEMMINI_CISC_CMD_I(GEMMINI_CISC_IMM(9, gemmini_i));
+        gemmini_fence();
+      }
+      threadblock_barrier(/*barrier_id=*/0, /*count=*/NUM_WARPS);
+      if (HW_TID() == 0) {
+        float *const dram_c_tile_start = C + tile_i * TILE_M * dim_n + tile_j * TILE_N;
+        ROCC_INSTRUCTION_RS1_RS2(XCUSTOM_ACC, 0, BOUND_INST, k_LOOP_WS_CONFIG_BOUNDS)
+        ROCC_INSTRUCTION_RS1_RS2(XCUSTOM_ACC, 0, (uint64_t) dram_c_tile_start, k_LOOP_WS_CONFIG_ADDRS_DC)
+        ROCC_INSTRUCTION_RS1_RS2(XCUSTOM_ACC, 0, dim_n, k_LOOP_WS_CONFIG_STRIDES_DC)
+        ROCC_INSTRUCTION_RS1_RS2(XCUSTOM_ACC, 0, loop_matmul_skips(1, 1, 1, 1, 0), k_LOOP_WS)
+      }
+    }
+  }
+  if (gemmini_i != 0 && threadblock_id == NUM_CLUSTERS - 1) {
+    threadblock_barrier(/*barrier_id=*/0, /*count=*/NUM_WARPS);
+    rd_cycles_force(marker1);
+    if (HW_TID() == 0) {
+      PRINTF("\ncomplete on core %d\n", gemmini_i);
+      PRINTF("total cycles:         %d\n", marker1 - marker0);
+      for (int i = 0; i < 1 /*dim_m*/; i += 8) { /* print one line only for quick test running */
+        for (int j = 0; j < dim_n; j += 8) {
+          PRINTF("%d %d ", (int) (C[i * dim_n + j]), (int) (C[i * dim_n + j + 4]));
+        }
+        PRINTF("\n");
+      }
+    }
+  }
+  threadblock_barrier(/*barrier_id=*/0, /*count=*/NUM_WARPS);
 }
 
 void thread_block_matmul_gemmini(kernel_arg_t *__UNIFORM__ arg,
@@ -74,83 +155,10 @@ void thread_block_matmul_gemmini(kernel_arg_t *__UNIFORM__ arg,
   const uint32_t dim_m = arg->dim_m;
   const uint32_t dim_n = arg->dim_n;
   const uint32_t dim_k = arg->dim_k;
-  const uint32_t num_tiles_m = dim_m / TILE_M;
-  const uint32_t num_tiles_n = dim_n / TILE_N;
-  const uint32_t num_tiles_k = dim_k / TILE_K;
-  constexpr uint32_t num_threads_in_cluster = NUM_THREADS_IN_CLUSTER;
 
-  const uint32_t num_tile_rows_per_tb = num_tiles_m / NUM_CLUSTERS;
+  gemm_in_gemmini(0, dim_m, dim_n, dim_k, A, B, C, threadblock_id);
+  gemm_in_gemmini(1, dim_m, dim_n, dim_k, A, B, C, threadblock_id);
 
-  #define RUN_ON_GEMMINI(gemmini_i) { \
-  use_gemmini(gemmini_i); \
-  if (HW_TID() == 0) { \
-    gemmini_extended3_config_ld(dim_k * sizeof(elem_t), MVIN_SCALE_IDENTITY, false, 0); \
-    gemmini_extended3_config_ld(dim_n * sizeof(elem_t), MVIN_SCALE_IDENTITY, false, 1); \
-    gemmini_extended_config_st(dim_n * sizeof(elem_t), 0, MVIN_SCALE_IDENTITY); \
-  } \
-  for (uint32_t tile_i = num_tile_rows_per_tb * threadblock_id; \
-       tile_i < num_tile_rows_per_tb * (threadblock_id + 1); \
-       tile_i += 1) { \
-    for (int tile_j = 0; tile_j < num_tiles_n; tile_j += 1) { \
-      if (HW_TID() == 0) { \
-        for (int tile_k = 0; tile_k < num_tiles_k; tile_k += 1) { \
-          ROCC_INSTRUCTION_RS1_RS2(XCUSTOM_ACC, \
-                                   (uint64_t) (A + tile_i * TILE_M * dim_k + tile_k * TILE_K), \
-                                   (uint64_t) (B + tile_k * TILE_K * dim_n + tile_j * TILE_N), \
-                                   k_LOOP_WS_CONFIG_ADDRS_AB) \
-          GEMMINI_CISC_CMD_R((dim_n) << 16 | (dim_k << 8) | GEMMINI_CISC_IMM(8, gemmini_i)); \
-          if (tile_k & 1) { \
-            GEMMINI_CISC_CMD_I(GEMMINI_CISC_IMM(11, gemmini_i)); \
-          } else { \
-            GEMMINI_CISC_CMD_I(GEMMINI_CISC_IMM(10, gemmini_i)); \
-          } \
-          if (tile_k == 0) { \
-            gemmini_fence(); \
-            GEMMINI_CISC_CMD_I(GEMMINI_CISC_IMM(0, gemmini_i)); \
-          } else if (tile_k & 1) { \
-            gemmini_fence(); \
-            GEMMINI_CISC_CMD_I(GEMMINI_CISC_IMM(2, gemmini_i)); \
-          } else { \
-            gemmini_fence(); \
-            GEMMINI_CISC_CMD_I(GEMMINI_CISC_IMM(1, gemmini_i)); \
-          } \
-        } \
-        gemmini_fence(); \
-        gemmini_fence(); \
-        gemmini_fence(); \
-        gemmini_fence(); \
-        GEMMINI_CISC_CMD_I(GEMMINI_CISC_IMM(9, gemmini_i)); \
-        gemmini_fence(); \
-      } \
-      threadblock_barrier(/*barrier_id=*/0, /*count=*/NUM_WARPS); \
-      if (HW_TID() == 0) { \
-        float *const dram_c_tile_start = C + tile_i * TILE_M * dim_n + tile_j * TILE_N; \
-        ROCC_INSTRUCTION_RS1_RS2(XCUSTOM_ACC, 0, BOUND_INST, k_LOOP_WS_CONFIG_BOUNDS) \
-        ROCC_INSTRUCTION_RS1_RS2(XCUSTOM_ACC, 0, (uint64_t) dram_c_tile_start, k_LOOP_WS_CONFIG_ADDRS_DC) \
-        ROCC_INSTRUCTION_RS1_RS2(XCUSTOM_ACC, 0, dim_n, k_LOOP_WS_CONFIG_STRIDES_DC) \
-        ROCC_INSTRUCTION_RS1_RS2(XCUSTOM_ACC, 0, loop_matmul_skips(1, 1, 1, 1, 0), k_LOOP_WS) \
-      } \
-    } \
-  } \
-  if (threadblock_id == NUM_CLUSTERS - 1) { \
-    threadblock_barrier(/*barrier_id=*/0, /*count=*/NUM_WARPS); \
-    rd_cycles_force(marker1); \
-    if (HW_TID() == 0) { \
-      PRINTF("\ncomplete on core %d\n", gemmini_i); \
-      PRINTF("total cycles:         %d\n", marker1 - marker0); \
-      for (int i = 0; i < 1 /*dim_m*/; i += 8) { /* print one line only for quick test running */ \
-        for (int j = 0; j < dim_n; j += 8) { \
-          PRINTF("%d %d ", (int) (C[i * dim_n + j]), (int) (C[i * dim_n + j + 4])); \
-        } \
-        PRINTF("\n"); \
-      } \
-    } \
-  } \
-  threadblock_barrier(/*barrier_id=*/0, /*count=*/NUM_WARPS); \
-  }
-
-  RUN_ON_GEMMINI(0)
-  RUN_ON_GEMMINI(1)
   vx_tmc(0);
 }
 
