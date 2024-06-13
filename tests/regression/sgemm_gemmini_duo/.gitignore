@@ -1,5 +1,5 @@
 *.bin
 *.dump
 *.elf
-sgemm_wg
+sgemm_gemmini_duo
 .depend
