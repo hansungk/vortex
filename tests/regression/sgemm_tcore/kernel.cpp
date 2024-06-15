@@ -334,7 +334,7 @@ inline void thread_block_gemm(kernel_arg_t *__UNIFORM__ arg,
           GEMMINI_CISC_CMD_R((dim_n << 16) | (dim_k << 8) | 8);
           gemmini_fence();
 
-          GEMMINI_CISC_CMD_I(12);
+          GEMMINI_CISC_CMD_I(10);
           gemmini_fence();
 
 #if 0
@@ -380,9 +380,9 @@ inline void thread_block_gemm(kernel_arg_t *__UNIFORM__ arg,
           GEMMINI_CISC_CMD_R((dim_n << 16) | (dim_k << 8) | 8);
           // gemmini_fence();
 
-          // block_k is even: opcode 13 (write to local_a_buf)
-          // block_k is odd:  opcode 12 (write to local_a)
-          const uint32_t opcode = 13 - (block_k & 1);
+          // block_k is even: opcode 11 (write to local_a_buf)
+          // block_k is odd:  opcode 10 (write to local_a)
+          const uint32_t opcode = 11 - (block_k & 1);
           GEMMINI_CISC_CMD_R(opcode);
           // // TODO: branch is probably slow
           // if (block_k & 1) {
