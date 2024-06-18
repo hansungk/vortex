@@ -19,7 +19,7 @@
 // * Combining BM * BK >= (BM*BN) / (TM*TN) == threadblock yields
 //   BM <= BK*TM*TN
 #define BM 64
-#define BN 64
+#define BN 32
 #define BK 64
 #define WM 16
 #define WN 8
