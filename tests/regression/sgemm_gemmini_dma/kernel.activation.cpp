@@ -353,12 +353,12 @@ void thread_block_matmul_gemmini(kernel_arg_t *__UNIFORM__ arg,
         gemmini_fence();
         gemmini_fence();
         gemmini_fence();
-        // mvout to scratchpad for activation
-        GEMMINI_CISC_CMD_I(9);
-
-        gemmini_fence();
+        // // mvout to scratchpad for activation
+        // GEMMINI_CISC_CMD_I(9);
+        // gemmini_fence();
       }
 
+      // synchronize activation and GEMM on (M,N) tile
       threadblock_barrier(/*barrier_id=*/0, /*count=*/NUM_WARPS);
 
       // move out to dram
