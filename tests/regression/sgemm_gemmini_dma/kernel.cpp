@@ -42,7 +42,7 @@
 #define PRINTF(...) sprintf(PRINT_BUF, __VA_ARGS__)
 // #define PRINTF(...) vx_printf(__VA_ARGS__)
 #define SWISH(beta, x) ((x) / (1 + exp(-(beta) * (x))))
-//#define POWER
+#define POWER
 
 inline void threadblock_barrier(unsigned int barrier_id, unsigned int count) {
   vx_fence();
@@ -60,7 +60,9 @@ void thread_block_matmul_gemmini(kernel_arg_t *__UNIFORM__ arg,
   if (HW_TID() == 0) {
     gemmini_extended_config_ex(WEIGHT_STATIONARY, 0, 0, 1, 0, 0);
     // gemmini_extended_config_ex(dataflow, act & 3, 0, 1, a_transpose, b_transpose);
+    #ifndef POWER
     PRINTF("start\n");
+    #endif
   }
 
   vx_fence();
@@ -119,15 +121,15 @@ void thread_block_matmul_gemmini(kernel_arg_t *__UNIFORM__ arg,
         gemmini_fence();
         gemmini_fence();
         // mvout to scratchpad for activation
-        GEMMINI_CISC_CMD_I(9);
-        gemmini_fence();
-      }
+      //   GEMMINI_CISC_CMD_I(9);
+      //   gemmini_fence();
+      // }
 
-      threadblock_barrier(/*barrier_id=*/0, /*count=*/NUM_WARPS);
-      // activate
+      // threadblock_barrier(/*barrier_id=*/0, /*count=*/NUM_WARPS);
+      // // activate
 
-      // move out to dram
-      if (HW_TID() == 0) {
+      // // move out to dram
+      // if (HW_TID() == 0) {
         float * const dram_c_tile_start = C + tile_i * TILE_M * dim_n + tile_j * TILE_N;
         ROCC_INSTRUCTION_RS1_RS2(XCUSTOM_ACC, 0, BOUND_INST, k_LOOP_WS_CONFIG_BOUNDS)
         ROCC_INSTRUCTION_RS1_RS2(XCUSTOM_ACC, 0, (uint64_t) dram_c_tile_start, k_LOOP_WS_CONFIG_ADDRS_DC)
@@ -142,7 +144,7 @@ void thread_block_matmul_gemmini(kernel_arg_t *__UNIFORM__ arg,
     rd_cycles_force(marker1);
     if (HW_TID() == 0) {
       #ifdef POWER
-        PRINTF("\nstart %d end %d\n", marker0, marker1);
+        PRINTF("%d\n", marker1 - marker0);
       #else
         PRINTF("\ncomplete\n");
         PRINTF("total cycles:         %d\n", marker1 - marker0);
