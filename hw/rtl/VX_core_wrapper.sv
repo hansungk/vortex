@@ -508,12 +508,12 @@ module Vortex import VX_gpu_pkg::*; #(
     end
 
     // give slack for other cores to finish
-    wire all_cores_finished = (finish_counter > 32'd1000);
+    wire all_cores_finished = (finish_counter > 32'd10000);
 
 `ifdef SIMULATION
     always @(posedge clock) begin
         if (!reset) begin
-            if (all_cores_finished) begin
+            if ((CORE_ID == '0) && all_cores_finished) begin
                 $display("simulation has probably ended. exiting");
                 $finish();
             end
