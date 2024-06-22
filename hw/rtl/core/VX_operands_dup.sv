@@ -30,6 +30,11 @@ module VX_operands_dup import VX_gpu_pkg::*; #(
     localparam DATAW = `UUID_WIDTH + ISSUE_WIS_W + `NUM_THREADS + `XLEN + 1 + `EX_BITS + `INST_OP_BITS + `INST_MOD_BITS + 1 + 1 + `XLEN + `NR_BITS;
     localparam RAM_ADDRW = `LOG2UP(`NUM_REGS * ISSUE_RATIO);
 
+`ifdef PERF_ENABLE
+    logic [`ISSUE_WIDTH-1:0][`PERF_CTR_BITS-1:0] perf_rf_read_per_warp;
+    logic [`ISSUE_WIDTH-1:0][`PERF_CTR_BITS-1:0] perf_rf_write_per_warp;
+`endif
+
     for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin
         VX_stream_buffer #(
             .DATAW (DATAW)
@@ -150,6 +155,12 @@ module VX_operands_dup import VX_gpu_pkg::*; #(
         end
     `endif
 
+`ifdef PERF_ENABLE
+        logic [`NUM_THREADS-1:0][`PERF_CTR_BITS-1:0] perf_write_rs1_per_thread;
+        logic [`NUM_THREADS-1:0][`PERF_CTR_BITS-1:0] perf_write_rs2_per_thread;
+        logic [`NUM_THREADS-1:0][`PERF_CTR_BITS-1:0] perf_write_rs3_per_thread;
+`endif
+
         for (genvar j = 0; j < `NUM_THREADS; ++j) begin
             VX_dp_ram #(
                 .DATAW (`XLEN),
@@ -219,8 +230,60 @@ module VX_operands_dup import VX_gpu_pkg::*; #(
                 .raddr (gpr_rd_addr_rs3),
                 .rdata (rs3_data[j])
             );
+
+`ifdef PERF_ENABLE
+            assign perf_write_rs1_per_thread[j] = (wr_enabled && writeback_if[i].valid && writeback_if[i].data.tmask[j]);
+            assign perf_write_rs2_per_thread[j] = (wr_enabled && writeback_if[i].valid && writeback_if[i].data.tmask[j]);
+            assign perf_write_rs3_per_thread[j] = (wr_enabled && writeback_if[i].valid && writeback_if[i].data.tmask[j]);
+`endif
+        end
+
+`ifdef PERF_ENABLE
+        // read is done for all threads; write is masked
+        wire scoreboard_fire = scoreboard_if[i].valid && scoreboard_if[i].ready;
+        wire [`PERF_CTR_BITS-1:0] perf_read_rs1_per_warp = (scoreboard_fire ? `NUM_THREADS : `PERF_CTR_BITS'b0);
+        wire [`PERF_CTR_BITS-1:0] perf_read_rs2_per_warp = (scoreboard_fire ? `NUM_THREADS : `PERF_CTR_BITS'b0);
+        wire [`PERF_CTR_BITS-1:0] perf_read_rs3_per_warp = (scoreboard_fire ? `NUM_THREADS : `PERF_CTR_BITS'b0);
+        assign perf_rf_read_per_warp[i] = perf_read_rs1_per_warp + perf_read_rs2_per_warp + perf_read_rs3_per_warp;
+
+        always @(*) begin
+            perf_rf_write_per_warp[i] = '0;
+            for (integer t = 0; t < `NUM_THREADS; ++t) begin
+                perf_rf_write_per_warp[i] = perf_rf_write_per_warp[i] + 
+                                            perf_write_rs1_per_thread[t] +
+                                            perf_write_rs2_per_thread[t] +
+                                            perf_write_rs3_per_thread[t];
+            end
+        end
+`endif
+    end
+
+`ifdef PERF_ENABLE
+    logic [`PERF_CTR_BITS-1:0] perf_rf_read_per_cycle;
+    logic [`PERF_CTR_BITS-1:0] perf_rf_write_per_cycle;
+
+    always @(*) begin
+        perf_rf_read_per_cycle = '0;
+        perf_rf_write_per_cycle = '0;
+        for (integer i = 0; i < `ISSUE_WIDTH; ++i) begin
+            perf_rf_read_per_cycle = perf_rf_read_per_cycle + perf_rf_read_per_warp[i];
+            perf_rf_write_per_cycle = perf_rf_write_per_cycle + perf_rf_write_per_warp[i];
         end
     end
+
+    logic [`PERF_CTR_BITS-1:0] perf_rf_reads;
+    logic [`PERF_CTR_BITS-1:0] perf_rf_writes;
+
+    always @(posedge clk) begin
+        if (reset) begin
+            perf_rf_reads <= '0;
+            perf_rf_writes <= '0;
+        end else begin
+            perf_rf_reads  <= perf_rf_reads  + perf_rf_read_per_cycle;
+            perf_rf_writes <= perf_rf_writes + perf_rf_write_per_cycle;
+        end
+    end
+`endif
 
 endmodule
 
