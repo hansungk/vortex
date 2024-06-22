@@ -39,6 +39,7 @@
 `ifdef SYNTHESIS
 `define FPU_FPNEW
 `define FIRESIM
+// `define FIRESIM
 `endif // SYNTHESIS
 
 `ifdef SV_DPI
@@ -79,7 +80,7 @@
 `define UNUSED_PIN(x) . x ()
 `define UNUSED_ARG(x) x
 `define TRACE(level, args) $write args
-`else
+`else // !SYNTHESIS
 `ifdef VERILATOR
 `define SIMULATION
 `define TRACING_ON      /* verilator tracing_on */
@@ -208,6 +209,7 @@
                         x \
                         /* verilator lint_on UNUSED */
 `define TRACE(level, args) $write args
+// `define TRACE(level, args) dpi_trace(level, $sformatf args)
 `endif
 `endif
 
