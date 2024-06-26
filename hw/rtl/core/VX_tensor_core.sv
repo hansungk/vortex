@@ -12,8 +12,9 @@ module VX_tensor_core import VX_gpu_pkg::*; #(
 );
     localparam BLOCK_SIZE = 1;
     localparam NUM_LANES  = `NUM_THREADS;
-    // localparam PARTIAL_BW = (BLOCK_SIZE != `ISSUE_WIDTH) || (NUM_LANES != `NUM_THREADS);
-    localparam PARTIAL_BW = 1;
+    // FIXME: @perf: PARTIAL_BW==1 increases power instantiating
+    // stream_buffers for ISSUE_WIDTH times
+    localparam PARTIAL_BW = (BLOCK_SIZE != `ISSUE_WIDTH) || (NUM_LANES != `NUM_THREADS);
 
     VX_execute_if #(
         .NUM_LANES (NUM_LANES)
