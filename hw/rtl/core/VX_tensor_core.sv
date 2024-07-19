@@ -411,6 +411,7 @@ module VX_tensor_octet #(
         substeps_n = substeps;
         
         if (operands_first_in_pair_fire) begin
+          // NOTE: substeps is only used for debugging
           substeps_n[operands_wid_buf] = 1'b1; // ready for hmma
           A_buffer_n[operands_wid_buf] = halves_buf.A_half;
           B_buffer_n[operands_wid_buf] = halves_buf.B_half;
@@ -496,7 +497,7 @@ module VX_tensor_octet #(
     wire outbuf_enq = outbuf_ready_in && dpu_valid;
     wire outbuf_deq = result_valid && result_ready;
 
-    // buffer to stage the result D tile for 2 cycles until commit/writeback
+    // result buffer to stage the D tile for 2 cycles until commit/writeback
     // is complete.  This decouples the irregular dpu output traffic from the
     // regular, every-2-cycle commit traffic to ensure the commit pipeline is
     // used more efficiently.
