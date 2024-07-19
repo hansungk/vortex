@@ -7,7 +7,7 @@
 #include "include/gemmini.h"
 #include "gemmini_mmio.h"
 
-#define GEMMINI_DMA 0
+#define GEMMINI_DMA 1
 #if SMEM_SIZE == 0x4000
 #define SMEM_ADDR_Q0 ((float * const) 0xff000000)
 #define SMEM_ADDR_Q1 ((float * const) 0xff001000)
@@ -368,7 +368,7 @@ inline void thread_block_gemm(kernel_arg_t *__UNIFORM__ arg,
         // this is either done using DMA or SIMT cores depending on GEMMINI_DMA
 
 #if (GEMMINI_DMA == 1)
-        if (tid_in_threadblock == 0) {
+        if ((tid_in_threadblock == 0) && ((block_k * BK) != (dim_k - BK))) {
           // configure dma gmem address to load from
           // FIXME: block_k is wrong
           ROCC_INSTRUCTION_RS1_RS2(

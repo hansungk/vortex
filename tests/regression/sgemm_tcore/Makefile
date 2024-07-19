@@ -2,7 +2,7 @@ PROJECT = sgemm_tcore
 
 SRCS = main.cpp common.h
 
-VX_SRCS = kernel.activation.cpp
+VX_SRCS = kernel.cpp
 
 OPTS ?= -n16
 
