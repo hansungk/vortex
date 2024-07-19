@@ -19,7 +19,7 @@
 // * Combining BM * BK >= (BM*BN) / (TM*TN) == threadblock yields
 //   BM <= BK*TM*TN
 #define BM 64
-#define BN 32
+#define BN 64
 #define BK 64
 #define WM 16
 #define WN 8
@@ -33,13 +33,15 @@
 // number of loop around the inner 0..TCK..BK loop to simulate perfect-DRAM
 // scenario
 #define BK_LOOP 1
-// whether to transpose smem A tile at GMEM->SMEM (produce), or SMEM->RF
+// Whether to transpose smem A tile at GMEM->SMEM (produce), or SMEM->RF
 // (consume).  This is because the tensor core expects the A tile to be stored
-// in column-major order in SMEM.
+// in column-major order in SMEM, whereas it is stored row-major in GMEM.
 //
 // For correctness, only one of either should be 1.  To model the case where
-// the entire A matrix is already stored transposed in GMEM ("TN" kernel), set
+// the A matrix is already stored transposed in GMEM ("TN" kernel), set
 // both to 0.
+//
+// For reference, PRODUCE 1 CONSUME 0 generates the performant NN kernel.
 #define TRANSPOSE_AT_PRODUCE 1
 #define TRANSPOSE_AT_CONSUME 0
 // GMEM_COALESCED sets bank conflict-free accesses for
