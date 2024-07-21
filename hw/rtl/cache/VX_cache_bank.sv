@@ -434,10 +434,13 @@ module VX_cache_bank #(
     wire [REQ_SEL_WIDTH-1:0] crsq_idx;
     wire [TAG_WIDTH-1:0] crsq_tag;
 
+    logic [REQ_SEL_WIDTH-1:0] req_idx_st2;
+    logic [TAG_WIDTH-1:0] tag_st2;
+
     assign crsq_valid = do_read_hit_st1 || do_replay_rd_st1;
-    assign crsq_idx   = req_idx_st1;
+    assign crsq_idx   = req_idx_st1; // req_idx_st2;
     assign crsq_data  = read_data_st1;
-    assign crsq_tag   = tag_st1;
+    assign crsq_tag   = tag_st1; // tag_st2;
 
     `RESET_RELAY (crsp_reset, reset);
 
@@ -451,10 +454,40 @@ module VX_cache_bank #(
         .valid_in  (crsq_valid && ~rdw_hazard_st1),
         .ready_in  (crsq_ready),
         .data_in   ({crsq_tag, crsq_data, crsq_idx}), 
+        // .data_out  (),
         .data_out  ({core_rsp_tag, core_rsp_data, core_rsp_idx}),
         .valid_out (core_rsp_valid),
         .ready_out (core_rsp_ready)
     );
+/*
+    logic sh_fire_in, sh_val_out;
+    logic [TAG_WIDTH + `CS_WORD_WIDTH + REQ_SEL_WIDTH - 1 : 0] fake_dout;
+    always @(posedge clk) begin
+      if (crsp_reset) begin
+        sh_fire_in <= 1'b0;
+        req_idx_st2 <= '0;
+        tag_st2 <= '0;
+      end else begin
+        sh_fire_in <= crsq_valid && (~rdw_hazard_st1) && crsq_ready;
+        req_idx_st2 <= req_idx_st1;
+        tag_st2 <= tag_st1;
+        assert(sh_val_out == core_rsp_valid);
+      end
+    end
+
+    // $assert(CRSQ_SIZE == 2);
+    VX_stream_buffer_comb #(
+        .DATAW   (TAG_WIDTH + `CS_WORD_WIDTH + REQ_SEL_WIDTH),
+    ) core_resp_queue_shadow (
+        .clk       (clk),
+        .reset     (crsp_reset),
+        .valid_in  (sh_fire_in),
+        .ready_in  (),
+        .data_in   ({crsq_tag, crsq_data, crsq_idx}),
+        .data_out  ({core_rsp_tag, core_rsp_data, core_rsp_idx}),
+        .valid_out (sh_val_out),
+        .ready_out (core_rsp_ready)
+    );*/
 
     assign crsq_stall = crsq_valid && ~crsq_ready;
 

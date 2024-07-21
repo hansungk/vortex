@@ -124,5 +124,58 @@ module VX_stream_buffer #(
     end
 
 endmodule
+
+module VX_stream_buffer_comb #(
+    parameter DATAW    = 1,
+	parameter OUT_REG  = 0,
+    parameter PASSTHRU = 0
+) (
+    input  wire             clk,
+    input  wire             reset,
+    input  wire             valid_in,
+    output wire             ready_in,
+    input  wire [DATAW-1:0] data_in,
+    output wire [DATAW-1:0] data_out,
+    input  wire             ready_out,
+    output wire             valid_out
+);
+  reg [1:0][DATAW-1:0] shift_reg;
+  reg valid_out_r, ready_in_r, rd_ptr_r;
+  reg bypass;
+
+  wire push = valid_in && ready_in;
+  wire pop = (valid_out_r || valid_in) && ready_out;
+
+  always @(posedge clk) begin
+	  if (reset) begin
+		  valid_out_r <= 0;
+		  ready_in_r  <= 1;
+		  rd_ptr_r    <= 1;
+	  end else begin
+		  if (push) begin
+			  if (!pop) begin
+				  ready_in_r  <= rd_ptr_r;
+				  valid_out_r <= 1;
+			  end
+		  end else if (pop) begin
+			  ready_in_r  <= 1;
+			  valid_out_r <= rd_ptr_r;
+		  end
+		  rd_ptr_r <= rd_ptr_r ^ (push ^ pop);
+	  end
+  end
+
+  always @(posedge clk) begin
+	  if (push) begin
+		  shift_reg[1] <= shift_reg[0];
+		  shift_reg[0] <= data_in;
+	  end
+  end
+
+  assign ready_in  = ready_in_r;
+  assign valid_out = valid_out_r || valid_in;
+  assign data_out  = valid_out_r ? shift_reg[rd_ptr_r] : data_in;
+
+endmodule
 `TRACING_ON
 

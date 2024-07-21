@@ -1,10 +1,10 @@
 // Copyright © 2019-2023
-// 
+//
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 // http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -20,17 +20,17 @@ module VX_dp_ram #(
     parameter WRENW       = 1,
     parameter OUT_REG     = 0,
     parameter NO_RWCHECK  = 0,
-    parameter LUTRAM      = 0,    
+    parameter LUTRAM      = 0,
     parameter INIT_ENABLE = 0,
     parameter INIT_FILE   = "",
     parameter [DATAW-1:0] INIT_VALUE = 0,
     parameter ADDRW       = `LOG2UP(SIZE)
-) ( 
+) (
     input wire               clk,
     input wire               read,
     input wire               write,
     input wire [WRENW-1:0]   wren,
-    input wire [ADDRW-1:0]   waddr,        
+    input wire [ADDRW-1:0]   waddr,
     input wire [DATAW-1:0]   wdata,
     input wire [ADDRW-1:0]   raddr,
     output wire [DATAW-1:0]  rdata
@@ -48,14 +48,14 @@ module VX_dp_ram #(
                     ram[i] = INIT_VALUE;           \
         end                                        \
     end
-    
+
     `UNUSED_VAR (read)
 
 `ifdef SYNTHESIS
     if (WRENW > 1) begin
     `ifdef QUARTUS
         if (LUTRAM != 0) begin
-            if (OUT_REG != 0) begin        
+            if (OUT_REG != 0) begin
                 reg [DATAW-1:0] rdata_r;
                 `USE_FAST_BRAM reg [WRENW-1:0][WSELW-1:0] ram [SIZE-1:0];
                 `RAM_INITIALIZATION
@@ -134,7 +134,7 @@ module VX_dp_ram #(
         if (LUTRAM != 0) begin
             `USE_FAST_BRAM reg [DATAW-1:0] ram [SIZE-1:0];
             `RAM_INITIALIZATION
-            if (OUT_REG != 0) begin            
+            if (OUT_REG != 0) begin
                 reg [DATAW-1:0] rdata_r;
                 always @(posedge clk) begin
                     if (write) begin
@@ -162,10 +162,10 @@ module VX_dp_ram #(
         end else begin
             `ifndef FIRESIM
             if (DATAW == 1024 && SIZE == 16) begin // dcache data
-                dcache_data ram (
+                (* dont_touch = "yes" *) dcache_data ram (
                     .R0_addr(raddr),
                     .R0_clk(clk),
-                    .R0_data(rdata),
+                    .R0_data(/*rdata*/),
                     .R0_en(read),
                     .W0_addr(waddr),
                     .W0_clk(clk),
@@ -174,10 +174,10 @@ module VX_dp_ram #(
                     .W0_mask(wren)
                 );
             end else if (DATAW == 305 && SIZE == 8) begin // mshr
-                cache_mshr ram (
+                (* dont_touch = "yes" *) cache_mshr ram (
                     .R0_addr(raddr),
                     .R0_clk(clk),
-                    .R0_data(rdata),
+                    .R0_data(/*rdata*/),
                     .R0_en(read),
                     .W0_addr(waddr),
                     .W0_clk(clk),
@@ -185,10 +185,10 @@ module VX_dp_ram #(
                     .W0_en(write)
                 );
             end else if (DATAW == 24 && SIZE == 16) begin // dcache tags
-                dcache_tags ram (
+                (* dont_touch = "yes" *) dcache_tags ram (
                     .R0_addr(raddr),
                     .R0_clk(clk),
-                    .R0_data(rdata),
+                    .R0_data(/*rdata*/),
                     .R0_en(read),
                     .W0_addr(waddr),
                     .W0_clk(clk),
@@ -196,10 +196,10 @@ module VX_dp_ram #(
                     .W0_en(write)
                 );
             end else if (DATAW == 1024 && SIZE == 128) begin // icache data
-                icache_data ram (
+                (* dont_touch = "yes" *) icache_data ram (
                     .R0_addr(raddr),
                     .R0_clk(clk),
-                    .R0_data(rdata),
+                    .R0_data(/*rdata*/),
                     .R0_en(read),
                     .W0_addr(waddr),
                     .W0_clk(clk),
@@ -208,17 +208,28 @@ module VX_dp_ram #(
                     .W0_mask(wren)
                 );
             end else if (DATAW == 21 && SIZE == 128) begin // icache tags
-                icache_tags ram (
+                (* dont_touch = "yes" *) icache_tags ram (
                     .R0_addr(raddr),
                     .R0_clk(clk),
-                    .R0_data(rdata),
+                    .R0_data(/*rdata*/),
                     .R0_en(read),
                     .W0_addr(waddr),
                     .W0_clk(clk),
                     .W0_data(wdata),
                     .W0_en(write)
                 );
-            end else begin
+            end else if (DATAW == 32 && SIZE == 64) begin // register file
+                (* dont_touch = "yes" *) rf_bank ram (
+                    .R0_addr(raddr),
+                    .R0_clk(clk),
+                    .R0_data(/*rdata*/),
+                    .R0_en(read),
+                    .W0_addr(waddr),
+                    .W0_clk(clk),
+                    .W0_data(wdata),
+                    .W0_en(write)
+                );
+            end // else begin
             `endif
                 if (OUT_REG != 0) begin
                     reg [DATAW-1:0] ram [SIZE-1:0];
@@ -264,7 +275,7 @@ module VX_dp_ram #(
                     end
                 end
             `ifndef FIRESIM
-            end
+            // end
             `endif
         end
     `endif
@@ -273,7 +284,7 @@ module VX_dp_ram #(
         if (LUTRAM != 0) begin
             `USE_FAST_BRAM reg [DATAW-1:0] ram [SIZE-1:0];
             `RAM_INITIALIZATION
-            if (OUT_REG != 0) begin            
+            if (OUT_REG != 0) begin
                 reg [DATAW-1:0] rdata_r;
                 always @(posedge clk) begin
                     if (write) begin
@@ -293,6 +304,51 @@ module VX_dp_ram #(
                 assign rdata = ram[raddr];
             end
         end else begin
+            if (DATAW == 305 && SIZE == 8) begin // mshr
+                (* dont_touch = "yes" *) cache_mshr ram (
+                    .R0_addr(raddr),
+                    .R0_clk(clk),
+                    .R0_data(/*rdata*/),
+                    .R0_en(read),
+                    .W0_addr(waddr),
+                    .W0_clk(clk),
+                    .W0_data(wdata),
+                    .W0_en(write)
+                );
+            end else if (DATAW == 24 && SIZE == 16) begin // dcache tags
+                (* dont_touch = "yes" *) dcache_tags ram (
+                    .R0_addr(raddr),
+                    .R0_clk(clk),
+                    .R0_data(/*rdata*/),
+                    .R0_en(read),
+                    .W0_addr(waddr),
+                    .W0_clk(clk),
+                    .W0_data(wdata),
+                    .W0_en(write)
+                );
+            end else if (DATAW == 21 && SIZE == 128) begin // icache tags
+                (* dont_touch = "yes" *) icache_tags ram (
+                    .R0_addr(raddr),
+                    .R0_clk(clk),
+                    .R0_data(/*rdata*/),
+                    .R0_en(read),
+                    .W0_addr(waddr),
+                    .W0_clk(clk),
+                    .W0_data(wdata),
+                    .W0_en(write)
+                );
+            end else if (DATAW == 32 && SIZE == 64) begin // register file
+                (* dont_touch = "yes" *) rf_bank ram (
+                    .R0_addr(raddr),
+                    .R0_clk(clk),
+                    .R0_data(/*rdata*/),
+                    .R0_en(read),
+                    .W0_addr(waddr),
+                    .W0_clk(clk),
+                    .W0_data(wdata),
+                    .W0_en(write)
+                );
+            end // else begin
             if (OUT_REG != 0) begin
                 reg [DATAW-1:0] ram [SIZE-1:0];
                 reg [DATAW-1:0] rdata_r;
@@ -328,7 +384,7 @@ module VX_dp_ram #(
                 end
             end
         end
-    end    
+    end
 `else
     // RAM emulation
     reg [DATAW-1:0] ram [SIZE-1:0];
@@ -339,8 +395,8 @@ module VX_dp_ram #(
         assign ram_n[i * WSELW +: WSELW] = ((WRENW == 1) | wren[i]) ? wdata[i * WSELW +: WSELW] : ram[waddr][i * WSELW +: WSELW];
     end
 
-    if (OUT_REG != 0) begin        
-        reg [DATAW-1:0] rdata_r;        
+    if (OUT_REG != 0) begin
+        reg [DATAW-1:0] rdata_r;
         always @(posedge clk) begin
             if (write) begin
                 ram[waddr] <= ram_n;
@@ -350,7 +406,7 @@ module VX_dp_ram #(
             end
         end
         assign rdata = rdata_r;
-    end else begin        
+    end else begin
         reg [DATAW-1:0] prev_data;
         reg [ADDRW-1:0] prev_waddr;
         reg prev_write;
@@ -361,7 +417,7 @@ module VX_dp_ram #(
             prev_write <= (| wren);
             prev_data  <= ram[waddr];
             prev_waddr <= waddr;
-        end            
+        end
         if (LUTRAM || !NO_RWCHECK) begin
             `UNUSED_VAR (prev_write)
             `UNUSED_VAR (prev_data)

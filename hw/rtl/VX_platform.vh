@@ -38,7 +38,6 @@
 
 `ifdef SYNTHESIS
 `define FPU_FPNEW
-`define FIRESIM
 `endif // SYNTHESIS
 
 `ifdef SV_DPI
