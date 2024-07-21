@@ -84,7 +84,7 @@
 #endif
 
 #ifndef NUM_CORES
-#define NUM_CORES 2
+#define NUM_CORES 4
 #endif
 
 #ifndef NUM_WARPS
@@ -96,7 +96,7 @@
 #endif
 
 #ifndef NUM_BARRIERS
-#define NUM_BARRIERS 4
+#define NUM_BARRIERS 8
 #endif
 
 #ifndef SOCKET_SIZE

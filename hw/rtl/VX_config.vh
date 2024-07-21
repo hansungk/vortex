@@ -83,7 +83,7 @@
 `endif
 
 `ifndef NUM_CORES
-`define NUM_CORES 2
+`define NUM_CORES 4
 `endif
 
 `ifndef NUM_WARPS
@@ -250,7 +250,7 @@
 `define NUM_ALU_LANES   `NUM_THREADS
 `endif
 `ifndef NUM_ALU_BLOCKS
-`define NUM_ALU_BLOCKS  4
+`define NUM_ALU_BLOCKS  2
 `endif
 
 // Number of FPU units
@@ -258,7 +258,7 @@
 `define NUM_FPU_LANES   `NUM_THREADS
 `endif
 `ifndef NUM_FPU_BLOCKS
-`define NUM_FPU_BLOCKS  2
+`define NUM_FPU_BLOCKS  1
 `endif
 
 // Number of LSU units

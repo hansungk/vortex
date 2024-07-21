@@ -280,6 +280,8 @@ module VX_schedule import VX_gpu_pkg::*; #(
     assign gbar_bus_if.req_valid   = gbar_req_valid;
     assign gbar_bus_if.req_id      = gbar_req_id;
     assign gbar_bus_if.req_size_m1 = gbar_req_size_m1;
+    // NOTE(hansung): since CORE_ID is global across multiple clusters, we
+    // need the modulo to get the per-cluster local core id
     assign gbar_bus_if.req_core_id = `NC_WIDTH'(CORE_ID % `NUM_CORES);
 `endif
 

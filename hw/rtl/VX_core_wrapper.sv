@@ -495,20 +495,30 @@ module Vortex import VX_gpu_pkg::*; #(
     //     .busy(busy)
     // );
 
+    logic [31:0] finish_counter;
+
+    always @(posedge clock) begin
+      if (reset) begin
+        finish_counter <= 32'd0;
+      end else begin
+        if (finished) begin
+          finish_counter <= finish_counter + 32'd1;
+        end
+      end
+    end
+
+    // give slack for other cores to finish
+    wire all_cores_finished = (finish_counter > 32'd10000);
+
+`ifdef SIMULATION
     always @(posedge clock) begin
         if (!reset) begin
+            if ((CORE_ID == '0) && all_cores_finished) begin
+                $display("simulation has probably ended. exiting");
+                $finish();
+            end
             if (finished) begin
-                `ifdef SIMULATION
-                    $display("---------------- core%2d has no more active warps ----------------", CORE_ID);
-                    $display("simulation has ended. exiting");
-                    $finish();
-                `endif
-                // `ifdef SIMULATION
-                // if ($time >= 60000) begin
-                //   $display("simulation has probably ended. exiting");
-                //   @(posedge clock) $finish();
-                // end
-                // `endif
+                $display("---------------- core%2d has no more active warps ----------------", CORE_ID);
                 // TODO: lane assumed to be 4
                 // `ifndef SYNTHESIS
                 // for (integer j = 0; j < `NUM_WARPS; j++) begin
@@ -525,6 +535,7 @@ module Vortex import VX_gpu_pkg::*; #(
             end
         end
     end
+`endif
 
 endmodule : Vortex
 
