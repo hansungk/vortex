@@ -14,15 +14,16 @@
 `ifndef VX_PLATFORM_VH
 `define VX_PLATFORM_VH
 
-// enable synthesizable build if SIMULATION not explicitly defined
+// enable synthesizable build by default if not SIMULATION
 `ifndef SIMULATION
 `define SYNTHESIS
 `define NDEBUG
 `define DPI_DISABLE
-`else
+`else  // !SYNTHESIS
 `define SV_DPI
-`endif // SIMULATION
+`endif
 
+// chipyard-specific configs
 `define GPR_RESET
 `define GPR_DUPLICATED
 `define GBAR_ENABLE
@@ -31,12 +32,12 @@
 `define ICACHE_DISABLE
 `define DCACHE_DISABLE
 
+`ifdef SYNTHESIS
 `define NUM_BARRIERS 8
 `define NUM_CORES 4
 `define NUM_THREADS 8
 `define NUM_WARPS 8
 
-`ifdef SYNTHESIS
 `define FPU_FPNEW
 // `define FIRESIM
 `endif // SYNTHESIS
