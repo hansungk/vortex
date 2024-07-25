@@ -250,7 +250,7 @@ module VX_tensor_threadgroup #(
     for (genvar i = 0; i < 4; ++i) begin
         localparam int d_row = i / 2;
         localparam int d_col = (i % 2) * 2;
-        // four-element dot product (FEDP) unit
+        // Dot product (FEDP) unit generated from Chisel
         TensorDotProductUnit fedp (
           .clock (clk),
           .reset (reset),

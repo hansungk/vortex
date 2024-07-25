@@ -298,7 +298,11 @@ endmodule
 
 module VX_tensor_octet #(
     parameter ISW,
-    parameter OCTET
+    parameter OCTET,
+    // RESULT_BUFFER_DEPTH = 2 gives good performance by absorbing commit
+    // backpressure (result_ready), although the value is arbitrary.
+    // RESULT_BUFFER_DEPTH = 0 eliminates result buffering.
+    parameter RESULT_BUFFER_DEPTH = 2
 ) (
     input clk,
     input reset,
@@ -488,39 +492,50 @@ module VX_tensor_octet #(
         .D_wid(D_wid_dpu)
     );
 
-    wire outbuf_empty;
-    wire outbuf_full;
-    // backpressure from commit
-    assign outbuf_ready_in = ~outbuf_full;
-    assign result_valid    = ~outbuf_empty;
+    if (RESULT_BUFFER_DEPTH > 0) begin
+        wire outbuf_empty;
+        wire outbuf_full;
+        // backpressure from commit
+        assign outbuf_ready_in = ~outbuf_full;
+        assign result_valid    = ~outbuf_empty;
 
-    wire outbuf_enq = outbuf_ready_in && dpu_valid;
-    wire outbuf_deq = result_valid && result_ready;
+        wire outbuf_enq = outbuf_ready_in && dpu_valid;
+        wire outbuf_deq = result_valid && result_ready;
 
-    // result buffer to stage the D tile for 2 cycles until commit/writeback
-    // is complete.  This decouples the irregular dpu output traffic from the
-    // regular, every-2-cycle commit traffic to ensure the commit pipeline is
-    // used more efficiently.
-    // FIXME: unnecessary?
-    VX_fifo_queue #(
-        .DATAW   ($bits(D_wid) + $bits(D_out)),
-        .DEPTH   (2 /* arbitrary */)
-    ) output_buffer (
-        .clk   (clk),
-        .reset (reset),
-        .push      (outbuf_enq),
-        .pop       (outbuf_deq),
-        .data_in   ({D_wid_dpu, D_tile}),
-        .data_out  ({D_wid,     D_out}),
-        .empty     (outbuf_empty),
-        `UNUSED_PIN(alm_empty),
-        .full      (outbuf_full), // should be impossible to overflow
-        `UNUSED_PIN(alm_full),
-        `UNUSED_PIN(size)
-    );
+        // Result buffer that stages the D tile for 2 cycles until
+        // commit/writeback is complete.  This decouples the irregular dpu
+        // output traffic from the regular, every-2-cycle commit traffic to
+        // ensure the commit pipeline is used more efficiently.
+        // FIXME: unnecessary?
+        VX_fifo_queue #(
+            .DATAW   ($bits(D_wid) + $bits(D_out)),
+            .DEPTH   (RESULT_BUFFER_DEPTH) // 2 works good
+        ) output_buffer (
+            .clk   (clk),
+            .reset (reset),
+            .push      (outbuf_enq),
+            .pop       (outbuf_deq),
+            .data_in   ({D_wid_dpu, D_tile}),
+            .data_out  ({D_wid,     D_out}),
+            .empty     (outbuf_empty),
+            `UNUSED_PIN(alm_empty),
+            .full      (outbuf_full), // should be impossible to overflow
+            `UNUSED_PIN(alm_full),
+            `UNUSED_PIN(size)
+        );
 
-    // FIXME: this shouldn't be necessary
-    `RUNTIME_ASSERT(reset || !outbuf_full, ("dpu result queue is full!"))
+        // FIXME: overly strict; this firing doesn't mean a bug
+        `RUNTIME_ASSERT(reset || !outbuf_full, ("dpu result queue is full!"))
+    end else begin
+        // XXX: this depends on the assumption that commit stage only asserts
+        // result_ready when result_valid is true
+        assign outbuf_ready_in = !result_valid || result_ready;
+        assign result_valid = dpu_valid;
+
+        // make direct connections
+        assign D_wid = D_wid_dpu;
+        assign D_out = D_tile;
+    end
 
 `ifdef PERF_ENABLE
     logic [`PERF_CTR_BITS-1:0] perf_tensor_dpu_total;
