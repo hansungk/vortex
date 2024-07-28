@@ -287,7 +287,7 @@ module VX_tensor_core_block import VX_gpu_pkg::*; #(
     end
 
     VX_tensor_reg #(
-        .N(1)
+        .DATAW(1)
     ) staging_subcommit (
         .clk(clk),
         .reset(reset),
@@ -298,15 +298,15 @@ module VX_tensor_core_block import VX_gpu_pkg::*; #(
 endmodule
 
 module VX_tensor_reg #(
-    parameter N
+    parameter DATAW
 ) (
     input  clk,
     input  reset,
-    input  [N-1:0] d,
+    input  [DATAW-1:0] d,
     input          en,
-    output [N-1:0] q
+    output [DATAW-1:0] q
 );
-    logic [N-1:0] data;
+    logic [DATAW-1:0] data;
 
     always @(posedge clk) begin
         if (reset) begin
@@ -436,7 +436,7 @@ module VX_tensor_octet #(
     // Staging buffer for the A/B/C half-tiles that will later be assembled
     // with the other half tiles coming in on the input ports.
     VX_tensor_reg #(
-        .N($bits(A_buffer) + $bits(B_buffer) + $bits(C_buffer))
+        .DATAW($bits(A_buffer) + $bits(B_buffer) + $bits(C_buffer))
     ) staging_abc (
         .clk(clk),
         .reset(reset),
@@ -464,7 +464,7 @@ module VX_tensor_octet #(
     end
 
     VX_tensor_reg #(
-        .N($bits(substeps))
+        .DATAW($bits(substeps))
     ) staging_substeps (
         .clk(clk),
         .reset(reset),
@@ -506,7 +506,7 @@ module VX_tensor_octet #(
     VX_tensor_dpu #(
         .ISW(ISW),
         .OCTET(OCTET),
-        .ISSUE_QUEUE_DEPTH(4 /*@perf: arbtirary*/)
+        .OPERAND_BUFFER_DEPTH(4 /*@perf: arbtirary*/)
     ) dpu (
         .clk(clk),
         .reset(reset),
