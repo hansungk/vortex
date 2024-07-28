@@ -60,12 +60,11 @@ module VX_tensor_dpu #(
 
     wire empty;
     wire full;
-    // sync between operand buffer and wid buffer
+    // sync operand buffer and wid buffer
     assign ready_in = !full && !wid_full;
 
     wire [1:0] threadgroup_valids_out;
     wire [1:0] threadgroup_readys_in;
-    // sync operand queue and wid queue
     wire threadgroup_valid_in = !empty;
     wire threadgroup_fire_in  = threadgroup_valid_in && &(threadgroup_readys_in);
 
@@ -98,11 +97,9 @@ module VX_tensor_dpu #(
     );
 
     // Split A_tile and C_tile by rows (0-1, 2-3) and parallelize in two
-    // threadgroups
-    //
-    // B_tile is shared across the two threadgroups; see Figure 13
+    // threadgroups; B_tile is shared across the two threadgroups. See Figure
+    // 13 in paper
     VX_tensor_threadgroup #(
-        .OPERAND_BUFFER_DEPTH(OPERAND_BUFFER_DEPTH)
     ) threadgroup_0 (
         .clk   (clk),
         .reset (reset),
@@ -116,7 +113,6 @@ module VX_tensor_dpu #(
         .D_frag    (D_tile[1:0])
     );
     VX_tensor_threadgroup #(
-        .OPERAND_BUFFER_DEPTH(OPERAND_BUFFER_DEPTH)
     ) threadgroup_1 (
         .clk   (clk),
         .reset (reset),
@@ -167,7 +163,6 @@ endmodule
 // does (m,n,k) = (2,4,2) matmul compute over 2 cycles.
 // see Figure 10(b) of the paper.
 module VX_tensor_threadgroup #(
-    parameter OPERAND_BUFFER_DEPTH
 ) (
     input clk,
     input reset,
