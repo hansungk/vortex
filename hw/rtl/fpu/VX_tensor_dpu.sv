@@ -14,6 +14,7 @@ module VX_tensor_dpu #(
 
     input valid_in,
     output ready_in,
+    // [rows][cols][dtype]
     input [3:0][1:0][31:0] A_tile,
     input [1:0][3:0][31:0] B_tile,
     input [3:0][3:0][31:0] C_tile,
@@ -30,18 +31,6 @@ module VX_tensor_dpu #(
     //     dpi_hmma(valid_in, A_tile, B_tile, C_tile, result_hmma);
     // end
 
-    // logic ready_reg;
-    // always @(posedge clk) begin
-    //     if (reset) begin
-    //         ready_reg <= '1;
-    //     end else if (valid_in && ready_in) begin
-    //         ready_reg <= '0;
-    //         dpi_print_results(int'(ISW), int'(OCTET), A_tile, B_tile, C_tile, result_hmma);
-    //     end else if (valid_out && ready_out) begin
-    //         ready_reg <= '1;
-    //     end
-    // end
-
     // // fixed-latency queue
     // VX_shift_register #(
     //     .DATAW  (1 + $bits(wid)/* + $bits(D_tile)*/),
@@ -56,7 +45,7 @@ module VX_tensor_dpu #(
     // );
 
     // ready as soon as valid_out
-    // assign ready_in = ready_reg || valid_out;
+    // assign ready_in = valid_out;
 
     // fully pipelined; ready_in is coupled to ready_out by immediately
     // stalling
