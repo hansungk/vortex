@@ -173,7 +173,7 @@ int main(int argc, char *argv[]) {
   uint32_t dim_n = 64;
   uint32_t dim_k = 64;
 
-  using float_type = half;
+  using float_type = float;
   generate_source_matrix<float_type>(dim_m, dim_n, dim_k);
   generate_reference_matmul<float_type>(dim_m, dim_n, dim_k);
 
