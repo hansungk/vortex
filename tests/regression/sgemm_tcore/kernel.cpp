@@ -37,6 +37,10 @@
 #error "threadblock size too big for cluster"
 #endif
 
+// "fake" fp16 type that only has the correct word size.  Proper conversion to
+// fp32 need to be done in a custom function.
+using float16_t = uint16_t;
+
 template <typename T>
 inline void global_dmem_load(const uint32_t dim_n, const uint32_t dim_k,
                              const uint32_t k, const T *A, const T *B,
@@ -127,14 +131,18 @@ inline void global_dmem_load(const uint32_t dim_n, const uint32_t dim_k,
         asm volatile ("flw ft7, (%0)"   :: "r"(global_a));
         global_a += row_stride_as;
 
-        asm volatile ("fsw ft0, %0(%1)" :: "i"(BM * row_stride_as * 0 * sizeof(T)), "r"(local_a_tmp));
-        asm volatile ("fsw ft1, %0(%1)" :: "i"(BM * row_stride_as * 1 * sizeof(T)), "r"(local_a_tmp));
-        asm volatile ("fsw ft2, %0(%1)" :: "i"(BM * row_stride_as * 2 * sizeof(T)), "r"(local_a_tmp));
-        asm volatile ("fsw ft3, %0(%1)" :: "i"(BM * row_stride_as * 3 * sizeof(T)), "r"(local_a_tmp));
-        asm volatile ("fsw ft4, %0(%1)" :: "i"(BM * row_stride_as * 4 * sizeof(T)), "r"(local_a_tmp));
-        asm volatile ("fsw ft5, %0(%1)" :: "i"(BM * row_stride_as * 5 * sizeof(T)), "r"(local_a_tmp));
-        asm volatile ("fsw ft6, %0(%1)" :: "i"(BM * row_stride_as * 6 * sizeof(T)), "r"(local_a_tmp));
-        asm volatile ("fsw ft7, %0(%1)" :: "i"(BM * row_stride_as * 7 * sizeof(T)), "r"(local_a_tmp));
+        // NOTE: stride is fixed to word size , i.e. sizeof(float) = 4,
+        // regardless of fp16 or fp32.  Since Vortex core does not support fp16,
+        // load things at word granularity and reinterpret bits inside the
+        // tensor core.
+        asm volatile ("fsw ft0, %0(%1)" :: "i"(BM * row_stride_as * 0 * sizeof(float)), "r"(local_a_tmp));
+        asm volatile ("fsw ft1, %0(%1)" :: "i"(BM * row_stride_as * 1 * sizeof(float)), "r"(local_a_tmp));
+        asm volatile ("fsw ft2, %0(%1)" :: "i"(BM * row_stride_as * 2 * sizeof(float)), "r"(local_a_tmp));
+        asm volatile ("fsw ft3, %0(%1)" :: "i"(BM * row_stride_as * 3 * sizeof(float)), "r"(local_a_tmp));
+        asm volatile ("fsw ft4, %0(%1)" :: "i"(BM * row_stride_as * 4 * sizeof(float)), "r"(local_a_tmp));
+        asm volatile ("fsw ft5, %0(%1)" :: "i"(BM * row_stride_as * 5 * sizeof(float)), "r"(local_a_tmp));
+        asm volatile ("fsw ft6, %0(%1)" :: "i"(BM * row_stride_as * 6 * sizeof(float)), "r"(local_a_tmp));
+        asm volatile ("fsw ft7, %0(%1)" :: "i"(BM * row_stride_as * 7 * sizeof(float)), "r"(local_a_tmp));
         local_a_tmp += BM * row_stride_as * 8;
       }
     } else {
@@ -178,14 +186,14 @@ inline void global_dmem_load(const uint32_t dim_n, const uint32_t dim_k,
         global_a += dim_k * row_stride_a;
 
         // stride along columns
-        asm volatile ("fsw ft0, %0(%1)" :: "i"(row_stride_a * 0 * sizeof(T)), "r"(local_a_tmp));
-        asm volatile ("fsw ft1, %0(%1)" :: "i"(row_stride_a * 1 * sizeof(T)), "r"(local_a_tmp));
-        asm volatile ("fsw ft2, %0(%1)" :: "i"(row_stride_a * 2 * sizeof(T)), "r"(local_a_tmp));
-        asm volatile ("fsw ft3, %0(%1)" :: "i"(row_stride_a * 3 * sizeof(T)), "r"(local_a_tmp));
-        asm volatile ("fsw ft4, %0(%1)" :: "i"(row_stride_a * 4 * sizeof(T)), "r"(local_a_tmp));
-        asm volatile ("fsw ft5, %0(%1)" :: "i"(row_stride_a * 5 * sizeof(T)), "r"(local_a_tmp));
-        asm volatile ("fsw ft6, %0(%1)" :: "i"(row_stride_a * 6 * sizeof(T)), "r"(local_a_tmp));
-        asm volatile ("fsw ft7, %0(%1)" :: "i"(row_stride_a * 7 * sizeof(T)), "r"(local_a_tmp));
+        asm volatile ("fsw ft0, %0(%1)" :: "i"(row_stride_a * 0 * sizeof(float)), "r"(local_a_tmp));
+        asm volatile ("fsw ft1, %0(%1)" :: "i"(row_stride_a * 1 * sizeof(float)), "r"(local_a_tmp));
+        asm volatile ("fsw ft2, %0(%1)" :: "i"(row_stride_a * 2 * sizeof(float)), "r"(local_a_tmp));
+        asm volatile ("fsw ft3, %0(%1)" :: "i"(row_stride_a * 3 * sizeof(float)), "r"(local_a_tmp));
+        asm volatile ("fsw ft4, %0(%1)" :: "i"(row_stride_a * 4 * sizeof(float)), "r"(local_a_tmp));
+        asm volatile ("fsw ft5, %0(%1)" :: "i"(row_stride_a * 5 * sizeof(float)), "r"(local_a_tmp));
+        asm volatile ("fsw ft6, %0(%1)" :: "i"(row_stride_a * 6 * sizeof(float)), "r"(local_a_tmp));
+        asm volatile ("fsw ft7, %0(%1)" :: "i"(row_stride_a * 7 * sizeof(float)), "r"(local_a_tmp));
         local_a_tmp += row_stride_a * 8;
       }
     }
@@ -233,17 +241,17 @@ inline void global_dmem_load(const uint32_t dim_n, const uint32_t dim_k,
     asm volatile ("flw ft7, (%0)"   :: "r"(global_b));
     global_b += dim_n * row_stride_b;
 
-    asm volatile ("fsw ft0, %0(%1)" :: "i"(BN * row_stride_b * 0 * sizeof(T)), "r"(local_b_tmp));
-    asm volatile ("fsw ft1, %0(%1)" :: "i"(BN * row_stride_b * 1 * sizeof(T)), "r"(local_b_tmp));
+    asm volatile ("fsw ft0, %0(%1)" :: "i"(BN * row_stride_b * 0 * sizeof(float)), "r"(local_b_tmp));
+    asm volatile ("fsw ft1, %0(%1)" :: "i"(BN * row_stride_b * 1 * sizeof(float)), "r"(local_b_tmp));
     local_b_tmp += BN * row_stride_b * 2;
-    asm volatile ("fsw ft2, %0(%1)" :: "i"(BN * row_stride_b * 0 * sizeof(T)), "r"(local_b_tmp));
-    asm volatile ("fsw ft3, %0(%1)" :: "i"(BN * row_stride_b * 1 * sizeof(T)), "r"(local_b_tmp));
+    asm volatile ("fsw ft2, %0(%1)" :: "i"(BN * row_stride_b * 0 * sizeof(float)), "r"(local_b_tmp));
+    asm volatile ("fsw ft3, %0(%1)" :: "i"(BN * row_stride_b * 1 * sizeof(float)), "r"(local_b_tmp));
     local_b_tmp += BN * row_stride_b * 2;
-    asm volatile ("fsw ft4, %0(%1)" :: "i"(BN * row_stride_b * 0 * sizeof(T)), "r"(local_b_tmp));
-    asm volatile ("fsw ft5, %0(%1)" :: "i"(BN * row_stride_b * 1 * sizeof(T)), "r"(local_b_tmp));
+    asm volatile ("fsw ft4, %0(%1)" :: "i"(BN * row_stride_b * 0 * sizeof(float)), "r"(local_b_tmp));
+    asm volatile ("fsw ft5, %0(%1)" :: "i"(BN * row_stride_b * 1 * sizeof(float)), "r"(local_b_tmp));
     local_b_tmp += BN * row_stride_b * 2;
-    asm volatile ("fsw ft6, %0(%1)" :: "i"(BN * row_stride_b * 0 * sizeof(T)), "r"(local_b_tmp));
-    asm volatile ("fsw ft7, %0(%1)" :: "i"(BN * row_stride_b * 1 * sizeof(T)), "r"(local_b_tmp));
+    asm volatile ("fsw ft6, %0(%1)" :: "i"(BN * row_stride_b * 0 * sizeof(float)), "r"(local_b_tmp));
+    asm volatile ("fsw ft7, %0(%1)" :: "i"(BN * row_stride_b * 1 * sizeof(float)), "r"(local_b_tmp));
     local_b_tmp += BN * row_stride_b * 2;
   }
 }
@@ -260,7 +268,7 @@ inline void thread_block_gemm(kernel_arg_t *__UNIFORM__ arg,
                               uint8_t *sharedmem_per_threadblock) {
   const T *A = (const T *)arg->addr_a;
   const T *B = (const T *)arg->addr_b;
-  T *C = (T *)arg->addr_c;
+  float *C = (float *)arg->addr_c;
 
   const uint32_t dim_m = arg->dim_m;
   const uint32_t dim_n = arg->dim_n;
@@ -498,8 +506,8 @@ inline void thread_block_gemm(kernel_arg_t *__UNIFORM__ arg,
       for (int wm_iter = 0; wm_iter < WMITER; wm_iter++) {
 #pragma GCC unroll 2
         for (int wn_iter = 0; wn_iter < WNITER; wn_iter++) {
-          write_results(tid_in_warp, warp_col, warp_row, wn_iter, wm_iter,
-                        dim_n, C, block_n, block_m);
+          write_results<float>(tid_in_warp, warp_col, warp_row, wn_iter,
+                               wm_iter, dim_n, C, block_n, block_m);
         }
       }
     }

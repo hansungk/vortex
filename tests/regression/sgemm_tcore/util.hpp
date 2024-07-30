@@ -168,16 +168,21 @@ inline void vx_wmma_load_a(volatile const T *smem_A, const int local_k,
 
     // @perf: bank conflicts
     // f8-f15 stores a single row of A
-    const volatile T *smem_addr;
-    smem_addr = &smem_A[(WM * warp_row + TCM * wm_iter + row) * smem_A_cols + local_k];
-    asm volatile("flw  f0, %0(%1)" ::"i"(0 * sizeof(T)), "r"(smem_addr));
-    asm volatile("flw  f1, %0(%1)" ::"i"(1 * sizeof(T)), "r"(smem_addr));
-    asm volatile("flw  f2, %0(%1)" ::"i"(2 * sizeof(T)), "r"(smem_addr));
-    asm volatile("flw  f3, %0(%1)" ::"i"(3 * sizeof(T)), "r"(smem_addr));
-    asm volatile("flw  f4, %0(%1)" ::"i"(4 * sizeof(T)), "r"(smem_addr));
-    asm volatile("flw  f5, %0(%1)" ::"i"(5 * sizeof(T)), "r"(smem_addr));
-    asm volatile("flw  f6, %0(%1)" ::"i"(6 * sizeof(T)), "r"(smem_addr));
-    asm volatile("flw  f7, %0(%1)" ::"i"(7 * sizeof(T)), "r"(smem_addr));
+    const volatile uint8_t *smem_addr;
+    smem_addr = reinterpret_cast<const volatile uint8_t *>(
+        &smem_A[(WM * warp_row + TCM * wm_iter + row) * smem_A_cols + local_k]);
+    // NOTE: stride is fixed to word size , i.e. sizeof(float) = 4,
+    // regardless of fp16 or fp32.  Since Vortex core does not support fp16,
+    // load things at word granularity and reinterpret bits inside the tensor
+    // core.
+    asm volatile("flw  f0, %0(%1)" ::"i"(0 * sizeof(float)), "r"(smem_addr));
+    asm volatile("flw  f1, %0(%1)" ::"i"(1 * sizeof(float)), "r"(smem_addr));
+    asm volatile("flw  f2, %0(%1)" ::"i"(2 * sizeof(float)), "r"(smem_addr));
+    asm volatile("flw  f3, %0(%1)" ::"i"(3 * sizeof(float)), "r"(smem_addr));
+    asm volatile("flw  f4, %0(%1)" ::"i"(4 * sizeof(float)), "r"(smem_addr));
+    asm volatile("flw  f5, %0(%1)" ::"i"(5 * sizeof(float)), "r"(smem_addr));
+    asm volatile("flw  f6, %0(%1)" ::"i"(6 * sizeof(float)), "r"(smem_addr));
+    asm volatile("flw  f7, %0(%1)" ::"i"(7 * sizeof(float)), "r"(smem_addr));
     // asm volatile("flw  f0, %0" ::"m"(smem_A[A_offset + (local_k + 0)]));
     // asm volatile("flw  f1, %0" ::"m"(smem_A[A_offset + (local_k + 1)]));
     // asm volatile("flw  f2, %0" ::"m"(smem_A[A_offset + (local_k + 2)]));
@@ -189,16 +194,18 @@ inline void vx_wmma_load_a(volatile const T *smem_A, const int local_k,
   } else {
     // read smem A tile as-is; bank-conflict-free AS load
     // f8-f15 stores a single row of A
-    const volatile T *smem_addr;
-    smem_addr = &smem_A[((local_k + 0) * smem_AS_cols) + (WM * warp_row + TCM * wm_iter) + row];
-    asm volatile("flw  f0, %0(%1)" :: "i"(smem_AS_cols * 0 * sizeof(T)), "r"(smem_addr));
-    asm volatile("flw  f1, %0(%1)" :: "i"(smem_AS_cols * 1 * sizeof(T)), "r"(smem_addr));
-    asm volatile("flw  f2, %0(%1)" :: "i"(smem_AS_cols * 2 * sizeof(T)), "r"(smem_addr));
-    asm volatile("flw  f3, %0(%1)" :: "i"(smem_AS_cols * 3 * sizeof(T)), "r"(smem_addr));
-    asm volatile("flw  f4, %0(%1)" :: "i"(smem_AS_cols * 4 * sizeof(T)), "r"(smem_addr));
-    asm volatile("flw  f5, %0(%1)" :: "i"(smem_AS_cols * 5 * sizeof(T)), "r"(smem_addr));
-    asm volatile("flw  f6, %0(%1)" :: "i"(smem_AS_cols * 6 * sizeof(T)), "r"(smem_addr));
-    asm volatile("flw  f7, %0(%1)" :: "i"(smem_AS_cols * 7 * sizeof(T)), "r"(smem_addr));
+    const volatile uint8_t *smem_addr;
+    smem_addr = reinterpret_cast<const volatile uint8_t *>(
+        &smem_A[((local_k + 0) * smem_AS_cols) +
+                (WM * warp_row + TCM * wm_iter) + row]);
+    asm volatile("flw  f0, %0(%1)" :: "i"(smem_AS_cols * 0 * sizeof(float)), "r"(smem_addr));
+    asm volatile("flw  f1, %0(%1)" :: "i"(smem_AS_cols * 1 * sizeof(float)), "r"(smem_addr));
+    asm volatile("flw  f2, %0(%1)" :: "i"(smem_AS_cols * 2 * sizeof(float)), "r"(smem_addr));
+    asm volatile("flw  f3, %0(%1)" :: "i"(smem_AS_cols * 3 * sizeof(float)), "r"(smem_addr));
+    asm volatile("flw  f4, %0(%1)" :: "i"(smem_AS_cols * 4 * sizeof(float)), "r"(smem_addr));
+    asm volatile("flw  f5, %0(%1)" :: "i"(smem_AS_cols * 5 * sizeof(float)), "r"(smem_addr));
+    asm volatile("flw  f6, %0(%1)" :: "i"(smem_AS_cols * 6 * sizeof(float)), "r"(smem_addr));
+    asm volatile("flw  f7, %0(%1)" :: "i"(smem_AS_cols * 7 * sizeof(float)), "r"(smem_addr));
 
     // asm volatile("flw  f0, %0" ::"m"(smem_A[((local_k + 0) * smem_AS_cols) + (WM * warp_row + TCM * wm_iter) + row]));
     // asm volatile("flw  f1, %0" ::"m"(smem_A[((local_k + 1) * smem_AS_cols) + (WM * warp_row + TCM * wm_iter) + row]));
@@ -227,16 +234,18 @@ inline void vx_wmma_load_b(const volatile T *smem_B, const int local_k,
   constexpr int smem_B_cols = BN;
 
   // f8-f15 stores a single column of B
-  const volatile T *smem_addr;
-  smem_addr = &smem_B[((local_k + 0) * smem_B_cols) + (WN * warp_col + TCN * wn_iter) + col];
-  asm volatile("flw  f8, %0(%1)" :: "i"(smem_B_cols * 0 * sizeof(T)), "r"(smem_addr));
-  asm volatile("flw  f9, %0(%1)" :: "i"(smem_B_cols * 1 * sizeof(T)), "r"(smem_addr));
-  asm volatile("flw f10, %0(%1)" :: "i"(smem_B_cols * 2 * sizeof(T)), "r"(smem_addr));
-  asm volatile("flw f11, %0(%1)" :: "i"(smem_B_cols * 3 * sizeof(T)), "r"(smem_addr));
-  asm volatile("flw f12, %0(%1)" :: "i"(smem_B_cols * 4 * sizeof(T)), "r"(smem_addr));
-  asm volatile("flw f13, %0(%1)" :: "i"(smem_B_cols * 5 * sizeof(T)), "r"(smem_addr));
-  asm volatile("flw f14, %0(%1)" :: "i"(smem_B_cols * 6 * sizeof(T)), "r"(smem_addr));
-  asm volatile("flw f15, %0(%1)" :: "i"(smem_B_cols * 7 * sizeof(T)), "r"(smem_addr));
+  const volatile uint8_t *smem_addr;
+  smem_addr = reinterpret_cast<const volatile uint8_t *>(
+      &smem_B[((local_k + 0) * smem_B_cols) + (WN * warp_col + TCN * wn_iter) +
+              col]);
+  asm volatile("flw  f8, %0(%1)" :: "i"(smem_B_cols * 0 * sizeof(float)), "r"(smem_addr));
+  asm volatile("flw  f9, %0(%1)" :: "i"(smem_B_cols * 1 * sizeof(float)), "r"(smem_addr));
+  asm volatile("flw f10, %0(%1)" :: "i"(smem_B_cols * 2 * sizeof(float)), "r"(smem_addr));
+  asm volatile("flw f11, %0(%1)" :: "i"(smem_B_cols * 3 * sizeof(float)), "r"(smem_addr));
+  asm volatile("flw f12, %0(%1)" :: "i"(smem_B_cols * 4 * sizeof(float)), "r"(smem_addr));
+  asm volatile("flw f13, %0(%1)" :: "i"(smem_B_cols * 5 * sizeof(float)), "r"(smem_addr));
+  asm volatile("flw f14, %0(%1)" :: "i"(smem_B_cols * 6 * sizeof(float)), "r"(smem_addr));
+  asm volatile("flw f15, %0(%1)" :: "i"(smem_B_cols * 7 * sizeof(float)), "r"(smem_addr));
 
   // asm volatile("flw  f8, %0" ::"m"(smem_B[((local_k + 0) * smem_B_cols) + (WN * warp_col + TCN * wn_iter) + col]));
   // asm volatile("flw  f9, %0" ::"m"(smem_B[((local_k + 1) * smem_B_cols) + (WN * warp_col + TCN * wn_iter) + col]));
@@ -287,22 +296,22 @@ inline void write_results(const int thread_in_warp, const int warp_col,
   int local_row = (WM * warp_row + TCM * wm_iter) + tid_row;
   int local_col = (WN * warp_col + TCN * wn_iter) + tid_col;
 
-  T *global_offset_C = C +
-                           (BM * threadblock_id_y) * dim_n +
-                           BN * threadblock_id_x;
+  T *global_offset_C =
+      C + (BM * threadblock_id_y) * dim_n + BN * threadblock_id_x;
 
   // @perf: this likely causes a lot of gmem bank conflicts
   if (wm_iter == 0) {
-    volatile T *gmem_addr = &global_offset_C[dim_n * (local_row + 0) + (local_col + 0)];
-    volatile T *gmem_addr_tmp = gmem_addr + (2 * dim_n);
-    asm volatile ("fsw f16, %0(%1)" :: "i"(0 * sizeof(T)), "r"(gmem_addr));
-    asm volatile ("fsw f17, %0(%1)" :: "i"(1 * sizeof(T)), "r"(gmem_addr));
-    asm volatile ("fsw f18, %0(%1)" :: "i"(0 * sizeof(T)), "r"(gmem_addr_tmp));
-    asm volatile ("fsw f19, %0(%1)" :: "i"(1 * sizeof(T)), "r"(gmem_addr_tmp));
-    asm volatile ("fsw f20, %0(%1)" :: "i"(4 * sizeof(T)), "r"(gmem_addr));
-    asm volatile ("fsw f21, %0(%1)" :: "i"(5 * sizeof(T)), "r"(gmem_addr));
-    asm volatile ("fsw f22, %0(%1)" :: "i"(4 * sizeof(T)), "r"(gmem_addr_tmp));
-    asm volatile ("fsw f23, %0(%1)" :: "i"(5 * sizeof(T)), "r"(gmem_addr_tmp));
+    volatile uint8_t *gmem_addr = reinterpret_cast<volatile uint8_t *>(
+        &global_offset_C[dim_n * (local_row + 0) + (local_col + 0)]);
+    volatile uint8_t *gmem_addr_tmp = gmem_addr + (2 * dim_n) * sizeof(T);
+    asm volatile ("fsw f16, %0(%1)" :: "i"(0 * sizeof(float)), "r"(gmem_addr));
+    asm volatile ("fsw f17, %0(%1)" :: "i"(1 * sizeof(float)), "r"(gmem_addr));
+    asm volatile ("fsw f18, %0(%1)" :: "i"(0 * sizeof(float)), "r"(gmem_addr_tmp));
+    asm volatile ("fsw f19, %0(%1)" :: "i"(1 * sizeof(float)), "r"(gmem_addr_tmp));
+    asm volatile ("fsw f20, %0(%1)" :: "i"(4 * sizeof(float)), "r"(gmem_addr));
+    asm volatile ("fsw f21, %0(%1)" :: "i"(5 * sizeof(float)), "r"(gmem_addr));
+    asm volatile ("fsw f22, %0(%1)" :: "i"(4 * sizeof(float)), "r"(gmem_addr_tmp));
+    asm volatile ("fsw f23, %0(%1)" :: "i"(5 * sizeof(float)), "r"(gmem_addr_tmp));
     // asm volatile ("fsw f16, %0" :: "m"(global_offset_C[dim_n * (local_row + 0) + (local_col + 0)]));
     // asm volatile ("fsw f17, %0" :: "m"(global_offset_C[dim_n * (local_row + 0) + (local_col + 1)]));
     // asm volatile ("fsw f18, %0" :: "m"(global_offset_C[dim_n * (local_row + 2) + (local_col + 0)]));
@@ -312,16 +321,17 @@ inline void write_results(const int thread_in_warp, const int warp_col,
     // asm volatile ("fsw f22, %0" :: "m"(global_offset_C[dim_n * (local_row + 2) + (local_col + 4)]));
     // asm volatile ("fsw f23, %0" :: "m"(global_offset_C[dim_n * (local_row + 2) + (local_col + 5)]));
   } else {
-    volatile T *gmem_addr = &global_offset_C[dim_n * (local_row + 0) + (local_col + 0)];
-    volatile T *gmem_addr_tmp = gmem_addr + (2 * dim_n);
-    asm volatile ("fsw f24, %0(%1)" :: "i"(0 * sizeof(T)), "r"(gmem_addr));
-    asm volatile ("fsw f25, %0(%1)" :: "i"(1 * sizeof(T)), "r"(gmem_addr));
-    asm volatile ("fsw f26, %0(%1)" :: "i"(0 * sizeof(T)), "r"(gmem_addr_tmp));
-    asm volatile ("fsw f27, %0(%1)" :: "i"(1 * sizeof(T)), "r"(gmem_addr_tmp));
-    asm volatile ("fsw f28, %0(%1)" :: "i"(4 * sizeof(T)), "r"(gmem_addr));
-    asm volatile ("fsw f29, %0(%1)" :: "i"(5 * sizeof(T)), "r"(gmem_addr));
-    asm volatile ("fsw f30, %0(%1)" :: "i"(4 * sizeof(T)), "r"(gmem_addr_tmp));
-    asm volatile ("fsw f31, %0(%1)" :: "i"(5 * sizeof(T)), "r"(gmem_addr_tmp));
+    volatile uint8_t *gmem_addr = reinterpret_cast<volatile uint8_t *>(
+        &global_offset_C[dim_n * (local_row + 0) + (local_col + 0)]);
+    volatile uint8_t *gmem_addr_tmp = gmem_addr + (2 * dim_n) * sizeof(T);
+    asm volatile ("fsw f24, %0(%1)" :: "i"(0 * sizeof(float)), "r"(gmem_addr));
+    asm volatile ("fsw f25, %0(%1)" :: "i"(1 * sizeof(float)), "r"(gmem_addr));
+    asm volatile ("fsw f26, %0(%1)" :: "i"(0 * sizeof(float)), "r"(gmem_addr_tmp));
+    asm volatile ("fsw f27, %0(%1)" :: "i"(1 * sizeof(float)), "r"(gmem_addr_tmp));
+    asm volatile ("fsw f28, %0(%1)" :: "i"(4 * sizeof(float)), "r"(gmem_addr));
+    asm volatile ("fsw f29, %0(%1)" :: "i"(5 * sizeof(float)), "r"(gmem_addr));
+    asm volatile ("fsw f30, %0(%1)" :: "i"(4 * sizeof(float)), "r"(gmem_addr_tmp));
+    asm volatile ("fsw f31, %0(%1)" :: "i"(5 * sizeof(float)), "r"(gmem_addr_tmp));
   }
 }
 
