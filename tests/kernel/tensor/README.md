@@ -1,13 +1,14 @@
 tensor
-------
+======
 
 Unittest kernel for the tensor core.
 
-## Build
+Build
+-----
 
 ```
 $ python3 generate_matrix.py
 $ make
 ```
 
-The argument and input matrix binary are hardcoded into the ELF.
+The generated ELF binary is run standalone; the argument and input matrix binary are hardcoded into the binary.
