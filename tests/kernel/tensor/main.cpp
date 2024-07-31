@@ -4,18 +4,21 @@
 #include <vx_intrinsics.h>
 #include <stdio.h>
 #include <vx_print.h>
+#include "test_data.h"
 
 constexpr int DIM_M = 8;
 
-inline void vx_wmma() {
+// single "substep" wmma instruction
+// use accum buffer 0 (f16-f23)
+inline void vx_wmma_acc0() {
 	asm volatile (".insn r %0, 0, 0, x0, x0, x0" :: "i"(RISCV_CUSTOM3));
 }
 
-inline void vx_wmma_new() {
+// single "substep" wmma instruction
+// use accum buffer 1 (f24-f31)
+inline void vx_wmma_acc1() {
         asm volatile (".insn r %0, 0, 0, x1, x0, x0" :: "i"(RISCV_CUSTOM3));
 }
-
-#include "test_data.h"
 
 inline constexpr void map_operand_32lanes(const int tid, int &row, int &col) {
   const int tg = tid / 4;
@@ -85,58 +88,60 @@ inline constexpr void map_c_8lanes(const int tid, int &row, int &col) {
 }
 
 void vx_wmma_load() {
-	int tid = vx_thread_id();
-	int tg = tid / 4;
+  int tid = vx_thread_id();
+  int tg = tid / 4;
 
-    int row = 0;
-    int col = 0;
+  int row = 0;
+  int col = 0;
 
-    map_operand_8lanes(tid, row, col);
+  map_operand_8lanes(tid, row, col);
 
-    // load A
-    // each operand element is read twice by two threadgroups (Sec. III-B);
-    // i.e. 8 regs * 32 lanes = 256 fp32 elements = 2 * (16 * 8) elements
-	asm volatile ("flw f0, %0" :: "m"(A[row][0])); 
-	asm volatile ("flw f1, %0" :: "m"(A[row][1])); 
-	asm volatile ("flw f2, %0" :: "m"(A[row][2]));
-	asm volatile ("flw f3, %0" :: "m"(A[row][3]));
-	asm volatile ("flw f4, %0" :: "m"(A[row][4]));
-	asm volatile ("flw f5, %0" :: "m"(A[row][5]));
-	asm volatile ("flw f6, %0" :: "m"(A[row][6]));
-	asm volatile ("flw f7, %0" :: "m"(A[row][7]));
+  // load A
+  // each operand element is read twice by two threadgroups (Sec. III-B);
+  // i.e. 8 regs * 32 lanes = 256 fp32 elements = 2 * (16 * 8) elements
+  asm volatile("flw f0, %0" ::"m"(A[row][0]));
+  asm volatile("flw f1, %0" ::"m"(A[row][1]));
+  asm volatile("flw f2, %0" ::"m"(A[row][2]));
+  asm volatile("flw f3, %0" ::"m"(A[row][3]));
+  asm volatile("flw f4, %0" ::"m"(A[row][4]));
+  asm volatile("flw f5, %0" ::"m"(A[row][5]));
+  asm volatile("flw f6, %0" ::"m"(A[row][6]));
+  asm volatile("flw f7, %0" ::"m"(A[row][7]));
 
-    // load B
-	asm volatile ("flw f8 , %0" :: "m"(B[0][col])); 
-	asm volatile ("flw f9 , %0" :: "m"(B[1][col])); 
-	asm volatile ("flw f10, %0" :: "m"(B[2][col])); 
-	asm volatile ("flw f11, %0" :: "m"(B[3][col])); 
-	asm volatile ("flw f12, %0" :: "m"(B[4][col])); 
-	asm volatile ("flw f13, %0" :: "m"(B[5][col])); 
-	asm volatile ("flw f14, %0" :: "m"(B[6][col])); 
-	asm volatile ("flw f15, %0" :: "m"(B[7][col])); 
+  // load B
+  asm volatile("flw f8 , %0" ::"m"(B[0][col]));
+  asm volatile("flw f9 , %0" ::"m"(B[1][col]));
+  asm volatile("flw f10, %0" ::"m"(B[2][col]));
+  asm volatile("flw f11, %0" ::"m"(B[3][col]));
+  asm volatile("flw f12, %0" ::"m"(B[4][col]));
+  asm volatile("flw f13, %0" ::"m"(B[5][col]));
+  asm volatile("flw f14, %0" ::"m"(B[6][col]));
+  asm volatile("flw f15, %0" ::"m"(B[7][col]));
 
-    map_c_8lanes(tid, row, col);
+  map_c_8lanes(tid, row, col);
 
-    // load C
-	asm volatile ("flw f16, %0" :: "m"(C[row+0][col+0]));
-	asm volatile ("flw f17, %0" :: "m"(C[row+0][col+1]));
-	asm volatile ("flw f18, %0" :: "m"(C[row+2][col+0]));
-	asm volatile ("flw f19, %0" :: "m"(C[row+2][col+1]));
-	asm volatile ("flw f20, %0" :: "m"(C[row+0][col+4]));
-	asm volatile ("flw f21, %0" :: "m"(C[row+0][col+5]));
-	asm volatile ("flw f22, %0" :: "m"(C[row+2][col+4]));
-	asm volatile ("flw f23, %0" :: "m"(C[row+2][col+5]));
-	asm volatile ("flw f24, %0" :: "m"(C[row+0][col+0]));
-	asm volatile ("flw f25, %0" :: "m"(C[row+0][col+1]));
-	asm volatile ("flw f26, %0" :: "m"(C[row+2][col+0]));
-	asm volatile ("flw f27, %0" :: "m"(C[row+2][col+1]));
-	asm volatile ("flw f28, %0" :: "m"(C[row+0][col+4]));
-	asm volatile ("flw f29, %0" :: "m"(C[row+0][col+5]));
-	asm volatile ("flw f30, %0" :: "m"(C[row+2][col+4]));
-	asm volatile ("flw f31, %0" :: "m"(C[row+2][col+5]));
+  // load C
+  // accum buffer 0
+  asm volatile("flw f16, %0" ::"m"(C[row + 0][col + 0]));
+  asm volatile("flw f17, %0" ::"m"(C[row + 0][col + 1]));
+  asm volatile("flw f18, %0" ::"m"(C[row + 2][col + 0]));
+  asm volatile("flw f19, %0" ::"m"(C[row + 2][col + 1]));
+  asm volatile("flw f20, %0" ::"m"(C[row + 0][col + 4]));
+  asm volatile("flw f21, %0" ::"m"(C[row + 0][col + 5]));
+  asm volatile("flw f22, %0" ::"m"(C[row + 2][col + 4]));
+  asm volatile("flw f23, %0" ::"m"(C[row + 2][col + 5]));
+  // accum buffer 1
+  asm volatile("flw f24, %0" ::"m"(C[row + 0][col + 0]));
+  asm volatile("flw f25, %0" ::"m"(C[row + 0][col + 1]));
+  asm volatile("flw f26, %0" ::"m"(C[row + 2][col + 0]));
+  asm volatile("flw f27, %0" ::"m"(C[row + 2][col + 1]));
+  asm volatile("flw f28, %0" ::"m"(C[row + 0][col + 4]));
+  asm volatile("flw f29, %0" ::"m"(C[row + 0][col + 5]));
+  asm volatile("flw f30, %0" ::"m"(C[row + 2][col + 4]));
+  asm volatile("flw f31, %0" ::"m"(C[row + 2][col + 5]));
 }
 
-// float results[32*8];
+// hardcoded device address for result
 float *const results = reinterpret_cast<float *>(0xc0000000UL);
 
 void store_wmma_result() {
@@ -150,17 +155,8 @@ void store_wmma_result() {
   map_c_8lanes(tid, row, col);
 
   // store C
-  // asm volatile ("fsw f16, %0" :: "m"(results[tid*8+0]));
-  // asm volatile ("fsw f17, %0" :: "m"(results[tid*8+1]));
-  // asm volatile ("fsw f18, %0" :: "m"(results[tid*8+2]));
-  // asm volatile ("fsw f19, %0" :: "m"(results[tid*8+3]));
-  // asm volatile ("fsw f20, %0" :: "m"(results[tid*8+4]));
-  // asm volatile ("fsw f21, %0" :: "m"(results[tid*8+5]));
-  // asm volatile ("fsw f22, %0" :: "m"(results[tid*8+6]));
-  // asm volatile ("fsw f23, %0" :: "m"(results[tid*8+7]));
-
   float *const results_wid = results + (DIM_M * DIM_M * wid);
-
+  // uncomment to have two accum buffers in rf
   // asm volatile("fsw f16, %0" ::"m"(results_wid[DIM_M * (row + 0) + (col + 0)]));
   // asm volatile("fsw f17, %0" ::"m"(results_wid[DIM_M * (row + 0) + (col + 1)]));
   // asm volatile("fsw f18, %0" ::"m"(results_wid[DIM_M * (row + 2) + (col + 0)]));
@@ -202,9 +198,9 @@ void wmma() {
   vx_wmma_load();
   // #pragma GCC unroll 100
   // 	for (int i = 0; i < 100; i++) {
-  // 		vx_wmma();
+  // 		vx_wmma_acc0();
   // 	}
-  vx_wmma_new();
+  vx_wmma_acc1();
 
   store_wmma_result();
   // print_wmma_result();
@@ -214,7 +210,8 @@ void wmma() {
 int main() {
   const int num_warps = vx_num_warps();
 
-  vx_wspawn(num_warps, wmma);
+  // vx_wspawn(num_warps, wmma);
+  vx_wspawn(1, wmma);
   wmma();
   vx_wspawn_wait();
 
