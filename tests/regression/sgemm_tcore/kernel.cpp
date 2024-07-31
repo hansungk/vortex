@@ -37,10 +37,6 @@
 #error "threadblock size too big for cluster"
 #endif
 
-// "fake" fp16 type that only has the correct word size.  Proper conversion to
-// fp32 need to be done in a custom function.
-using float16_t = uint16_t;
-
 template <typename T>
 inline void global_dmem_load(const uint32_t dim_n, const uint32_t dim_k,
                              const uint32_t k, const T *A, const T *B,
@@ -48,13 +44,27 @@ inline void global_dmem_load(const uint32_t dim_n, const uint32_t dim_k,
                              const uint32_t tid_in_threadblock,
                              const uint32_t threadblock_id_x,
                              const uint32_t threadblock_id_y) {
-  const uint32_t local_a_row = tid_in_threadblock / BK;
-  const uint32_t local_a_col = tid_in_threadblock % BK;
+  // In fp16 mode, bit-pack two fp16 elements into each fp32 element, and do
+  // data movement at the fp32 granularity.  Assuming that the matrix is stored
+  // row-major in GMEM, the packed fp16 pairs belong to the same row,
+  // neighboring columns; therefore, it essentially becomes equivalent to
+  // moving a fp32 matrix whose column dimensions (dim_k/BK/k) are compressed
+  // by a factor of two.
+  constexpr uint32_t packed_factor = (std::is_same_v<T, float16_t> ? 2 : 1);
+  constexpr uint32_t BK_adjusted = BK / packed_factor;
+  const uint32_t dim_k_adjusted = dim_k / packed_factor;
+  constexpr uint32_t BN_adjusted = BN / packed_factor;
+  const uint32_t dim_n_adjusted = dim_n / packed_factor;
+  const uint32_t k_adjusted = k / packed_factor;
+
+  const uint32_t local_a_row = tid_in_threadblock / BK_adjusted;
+  const uint32_t local_a_col = tid_in_threadblock % BK_adjusted;
   const uint32_t local_as_row = tid_in_threadblock / BM;
   const uint32_t local_as_col = tid_in_threadblock % BM;
-  const uint32_t local_b_row = tid_in_threadblock / BN;
-  const uint32_t local_b_col = tid_in_threadblock % BN;
+  const uint32_t local_b_row = tid_in_threadblock / BN_adjusted;
+  const uint32_t local_b_col = tid_in_threadblock % BN_adjusted;
 
+  // FIXME: need fix for fp16?
   constexpr uint32_t threads_in_threadblock = (BM * BN) / ELEM_PER_THREAD;
 
   // Data move from GMEM to SMEM
@@ -63,53 +73,59 @@ inline void global_dmem_load(const uint32_t dim_n, const uint32_t dim_k,
   // neighboring threads to ensure GMEM coalescing.
   //
   // TODO: Sharedmem swizzling is important here
+
+  // move A
   if constexpr (!TRANSPOSE_AT_PRODUCE) {
+    // No transpose at GMEM->SMEM movement
     // FIXME: !TRANSPOSE_AS code is old
 
     const uint32_t global_a_row = BM * threadblock_id_y + local_a_row;
     // number of rows a full TB can read at a time
-    constexpr uint32_t row_stride_a = threads_in_threadblock / BK;
-    const T *global_a = A + dim_k * global_a_row + (k + local_a_col);
-    volatile T *local_a_tmp = local_a + BK * local_a_row + local_a_col;
+    // this is equivalent to threadblock_dim_y (assuming threadblock_dim_x ==
+    // BK)
+    constexpr uint32_t row_stride_a = threads_in_threadblock / BK_adjusted;
+    const float *global_a = reinterpret_cast<float *>(A) +
+                            dim_k_adjusted * global_a_row +
+                            (k_adjusted + local_a_col);
+    volatile float *local_a_tmp = reinterpret_cast<float *>(local_a) +
+                                  BK_adjusted * local_a_row + local_a_col;
 
 #pragma GCC unroll 1
     for (uint32_t local_row_offset = 0; local_row_offset < BM;
          local_row_offset += row_stride_a) {
-      // const uint32_t global_a_offset =
-      //     dim_k * (global_a_row + local_row_offset) + (k + local_a_col);
-      // local_a[BK * (local_a_row + local_row_offset) + local_a_col] =
-      //     A[global_a_offset];
       *local_a_tmp = *global_a;
 
-      global_a += dim_k * row_stride_a;
-      local_a_tmp += BK * row_stride_a;
+      // move to the next "row-chunk", when threadblock is smaller than BM*BK
+      global_a += dim_k_adjusted * row_stride_a;
+      local_a_tmp += BK_adjusted * row_stride_a;
     }
   } else {
     if constexpr (!GMEM_COALESCED_A) {
+      // !GMEM_COALESCED_A: threads do uncoalesced read from neighboring row in
+      // GMEM, writes to neighboring cols in SMEM
       constexpr uint32_t row_stride_as = threads_in_threadblock / BM;
       const uint32_t global_a_row = BM * threadblock_id_y + local_as_col;
-      const T *global_a = A + dim_k * global_a_row + (k + local_as_row);
-      // FIXME experimenting with global coalescing
-      // const uint32_t global_a_row = BM * threadblock_id_y + local_as_row;
-      // const T *global_a = A + dim_k * global_a_row + (k + local_as_col);
-      volatile T *local_a_tmp = local_a + BM * local_as_row + local_as_col;
+      const float *global_a =
+          reinterpret_cast<float *>(A) + dim_k_adjusted * global_a_row + (k_adjusted + local_as_row);
+      volatile float *local_a_tmp =
+          reinterpret_cast<float *>(local_a) + BM * local_as_row + local_as_col;
 
       static_assert(
-          row_stride_as * 8 <= BK,
+          row_stride_as * 8 <= BK_adjusted,
           "manual loop unrolling condition not met; consider increasing BK");
       static_assert(
-          (BK % (row_stride_as * 8)) == 0,
+          (BK_adjusted % (row_stride_as * 8)) == 0,
           "manual loop unrolling condition not met; BK should be power-of-two");
 
 #pragma GCC unroll 1
-      for (uint32_t local_row_offset = 0; local_row_offset < BK;
+      for (uint32_t local_row_offset = 0; local_row_offset < BK_adjusted;
            local_row_offset += row_stride_as * 8) {
         // @perf: bank conflicts here
         // const uint32_t global_a_offset =
-        //     dim_k * (global_a_row) + (k + local_as_row + local_row_offset);
+        //     dim_k_adjusted * (global_a_row) + (k + local_as_row + local_row_offset);
         // FIXME experimenting with global coalescing
         // const uint32_t global_a_offset =
-        //     dim_k * (global_a_row + local_row_offset) + (k + local_as_col);
+        //     dim_k_adjusted * (global_a_row + local_row_offset) + (k + local_as_col);
         // local_a[BM * (local_as_row + local_row_offset) + local_as_col] =
         //     A[global_a_offset];
 
@@ -146,11 +162,15 @@ inline void global_dmem_load(const uint32_t dim_n, const uint32_t dim_k,
         local_a_tmp += BM * row_stride_as * 8;
       }
     } else {
-      constexpr uint32_t row_stride_a = threads_in_threadblock / BK;
+      constexpr uint32_t row_stride_a = threads_in_threadblock / BK_adjusted;
       const uint32_t global_a_row = BM * threadblock_id_y + local_a_row;
-      const T *global_a = A + dim_k * global_a_row + (k + local_a_col);
+      const float *global_a = reinterpret_cast<const float *>(A) +
+                              dim_k_adjusted * global_a_row +
+                              (k_adjusted + local_a_col);
       // NOTE that SMEM writes are transposed
-      volatile T *local_a_tmp = local_a + BM * local_a_col + local_a_row;
+      volatile float *local_a_tmp =
+          reinterpret_cast<volatile float *>(local_a) + BM * local_a_col +
+          local_a_row;
 
       static_assert(
           row_stride_a * 8 <= BM,
@@ -163,27 +183,27 @@ inline void global_dmem_load(const uint32_t dim_n, const uint32_t dim_k,
       for (uint32_t local_row_offset = 0; local_row_offset < BM;
            local_row_offset += row_stride_a * 8) {
         // const uint32_t global_a_offset =
-        //     dim_k * (global_a_row + local_row_offset) + (k + local_a_col);
+        //     dim_k_adjusted * (global_a_row + local_row_offset) + (k + local_a_col);
         // NOTE that SMEM writes are transposed
         // local_a[BM * (local_a_col) + local_a_row + local_row_offset] =
         //     A[global_a_offset];
 
         asm volatile ("flw ft0, (%0)"   :: "r"(global_a));
-        global_a += dim_k * row_stride_a;
+        global_a += dim_k_adjusted * row_stride_a;
         asm volatile ("flw ft1, (%0)"   :: "r"(global_a));
-        global_a += dim_k * row_stride_a;
+        global_a += dim_k_adjusted * row_stride_a;
         asm volatile ("flw ft2, (%0)"   :: "r"(global_a));
-        global_a += dim_k * row_stride_a;
+        global_a += dim_k_adjusted * row_stride_a;
         asm volatile ("flw ft3, (%0)"   :: "r"(global_a));
-        global_a += dim_k * row_stride_a;
+        global_a += dim_k_adjusted * row_stride_a;
         asm volatile ("flw ft4, (%0)"   :: "r"(global_a));
-        global_a += dim_k * row_stride_a;
+        global_a += dim_k_adjusted * row_stride_a;
         asm volatile ("flw ft5, (%0)"   :: "r"(global_a));
-        global_a += dim_k * row_stride_a;
+        global_a += dim_k_adjusted * row_stride_a;
         asm volatile ("flw ft6, (%0)"   :: "r"(global_a));
-        global_a += dim_k * row_stride_a;
+        global_a += dim_k_adjusted * row_stride_a;
         asm volatile ("flw ft7, (%0)"   :: "r"(global_a));
-        global_a += dim_k * row_stride_a;
+        global_a += dim_k_adjusted * row_stride_a;
 
         // stride along columns
         asm volatile ("fsw ft0, %0(%1)" :: "i"(row_stride_a * 0 * sizeof(float)), "r"(local_a_tmp));
@@ -197,62 +217,63 @@ inline void global_dmem_load(const uint32_t dim_n, const uint32_t dim_k,
         local_a_tmp += row_stride_a * 8;
       }
     }
-  }
+  } // end move A
 
-  constexpr uint32_t row_stride_b = threads_in_threadblock / BN;
-  const uint32_t global_b_col = BN * threadblock_id_x + local_b_col;
-  const T *global_b = B + dim_n * (k + local_b_row) + global_b_col;
-  volatile T *local_b_tmp = local_b + BN * local_b_row + local_b_col;
+  // move B
+  constexpr uint32_t row_stride_b = threads_in_threadblock / BN_adjusted;
+  const uint32_t global_b_col = BN_adjusted * threadblock_id_x + local_b_col;
+  // NOTE: not k_adjusted here; k is along the row dimension which is not
+  // compressed for fp16
+  const float *global_b = reinterpret_cast<const float *>(B) +
+                          dim_n_adjusted * (k + local_b_row) + global_b_col;
+  volatile float *local_b_tmp = reinterpret_cast<volatile float *>(local_b) +
+                                BN_adjusted * local_b_row + local_b_col;
 
   static_assert(
-      row_stride_b * 8 <= BK,
+      row_stride_b * 8 <= BK_adjusted,
       "manual loop unrolling condition not met; consider increasing BK");
   static_assert(
-      (BK % (row_stride_b * 8)) == 0,
+      (BK_adjusted % (row_stride_b * 8)) == 0,
       "manual loop unrolling condition not met; BK should be power-of-two");
 
 #pragma GCC unroll 1
   for (uint32_t load_offset = 0; load_offset < BK;
        load_offset += row_stride_b * 8) {
-    // const uint32_t global_b_offset =
-    //     dim_n * (k + local_b_row + load_offset) + global_b_col;
-    // local_b[BN * (local_b_row + load_offset) + local_b_col] =
-    //     B[global_b_offset];
-
+    // equivalent code:
+    //
     // *local_b_tmp = *global_b;
-
     // global_b += dim_n * row_stride_b;
     // local_b_tmp += BN * row_stride_b;
 
     asm volatile ("flw ft0, (%0)"   :: "r"(global_b));
-    global_b += dim_n * row_stride_b;
+    global_b += dim_n_adjusted * row_stride_b;
     asm volatile ("flw ft1, (%0)"   :: "r"(global_b));
-    global_b += dim_n * row_stride_b;
+    global_b += dim_n_adjusted * row_stride_b;
     asm volatile ("flw ft2, (%0)"   :: "r"(global_b));
-    global_b += dim_n * row_stride_b;
+    global_b += dim_n_adjusted * row_stride_b;
     asm volatile ("flw ft3, (%0)"   :: "r"(global_b));
-    global_b += dim_n * row_stride_b;
+    global_b += dim_n_adjusted * row_stride_b;
     asm volatile ("flw ft4, (%0)"   :: "r"(global_b));
-    global_b += dim_n * row_stride_b;
+    global_b += dim_n_adjusted * row_stride_b;
     asm volatile ("flw ft5, (%0)"   :: "r"(global_b));
-    global_b += dim_n * row_stride_b;
+    global_b += dim_n_adjusted * row_stride_b;
     asm volatile ("flw ft6, (%0)"   :: "r"(global_b));
-    global_b += dim_n * row_stride_b;
+    global_b += dim_n_adjusted * row_stride_b;
     asm volatile ("flw ft7, (%0)"   :: "r"(global_b));
-    global_b += dim_n * row_stride_b;
+    global_b += dim_n_adjusted * row_stride_b;
 
-    asm volatile ("fsw ft0, %0(%1)" :: "i"(BN * row_stride_b * 0 * sizeof(float)), "r"(local_b_tmp));
-    asm volatile ("fsw ft1, %0(%1)" :: "i"(BN * row_stride_b * 1 * sizeof(float)), "r"(local_b_tmp));
-    local_b_tmp += BN * row_stride_b * 2;
-    asm volatile ("fsw ft2, %0(%1)" :: "i"(BN * row_stride_b * 0 * sizeof(float)), "r"(local_b_tmp));
-    asm volatile ("fsw ft3, %0(%1)" :: "i"(BN * row_stride_b * 1 * sizeof(float)), "r"(local_b_tmp));
-    local_b_tmp += BN * row_stride_b * 2;
-    asm volatile ("fsw ft4, %0(%1)" :: "i"(BN * row_stride_b * 0 * sizeof(float)), "r"(local_b_tmp));
-    asm volatile ("fsw ft5, %0(%1)" :: "i"(BN * row_stride_b * 1 * sizeof(float)), "r"(local_b_tmp));
-    local_b_tmp += BN * row_stride_b * 2;
-    asm volatile ("fsw ft6, %0(%1)" :: "i"(BN * row_stride_b * 0 * sizeof(float)), "r"(local_b_tmp));
-    asm volatile ("fsw ft7, %0(%1)" :: "i"(BN * row_stride_b * 1 * sizeof(float)), "r"(local_b_tmp));
-    local_b_tmp += BN * row_stride_b * 2;
+    asm volatile ("fsw ft0, %0(%1)" :: "i"(BN_adjusted * row_stride_b * 0 * sizeof(float)), "r"(local_b_tmp));
+    asm volatile ("fsw ft1, %0(%1)" :: "i"(BN_adjusted * row_stride_b * 1 * sizeof(float)), "r"(local_b_tmp));
+    local_b_tmp += BN_adjusted * row_stride_b * 2;
+    asm volatile ("fsw ft2, %0(%1)" :: "i"(BN_adjusted * row_stride_b * 0 * sizeof(float)), "r"(local_b_tmp));
+    asm volatile ("fsw ft3, %0(%1)" :: "i"(BN_adjusted * row_stride_b * 1 * sizeof(float)), "r"(local_b_tmp));
+    local_b_tmp += BN_adjusted * row_stride_b * 2;
+    asm volatile ("fsw ft4, %0(%1)" :: "i"(BN_adjusted * row_stride_b * 0 * sizeof(float)), "r"(local_b_tmp));
+    asm volatile ("fsw ft5, %0(%1)" :: "i"(BN_adjusted * row_stride_b * 1 * sizeof(float)), "r"(local_b_tmp));
+    local_b_tmp += BN_adjusted * row_stride_b * 2;
+    asm volatile ("fsw ft6, %0(%1)" :: "i"(BN_adjusted * row_stride_b * 0 * sizeof(float)), "r"(local_b_tmp));
+    asm volatile ("fsw ft7, %0(%1)" :: "i"(BN_adjusted * row_stride_b * 1 * sizeof(float)), "r"(local_b_tmp));
+    local_b_tmp += BN_adjusted * row_stride_b * 2;
   }
 }
 
@@ -440,8 +461,8 @@ inline void thread_block_gemm(kernel_arg_t *__UNIFORM__ arg,
 #endif
         }
 #else
-        global_dmem_load(dim_n, dim_k, block_k * BK, A, B, local_a, local_b,
-                         tid_in_threadblock, block_n, block_m);
+        global_dmem_load<T>(dim_n, dim_k, block_k * BK, A, B, local_a, local_b,
+                            tid_in_threadblock, block_n, block_m);
 
         threadblock_barrier(threadblock_id_in_cluster, threadblock_dim_y);
 #endif
@@ -466,6 +487,7 @@ inline void thread_block_gemm(kernel_arg_t *__UNIFORM__ arg,
           local_a_consume = local_a + (block_k & 1) * (local_a_elems);
           local_b_consume = local_b + (block_k & 1) * (local_b_elems);
         } else {
+          // no double-buffering without DMA
           local_a_consume = local_a;
           local_b_consume = local_b;
         }
@@ -477,12 +499,13 @@ inline void thread_block_gemm(kernel_arg_t *__UNIFORM__ arg,
 #pragma GCC unroll 2
             for (int wn_iter = 0; wn_iter < WNITER; wn_iter++) {
               // SMEM -> RF
-              vx_wmma_load_b(local_b_consume, local_k, warp_col, wn_iter, tid_in_warp);
+              vx_wmma_load_b<T>(local_b_consume, local_k, warp_col, wn_iter,
+                                tid_in_warp);
 #pragma GCC unroll 2
               for (int wm_iter = 0; wm_iter < WMITER; wm_iter++) {
                 // SMEM -> RF
-                vx_wmma_load_a(local_a_consume, local_k, warp_row, wm_iter,
-                               tid_in_warp);
+                vx_wmma_load_a<T>(local_a_consume, local_k, warp_row, wm_iter,
+                                  tid_in_warp);
                 // perform mma
                 vx_wmma(wm_iter);
               }
@@ -506,8 +529,8 @@ inline void thread_block_gemm(kernel_arg_t *__UNIFORM__ arg,
       for (int wm_iter = 0; wm_iter < WMITER; wm_iter++) {
 #pragma GCC unroll 2
         for (int wn_iter = 0; wn_iter < WNITER; wn_iter++) {
-          write_results<float>(tid_in_warp, warp_col, warp_row, wn_iter,
-                               wm_iter, dim_n, C, block_n, block_m);
+          write_results(tid_in_warp, warp_col, warp_row, wn_iter, wm_iter,
+                        dim_n, C, block_n, block_m);
         }
       }
     }
