@@ -11,13 +11,12 @@
 #define SMEM_MASK (SMEM_SIZE - 1)
 #define SMEM_ADDR_END (SMEM_BASE + SMEM_SIZE)
 
-static size_t gemmini_tile_idx = 0;
+static size_t gemmini_tile_idx[NUM_THREADS * NUM_WARPS * NUM_CORES * NUM_CLUSTERS] = {0};
 
-inline void use_gemmini(size_t i) {
-  gemmini_tile_idx = i;
-}
-
-#define GEMMINI_CTRL (SMEM_BASE + SMEM_SIZE + 0x3000 + 0x100 * (gemmini_tile_idx))
+#define HW_TID() ({uint32_t gtid; asm volatile ("csrr %0, mhartid" : "=r" (gtid)); gtid;})
+#define use_gemmini(i) {gemmini_tile_idx[HW_TID()] = (i);}
+#define GEMMINI_TILE_IDX() (gemmini_tile_idx[HW_TID()])
+#define GEMMINI_CTRL (SMEM_BASE + SMEM_SIZE + 0x3000 + 0x100 * GEMMINI_TILE_IDX())
 #define GEMMINI_CISC_IMM(x, i) ((x) + 32 * (i))
 
 #define SPAD_BASE 0x0
@@ -67,14 +66,9 @@ inline void use_gemmini(size_t i) {
 
 #undef ROCC_INSTRUCTION_RS1_RS2
 #define ROCC_INSTRUCTION_RS1_RS2(x, rs1, rs2, funct) { \
-    /* printf("function %d\n", funct); */              \
     *((volatile uint64_t *) GEMMINI_RS1_ADDR) = (rs1); \
     *((volatile uint64_t *) GEMMINI_RS2_ADDR) = (rs2); \
-    /* *((volatile uint32_t*) GEMMINI_RS2_ADDR) = (uint32_t) ((uint64_t) (rs2) & 0xFFFFFFFFULL); */ \
-    /* *((volatile uint32_t*) (GEMMINI_RS2_ADDR + 4)) = (uint32_t) ((uint64_t) (rs2) >> 32); */ \
-    /* gemmini_fence(); */ \
     *((volatile uint32_t*) GEMMINI_INST_ADDR) = (0x7B) | (0 << 7) | (3 << 12) | (1 << 15) | (2 << 20) | ((funct) << 25); \
-    /* sprintf((char *) PRINT_BUF, "%llx %llx %d\n", rs1, rs2, funct); */ \
 }
 
 #define loop_matmul_skips(skip_lda, skip_ldb, skip_ldd, skip_ex, skip_stc) \
