@@ -1,10 +1,14 @@
 import numpy as np
 
+M = 8
+N = 8
+K = 16
+
 # A_array = np.random.rand(8, 16)
-A_array = np.arange(8 * 8).reshape([8, 8])
-B_array = np.arange(8 * 8).reshape([8, 8])
+A_array = np.arange(M * K).reshape([M, K])
+B_array = np.arange(K * N).reshape([K, N])
 # C_array = np.random.rand(16, 16)
-C_array = np.zeros([8, 8])
+C_array = np.zeros([M, N])
 # A_array = np.zeros((16, 8))
 # B_array = np.zeros((8, 16))
 # A_array[0,:] = 1.0
@@ -56,10 +60,10 @@ if __name__ == "__main__":
 
     np.savez("abc", A_array=A_array, B_array=B_array, C_array=C_array)
 
-    A_array.astype('float32').tofile("input.a.bin")
-    B_array.astype('float32').tofile("input.b.bin")
+    # A_array.astype('float32').tofile("input.a.bin")
+    # B_array.astype('float32').tofile("input.b.bin")
 
-    # A_array.astype('float16').tofile("input.a.bin")
-    # B_array = pack_fp16_by_column(B_array)
-    # B_array.astype('float16').tofile("input.b.bin")
+    A_array.astype('float16').tofile("input.a.bin")
+    B_array = pack_fp16_by_column(B_array)
+    B_array.astype('float16').tofile("input.b.bin")
     print(B_array)

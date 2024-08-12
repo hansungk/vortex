@@ -41,9 +41,13 @@ def C_index(threadgroup, thread, register):
 def check_sim_output():
     file = input("simulator output filename: ")
 
-    A_array = np.zeros((16, 8))
-    B_array = np.zeros((8, 16))
-    C_array = np.zeros((16, 16))
+    M = 8
+    N = 8
+    K = 16
+
+    A_array = np.zeros((M, K))
+    B_array = np.zeros((K, N))
+    C_array = np.zeros((M, N))
 
     with open(file) as f:
         for line in f.readlines():
@@ -87,26 +91,23 @@ def check_sim_output():
 
 if __name__ == "__main__":
     expected = np.load("abc.npz")
-    # expected_A = expected['A_array']
-    # expected_B = expected['B_array']
-    # expected_C = expected['C_array']
-    expected_A = expected['A_array'][0:8, 0:8]
-    expected_B = expected['B_array'][0:8, 0:8]
-    expected_C = expected['C_array'][0:8, 0:8]
+    expected_A = expected['A_array']
+    expected_B = expected['B_array']
+    expected_C = expected['C_array']
     expected_C = expected_C + expected_A @ expected_B
     print('expected A:')
     print(expected_A)
     print('expected B:')
     print(expected_B)
     print('expected C:')
-    print(expected_C[0:8, 0:8])
+    print(expected_C)
     expected_C.astype('float32').tofile("c_expected.bin")
 
     [got_A, got_B, got_C] = check_sim_output()
     print('got C:')
-    print(C_array[0:8, 0:8])
+    print(C_array)
     print('diff C:')
-    print(expected_C[0:8, 0:8] - C_array[0:8, 0:8])
+    print(expected_C - C_array)
     assert np.allclose(expected_A, got_A)
     assert np.allclose(expected_B, got_B)
     assert np.allclose(expected_C, got_C)
