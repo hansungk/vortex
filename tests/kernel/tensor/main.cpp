@@ -122,14 +122,24 @@ void vx_wmma_load() {
   // load B
   // B is stored row-major in the memory,
   // loaded column-major into the RF.
-  asm volatile("flw f8 , %0" ::"m"(B[DIM_N * 0 + col]));
-  asm volatile("flw f9 , %0" ::"m"(B[DIM_N * 1 + col]));
-  asm volatile("flw f10, %0" ::"m"(B[DIM_N * 2 + col]));
-  asm volatile("flw f11, %0" ::"m"(B[DIM_N * 3 + col]));
-  asm volatile("flw f12, %0" ::"m"(B[DIM_N * 4 + col]));
-  asm volatile("flw f13, %0" ::"m"(B[DIM_N * 5 + col]));
-  asm volatile("flw f14, %0" ::"m"(B[DIM_N * 6 + col]));
-  asm volatile("flw f15, %0" ::"m"(B[DIM_N * 7 + col]));
+  // asm volatile("flw f8 , %0" ::"m"(B[DIM_N * 0 + col]));
+  // asm volatile("flw f9 , %0" ::"m"(B[DIM_N * 1 + col]));
+  // asm volatile("flw f10, %0" ::"m"(B[DIM_N * 2 + col]));
+  // asm volatile("flw f11, %0" ::"m"(B[DIM_N * 3 + col]));
+  // asm volatile("flw f12, %0" ::"m"(B[DIM_N * 4 + col]));
+  // asm volatile("flw f13, %0" ::"m"(B[DIM_N * 5 + col]));
+  // asm volatile("flw f14, %0" ::"m"(B[DIM_N * 6 + col]));
+  // asm volatile("flw f15, %0" ::"m"(B[DIM_N * 7 + col]));
+  // B is stored column-major in the memory,
+  // loaded column-major into the RF.
+  asm volatile("flw f8 , %0" ::"m"(B[DIM_K * row + 0]));
+  asm volatile("flw f9 , %0" ::"m"(B[DIM_K * row + 1]));
+  asm volatile("flw f10, %0" ::"m"(B[DIM_K * row + 2]));
+  asm volatile("flw f11, %0" ::"m"(B[DIM_K * row + 3]));
+  asm volatile("flw f12, %0" ::"m"(B[DIM_K * row + 4]));
+  asm volatile("flw f13, %0" ::"m"(B[DIM_K * row + 5]));
+  asm volatile("flw f14, %0" ::"m"(B[DIM_K * row + 6]));
+  asm volatile("flw f15, %0" ::"m"(B[DIM_K * row + 7]));
 
   map_c_8lanes(tid, row, col);
 

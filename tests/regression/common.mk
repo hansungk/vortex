@@ -49,7 +49,10 @@ VX_CP  = $(LLVM_VORTEX)/bin/llvm-objcopy
 #VX_CP  = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-objcopy
 
 VX_CFLAGS += -v -O3 -std=c++17
-VX_CFLAGS += -mcmodel=medany -fno-rtti -fno-exceptions -nostartfiles -fdata-sections -ffunction-sections -mllvm -inline-threshold=8192
+VX_CFLAGS += -mcmodel=medany -fno-rtti -fno-exceptions -nostartfiles -fdata-sections -ffunction-sections
+# comment out below for regression/basic, which uses GCC that doesn't
+# understand these flags
+VX_CFLAGS += -mllvm -inline-threshold=8192
 VX_CFLAGS += -I$(VORTEX_KN_PATH)/include -I$(VORTEX_KN_PATH)/../hw -I$(GEMMINI_SW_PATH)
 VX_CFLAGS += -DNDEBUG -DLLVM_VORTEX
 
@@ -104,23 +107,24 @@ kernel.bin: kernel.elf kernel.radiance.elf
 
 OBJCOPY ?= $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-objcopy
 OBJCOPY_FLAGS ?= "LOAD,ALLOC,DATA,CONTENTS"
-kernel.elf: $(VX_SRCS)
+BINFILES :=  args.bin input.a.bin input.b.bin
+kernel.elf: $(VX_SRCS) $(BINFILES)
 	$(VX_CXX) $(VX_CFLAGS) $(VX_SRCS) $(VX_LDFLAGS) -o $@
 	$(OBJCOPY) --set-section-flags .operand.a=$(OBJCOPY_FLAGS) $@
 	$(OBJCOPY) --set-section-flags .operand.b=$(OBJCOPY_FLAGS) $@
 	$(OBJCOPY) --set-section-flags .args=$(OBJCOPY_FLAGS) $@
-	$(OBJCOPY) --update-section .operand.a=input.a.bin $@
-	$(OBJCOPY) --update-section .operand.b=input.b.bin $@
-	$(OBJCOPY) --update-section .args=args.bin $@
+	$(OBJCOPY) --update-section .operand.a=input.a.bin $@ || true
+	$(OBJCOPY) --update-section .operand.b=input.b.bin $@ || true
+	$(OBJCOPY) --update-section .args=args.bin $@ || true
 
-kernel.radiance.elf: $(VX_SRCS)
+kernel.radiance.elf: $(VX_SRCS) $(BINFILES)
 	$(VX_CXX) $(VX_CFLAGS) $(VX_SRCS) $(VX_LDFLAGS) -DRADIANCE -o $@
 	$(OBJCOPY) --set-section-flags .operand.a=$(OBJCOPY_FLAGS) $@
 	$(OBJCOPY) --set-section-flags .operand.b=$(OBJCOPY_FLAGS) $@
 	$(OBJCOPY) --set-section-flags .args=$(OBJCOPY_FLAGS) $@
-	$(OBJCOPY) --update-section .operand.a=input.a.bin $@
-	$(OBJCOPY) --update-section .operand.b=input.b.bin $@
-	$(OBJCOPY) --update-section .args=args.bin $@
+	$(OBJCOPY) --update-section .operand.a=input.a.bin $@ || true
+	$(OBJCOPY) --update-section .operand.b=input.b.bin $@ || true
+	$(OBJCOPY) --update-section .args=args.bin $@ || true
 
 ifneq ($(CONFIG),)
 kernel$(CONFIGEXT).elf: kernel.elf

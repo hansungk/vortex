@@ -20,7 +20,7 @@
 //   BM <= BK*TM*TN
 #define BM 64
 #define BN 64
-#define BK 64
+#define BK 128
 #define WM 16
 #define WN 8
 #define TCM 8

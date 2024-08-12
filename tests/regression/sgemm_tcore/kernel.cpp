@@ -572,7 +572,7 @@ void kernel_body(int task_id, kernel_arg_t *__UNIFORM__ arg) {
   const uint32_t problem_size = (dim_m * dim_n) / (ELEM_PER_THREAD);
   const uint32_t num_threadblocks = problem_size / threads_per_threadblock;
 
-  using float_type = float;
+  using float_type = float16_t;
 
   // "static" shared memory allocation.  This would determine threadblock
   // occupancy of a single cluster
