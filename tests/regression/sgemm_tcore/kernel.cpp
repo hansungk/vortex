@@ -84,10 +84,10 @@ inline void global_dmem_load(const uint32_t dim_n, const uint32_t dim_k,
     // this is equivalent to threadblock_dim_y (assuming threadblock_dim_x ==
     // BK)
     constexpr uint32_t row_stride_a = threads_in_threadblock / BK_adjusted;
-    const float *global_a = reinterpret_cast<float *>(A) +
+    const float *global_a = reinterpret_cast<const float *>(A) +
                             dim_k_adjusted * global_a_row +
                             (k_adjusted + local_a_col);
-    volatile float *local_a_tmp = reinterpret_cast<float *>(local_a) +
+    volatile float *local_a_tmp = reinterpret_cast<volatile float *>(local_a) +
                                   BK_adjusted * local_a_row + local_a_col;
 
 #pragma GCC unroll 1
