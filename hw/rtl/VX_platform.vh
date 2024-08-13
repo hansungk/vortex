@@ -144,6 +144,9 @@
                         x \
                         /* verilator lint_on UNUSED */
 `define TRACE(level, args) dpi_trace(level, $sformatf args)
+// squelch spurrious traces at the very first few cycles caused by to reset
+// delay
+`define TRACE_STARTTIME 32'd10
 `endif
 // NOTE(hansung): define these macros to be the same as VERILATOR under VCS;
 // they will mostly be ignored
@@ -209,7 +212,9 @@
                         x \
                         /* verilator lint_on UNUSED */
 `define TRACE(level, args) $write args
-// `define TRACE(level, args) dpi_trace(level, $sformatf args)
+// squelch spurrious traces at the very first few cycles caused by to reset
+// delay
+`define TRACE_STARTTIME 32'd10
 `endif
 `endif
 

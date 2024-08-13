@@ -533,7 +533,7 @@ module VX_mem_scheduler #(
 `ifndef NDEBUG
     wire [NUM_BANKS-1:0] mem_req_fire_s = mem_req_valid_s & mem_req_ready_s;
     always @(negedge clk) begin
-        if (!reset) begin
+        if (!reset && ($time > `TRACE_STARTTIME)) begin
             if (req_valid && req_ready) begin
                 if (req_rw) begin
                     `TRACE(1, ("%d: %s-core-req-wr: valid=%b, addr=", $time, INST_ID, req_mask));
@@ -576,7 +576,7 @@ module VX_mem_scheduler #(
     end
 `else
     always @(negedge clk) begin
-        if (!reset) begin
+        if (!reset && ($time > `TRACE_STARTTIME)) begin
             if (req_valid && req_ready) begin
                 if (req_rw) begin
                     `TRACE(1, ("%d: %s-core-req-wr: valid=%b, addr=", $time, INST_ID, req_mask));
