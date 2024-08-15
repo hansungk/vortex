@@ -2,6 +2,7 @@
 #include <vx_intrinsics.h>
 #include <vx_print.h>
 #include <vx_spawn.h>
+#include <float.h>
 #include "common.h"
 #include "sgemm_impl.hpp"
 #include "include/gemmini.h"
@@ -13,7 +14,7 @@ using float_type = float16_t;
 #define B_ROW BM
 #define B_COL BN
 
-inline void thread_block_flashattn(float *S, float *gmem,
+inline void thread_block_flashattn(float *S,
                                    const uint32_t tid_in_threadblock,
                                    const uint32_t threads_per_threadblock,
                                    const uint32_t threadblock_id_in_cluster,
@@ -37,29 +38,121 @@ inline void thread_block_flashattn(float *S, float *gmem,
   // asm volatile("fmv.s %0, f22" : "=f"(ft[6]));
   // asm volatile("fmv.s %0, f23" : "=f"(ft[7]));
 
-  // row-max
-  //
-  // one warp handles one row in tile; iterate enough times to cover all the
-  // rows
+  volatile float *gmem_tmp0 = reinterpret_cast<volatile float *>(0xd0000000UL);
+  volatile float *gmem_tmp1 = reinterpret_cast<volatile float *>(0xe0000000UL);
+  volatile float *gmem_tmp2 = reinterpret_cast<volatile float *>(0xf0000000UL);
+
   for (int warp_offset = 0; warp_offset < B_ROW;
        warp_offset += warps_in_threadblock) {
     const uint32_t row = warp_offset + warp_id;
     const uint32_t first_thread_offset = B_COL * row;
-    uint32_t thread_offset = first_thread_offset + tid_in_warp;
 
-    float curr_max = S[first_thread_offset];
-    constexpr uint32_t load_iter = B_COL / NUM_THREADS;
+    // rowmax
+    //
+    // two-level tree reduction: reduce each row into NUM_THREADS intermediate
+    // maxes, then reduce it to one global max
+    // one warp handles one row in tile
+
+// #define DUMB_ROWMAX
+#ifdef DUMB_ROWMAX
+    if (tid_in_warp == 0) {
+      float max = S[first_thread_offset];
 #pragma GCC unroll
-    for (int iter = 0; iter < load_iter; iter++) {
+      for (int i = 0; i < B_COL; i++) {
+        asm volatile("fmax.s %0, %1, %2"
+                     : "=f"(max)
+                     : "f"(max), "f"(S[first_thread_offset + i]));
+      }
+      sharedmem_row_max_sum[row] = max;
+      gmem_tmp0[row] = max;
+    }
+
+#else
+    static_assert((B_ROW % NUM_THREADS) == 0,
+                  "B_ROW must be a multiple of NUM_THREADS");
+    constexpr uint32_t per_row_iter = B_COL / NUM_THREADS;
+    uint32_t thread_offset = first_thread_offset + tid_in_warp;
+    float per_thread_max = FLT_MIN;
+#pragma GCC unroll
+    for (int i = 0; i < per_row_iter; i++) {
+      const float next = S[thread_offset];
       asm volatile("fmax.s %0, %1, %2"
-                   : "=f"(curr_max)
-                   : "f"(curr_max), "f"(S[thread_offset]));
+                   : "=f"(per_thread_max)
+                   : "f"(per_thread_max), "f"(next));
       thread_offset += NUM_THREADS;
     }
-    // get max value across the same-warp threads using smem
-    // NOTE: be careful with out-of-bounds
+    // stage per-thread max value in smem
+    // FIXME: we could warp_id instead of row here, but we need another barrier
+    // at the end of the loop iteration to prevent write-after-read hazard
+    // FIXME: threadblock_id needs to be in here too
     float *warp_smem = sharedmem_scratchpad + (row * NUM_THREADS);
-    warp_smem[tid_in_warp] = curr_max;
+    warp_smem[tid_in_warp] = per_thread_max;
+
+    // sync writes to warp_smem
+    threadblock_barrier(threadblock_id_in_cluster,
+                        warps_per_threadblock_per_core);
+
+    // elect 0-th thread to reduce all other thread's values in the warp
+    if (tid_in_warp == 0) {
+      for (int iter = 1; iter < NUM_THREADS; iter++) {
+        float other = warp_smem[iter];
+        asm volatile("fmax.s %0, %1, %2"
+                     : "=f"(per_thread_max)
+                     : "f"(per_thread_max), "f"(other));
+      }
+      sharedmem_row_max_sum[row] = per_thread_max;
+      gmem_tmp0[row] = per_thread_max;
+    }
+#endif
+
+    // FIXME: unnecessary?
+    threadblock_barrier(threadblock_id_in_cluster,
+                        warps_per_threadblock_per_core);
+
+    // exponential
+    //
+    // B_ROW / (B_ROW * B_COL / (exp_elem * threads_per_threadblock))
+    // const uint32_t row_stride =
+    //     (exp_elem_per_thread * threads_per_threadblock) / B_COL;
+
+    thread_offset = first_thread_offset + tid_in_warp;
+
+    // broadcast rowmax to all threads in the warp
+    const float row_max = sharedmem_row_max_sum[row];
+
+#pragma GCC unroll
+    for (int i = 0; i < per_row_iter; i++) {
+      float val = S[thread_offset];
+
+      // FIXME: placeholder for proper exp
+      val = val;
+
+      // update S in-place to P
+      // S[thread_offset] = val;
+      gmem_tmp1[thread_offset] = val;
+      gmem_tmp2[thread_offset] = val - row_max;
+
+      thread_offset += NUM_THREADS;
+    }
+
+    threadblock_barrier(threadblock_id_in_cluster,
+                        warps_per_threadblock_per_core);
+
+    // rowsum
+    //
+    // two-level tree reduction, similar to rowmax
+
+#if 0
+    float per_thread_sum = 0.0f;
+#pragma GCC unroll
+    for (int i = 0; i < per_row_iter; i++) {
+      per_thread_sum += S[thread_offset];
+      thread_offset += NUM_THREADS;
+    }
+    // stage per-thread sum value in smem
+    // FIXME: threadblock_id needs to be in here too
+    warp_smem = sharedmem_scratchpad + (row * NUM_THREADS);
+    warp_smem[tid_in_warp] = per_thread_sum;
 
     // sync writes to warp_smem
     threadblock_barrier(threadblock_id_in_cluster,
@@ -69,21 +162,16 @@ inline void thread_block_flashattn(float *S, float *gmem,
     if (tid_in_warp == 0) {
       for (int iter = 1; iter < NUM_THREADS; iter++) {
         float other = warp_smem[iter];
-        asm volatile("fmax.s %0, %1, %2"
-                     : "=f"(curr_max)
-                     : "f"(curr_max), "f"(other));
+        per_thread_sum += other;
       }
-      sharedmem_row_max_sum[row] = curr_max;
+      sharedmem_row_max_sum[row] = per_thread_sum;
+      gmem_tmp2[row] = per_thread_sum;
     }
-  }
+#endif
 
-  // exponential
-  //
-  // FIXME: placeholder for proper exp
-  constexpr uint32_t exp_elem_per_thread = 1;
-  // B_ROW / (B_ROW * B_COL / (exp_elem * threads_per_threadblock))
-  const uint32_t row_stride =
-      (exp_elem_per_thread * threads_per_threadblock) / B_COL;
+    threadblock_barrier(threadblock_id_in_cluster,
+                        warps_per_threadblock_per_core);
+  }
 
   asm volatile("thread_block_flashattn_finish_%=:" ::);
 }
@@ -135,17 +223,18 @@ void kernel_body(int task_id, kernel_arg_t *__UNIFORM__ arg) {
       reinterpret_cast<uint8_t *>(SMEM_ADDR_END) - sharedmem_row_max_sum_size;
   // sharedmem "scratchpad" area to put temporary data, e.g. for tree reduction
   // in rowsum
-  // FIXME: size is arbitrary, and out-of bounds is not checked
-  constexpr uint32_t sharedmem_scratchpad_size = 0x1000;
+  // NOTE: out-of bounds is not checked
+  constexpr uint32_t sharedmem_scratchpad_size =
+      sizeof(float) * B_ROW * NUM_THREADS * 2 /*arbitrary slack*/;
   uint8_t *sharedmem_scratchpad =
       sharedmem_row_max_sum - sharedmem_scratchpad_size;
 
-  thread_block_gemm<float_type, /*write_to_gmem=*/true>(
-      (const float_type *)arg->addr_a, (const float_type *)arg->addr_b,
-      (float *)smem_S /*write result to SMEM */, arg->dim_m, arg->dim_n,
-      arg->dim_k, tid_in_threadblock, threads_per_threadblock,
-      threadblocks_per_cluster, threadblock_id_in_cluster,
-      sharedmem_per_threadblock);
+  // thread_block_gemm<float_type, /*write_to_gmem=*/true>(
+  //     (const float_type *)arg->addr_a, (const float_type *)arg->addr_b,
+  //     (float *)smem_S /*write result to SMEM */, arg->dim_m, arg->dim_n,
+  //     arg->dim_k, tid_in_threadblock, threads_per_threadblock,
+  //     threadblocks_per_cluster, threadblock_id_in_cluster,
+  //     sharedmem_per_threadblock);
 
   // protect writes of GEMM results before softmax
   const uint32_t warps_per_threadblock_per_core =
@@ -153,10 +242,10 @@ void kernel_body(int task_id, kernel_arg_t *__UNIFORM__ arg) {
   threadblock_barrier(threadblock_id_in_cluster,
                       warps_per_threadblock_per_core);
 
-  thread_block_flashattn(
-      (float *)smem_S, (float *)arg->addr_c, tid_in_threadblock,
-      threads_per_threadblock, threadblock_id_in_cluster,
-      (float *)sharedmem_scratchpad_size, (float *)sharedmem_row_max_sum);
+  thread_block_flashattn((float *)arg->addr_a /* smem_S, */, tid_in_threadblock,
+                         threads_per_threadblock, threadblock_id_in_cluster,
+                         (float *)sharedmem_scratchpad,
+                         (float *)sharedmem_row_max_sum);
 }
 
 int main() {
