@@ -31,7 +31,6 @@ void kernel_body(int task_id, kernel_arg_t *__UNIFORM__ arg) {
   const uint32_t threadblocks_per_cluster =
       hw_threads_per_cluster / threads_per_threadblock;
 
-  const uint32_t threadblock_dim_y = vx_num_warps() / threadblocks_per_cluster;
   const int threadblock_id = task_id / threads_per_threadblock;
   const int threadblock_id_in_cluster =
       threadblock_id % threadblocks_per_cluster;
@@ -51,11 +50,10 @@ void kernel_body(int task_id, kernel_arg_t *__UNIFORM__ arg) {
       DEV_SMEM_START_ADDR + sizeof(float_type) * 2 /*overkill for non-dma*/ *
                                 (2 * BM * BK) * threadblock_id_in_cluster);
 
-  thread_block_gemm<float_type>(
-      arg, tid_in_threadblock, threads_per_threadblock, threadblock_dim_y,
-      /*threadblock_id_x, threadblock_id_y,*/
-      threadblocks_per_cluster,
-      // threadblock_id,
+  thread_block_gemm<float_type, /*write_to_gmem=*/true>(
+      (const float_type *)arg->addr_a, (const float_type *)arg->addr_b,
+      (float *)arg->addr_c, arg->dim_m, arg->dim_n, arg->dim_k,
+      tid_in_threadblock, threads_per_threadblock, threadblocks_per_cluster,
       threadblock_id_in_cluster, sharedmem_per_threadblock);
 }
 
