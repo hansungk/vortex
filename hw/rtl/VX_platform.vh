@@ -78,7 +78,6 @@
 `define UNUSED_VAR(x)
 `define UNUSED_PIN(x) . x ()
 `define UNUSED_ARG(x) x
-`define TRACE(level, args) $write args
 `else // !SYNTHESIS
 `ifdef VERILATOR
 `define SIMULATION

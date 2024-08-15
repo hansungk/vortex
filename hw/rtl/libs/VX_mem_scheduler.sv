@@ -530,6 +530,7 @@ module VX_mem_scheduler #(
 
     ///////////////////////////////////////////////////////////////////////////
 
+`ifdef SIMULATION
 `ifndef NDEBUG
     wire [NUM_BANKS-1:0] mem_req_fire_s = mem_req_valid_s & mem_req_ready_s;
     always @(negedge clk) begin
@@ -598,7 +599,8 @@ module VX_mem_scheduler #(
             end
         end
     end
-`endif
+`endif // NDEBUG
+`endif // SIMULATION
   
 endmodule
 `TRACING_ON
