@@ -1,22 +1,15 @@
+import sys
 import numpy as np
 
-M = 8
-N = 8
-K = 16
+def parse_mnk():
+    if len(sys.argv) != 4:
+        print(f"usage: {sys.argv[0]} dimM dimN dimK", file=sys.stderr)
+        sys.exit(1)
+    m = int(sys.argv[1])
+    n = int(sys.argv[2])
+    k = int(sys.argv[3])
+    return (m, n, k)
 
-# A_array = np.random.rand(8, 16)
-A_array = np.arange(M * K).reshape([M, K])
-B_array = np.arange(K * N).reshape([K, N])
-# C_array = np.random.rand(16, 16)
-C_array = np.zeros([M, N])
-# A_array = np.zeros((16, 8))
-# B_array = np.zeros((8, 16))
-# A_array[0,:] = 1.0
-# B_array[:,4] = 1.0
-# C_array = np.zeros((16, 16))
-# for i in range(16):
-#     for j in range(16):
-#         C_array[i,j] = i * 16 + j
 
 # Reorder array in a way that groups two adjacent elements along the column to
 # be now adjacent along the row.  This way, when the resulting fp16 array is
@@ -37,11 +30,31 @@ def pack_fp16_by_column(array):
 
     T = array.transpose([1, 0])
     T_packed = T.reshape([cols, -1, 2])
-    result = T_packed.transpose([1, 0, 2]).reshape([rows // 2, cols * 2])
+    result = T_packed.transpose([1, 0, 2])
+    return result
+
+
+# Do the same as pack_fp16_by_column, but for every two elements along the row.
+def pack_fp16_by_row(array):
+    rows = array.shape[0]
+    cols = array.shape[1]
+
+    result = array.reshape([rows, -1, 2])
     return result
 
 
 if __name__ == "__main__":
+    M, N, K = parse_mnk()
+
+    # A_array = np.arange(M * K).reshape([M, K])
+    # B_array = np.arange(K * N).reshape([K, N])
+    # C_array = np.zeros([M, N])
+
+    np.random.seed(0)
+    A_array = np.random.rand(M, K) - 0.5
+    B_array = np.random.rand(K, N) - 0.5
+    C_array = np.zeros([M, N])
+
     with open('a_matrix.h', 'w') as f:
         for i in range(A_array.shape[0]):
             for j in range(A_array.shape[1]):
@@ -60,10 +73,40 @@ if __name__ == "__main__":
 
     np.savez("abc", A_array=A_array, B_array=B_array, C_array=C_array)
 
-    # A_array.astype('float32').tofile("input.a.bin")
-    # B_array.astype('float32').tofile("input.b.bin")
+    C_expected = A_array @ B_array
+    C_expected.astype('float32').tofile("c_expected.bin")
+    print('C_expected:')
+    print(C_expected)
 
-    A_array.astype('float16').tofile("input.a.bin")
-    B_array = pack_fp16_by_column(B_array)
-    B_array.astype('float16').tofile("input.b.bin")
-    print(B_array)
+    fp16 = True
+    if fp16:
+        A_packed = pack_fp16_by_row(A_array)
+        AT_packed = A_packed.transpose([1, 0, 2])
+        AT_array = AT_packed.reshape([-1, M * 2])
+        AT_array.astype('float16').tofile("input.a.bin")
+        print(AT_array)
+        B_packed = pack_fp16_by_column(B_array)
+        B_array = B_packed.reshape([-1, N * 2])
+        B_array.astype('float16').tofile("input.b.bin")
+        print(B_array)
+    else:
+        AT_array = A_array.transpose([1, 0])
+        # AT_array.astype('float32').tofile("input.a.bin")
+        A_array.astype('float32').tofile("input.a.bin")
+        B_array.astype('float32').tofile("input.b.bin")
+        print(AT_array)
+        print(B_array)
+
+    # generate rowmax result in online softmax
+    row_max = np.max(C_expected, axis=1)
+    row_max.astype('float32').tofile("rowmax.bin")
+
+    # subtrace row_max from each row by broadcasting
+    # (placeholder for exp)
+    P = C_expected - row_max[:, np.newaxis]
+    P.astype('float32').tofile("P_expected.bin")
+    print('P_expected:')
+    print(P)
+
+    row_sum = np.sum(P, axis=1)
+    row_sum.astype('float32').tofile("rowsum.bin")
