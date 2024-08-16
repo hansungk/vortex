@@ -102,15 +102,20 @@ module VX_alu_unit #(
 
         `RESET_RELAY(red_reset, reset);
 
-        VX_reduce_unit #(
-            .CORE_ID(CORE_ID),
-            .NUM_LANES(NUM_LANES)
-        ) reduce_unit (
-            .clk(clk),
-            .reset(red_reset),
-            .execute_if(red_execute_if),
-            .commit_if(red_commit_if)
-        );
+        `RUNTIME_ASSERT((reset || !red_execute_if.valid),
+            ("%t: *** core%0d-alu-unit: reduce instruction used but reduce_unit is disabled, PC=0x%x (#%d)",
+            $time, CORE_ID, red_execute_if.data.PC, red_execute_if.data.uuid));
+        assign red_commit_if.valid = 1'b0;
+        assign red_commit_if.data = '0;
+        // VX_reduce_unit #(
+        //     .CORE_ID(CORE_ID),
+        //     .NUM_LANES(NUM_LANES)
+        // ) reduce_unit (
+        //     .clk(clk),
+        //     .reset(red_reset),
+        //     .execute_if(red_execute_if),
+        //     .commit_if(red_commit_if)
+        // );
 
     `ifdef EXT_M_ENABLE
 
