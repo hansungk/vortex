@@ -7,9 +7,6 @@
 #include "include/gemmini.h"
 #include "gemmini_mmio.h"
 
-// using float_type = float;
-using float_type = float16_t;
-
 void kernel_body(int task_id, kernel_arg_t *__UNIFORM__ arg) {
   // @perf: All threads are running these compute whose result is mostly same
   // across the threadblock
