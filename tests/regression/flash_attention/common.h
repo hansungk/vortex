@@ -7,12 +7,12 @@
 #define DEV_SMEM_START_ADDR 0xff000000
 
 typedef struct {
-  uint32_t dim_m;
-  uint32_t dim_n;
-  uint32_t dim_k;
-  uint64_t addr_a;
-  uint64_t addr_b;
-  uint64_t addr_c;
+  uint32_t dim_seqlen;
+  uint32_t dim_headdim;
+  uint64_t addr_q;
+  uint64_t addr_k;
+  uint64_t addr_v;
+  uint64_t addr_o;
 } kernel_arg_t;
 
 #endif

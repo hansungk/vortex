@@ -8,9 +8,6 @@
 #include "include/gemmini.h"
 #include "gemmini_mmio.h"
 
-// using float_type = float;
-using float_type = float16_t;
-
 #define B_ROW BM
 #define B_COL BN
 
@@ -90,8 +87,8 @@ inline void thread_block_flashattn(float *S, const uint32_t tid_in_threadblock,
     }
 
 #else
-    static_assert((B_ROW % NUM_THREADS) == 0,
-                  "B_ROW must be a multiple of NUM_THREADS");
+    static_assert((B_COL % NUM_THREADS) == 0,
+                  "B_COL must be a multiple of NUM_THREADS");
     constexpr uint32_t per_row_iter = B_COL / NUM_THREADS;
     uint32_t thread_offset = first_thread_offset + tid_in_warp;
     float per_thread_max = FLT_MIN;
@@ -122,7 +119,7 @@ inline void thread_block_flashattn(float *S, const uint32_t tid_in_threadblock,
                      : "f"(rowmax), "f"(other));
       }
 
-      // update previous rowsum
+      // update previous rowmax
       // i.e. mi_new = max(mi, mij)
       float prev_rowmax = sharedmem_rowmax[row];
       asm volatile("fmax.s %0, %1, %2"
@@ -147,17 +144,32 @@ inline void thread_block_flashattn(float *S, const uint32_t tid_in_threadblock,
     // broadcast rowmax to all threads in the warp
     const float row_max = sharedmem_rowmax[row];
 
-    thread_offset = first_thread_offset + tid_in_warp;
+    // each thread computes two fp32 elements, downconverts it to fp16, then
+    // packs them into one fp32
+    constexpr uint32_t elem_per_thread = 1;
+    static_assert((B_COL % (elem_per_thread * NUM_THREADS)) == 0,
+                  "B_COL condition not met for P compute");
+
+    thread_offset = first_thread_offset + (elem_per_thread * tid_in_warp);
+    constexpr uint32_t exp_per_row_iter =
+        B_COL / (elem_per_thread * NUM_THREADS);
 #pragma GCC unroll
-    for (int i = 0; i < per_row_iter; i++) {
-      float val = S[thread_offset];
+    for (int i = 0; i < exp_per_row_iter; i++) {
+      float f0 = S[thread_offset];
+      // float f1 = S[thread_offset + 1];
 
       // FIXME: placeholder for proper exp
-      val -= row_max;
+      f0 -= row_max;
+      // f1 -= row_max;
+      // float16_t h0 = NN_float_to_half(f0);
+      // float16_t h1 = NN_float_to_half(f1);
 
-      // update S in-place to P
-      S[thread_offset] = val;
-      gmem_tmp1[thread_offset] = val;
+      // Store S transposed to the shared memory
+
+      // update S in-place into P
+      S[thread_offset] = f0;
+      // S[thread_offset + 1] = f1;
+      gmem_tmp1[thread_offset] = f0;
 
       thread_offset += NUM_THREADS;
     }
@@ -230,13 +242,8 @@ void kernel_body(int task_id, kernel_arg_t *__UNIFORM__ arg) {
       threadblock_id % threadblocks_per_cluster;
   const int tid_in_threadblock = task_id % threads_per_threadblock;
 
-  const uint32_t dim_m = arg->dim_m;
-  const uint32_t dim_n = arg->dim_n;
-  const uint32_t dim_n_in_blocks = dim_n / BN;
-  const int threadblock_id_x = threadblock_id % dim_n_in_blocks;
-  const int threadblock_id_y = threadblock_id / dim_n_in_blocks;
-  const uint32_t problem_size = (dim_m * dim_n) / (ELEM_PER_THREAD);
-  const uint32_t num_threadblocks = problem_size / threads_per_threadblock;
+  const uint32_t dim_seqlen = arg->dim_seqlen;
+  const uint32_t dim_headdim = arg->dim_headdim;
 
   // "static" shared memory allocation.  This would determine threadblock
   // occupancy of a single cluster
@@ -272,7 +279,7 @@ void kernel_body(int task_id, kernel_arg_t *__UNIFORM__ arg) {
 #define SKIP_GEMM
 #ifndef SKIP_GEMM
   thread_block_gemm<float_type, /*write_to_gmem=*/true>(
-      (const float_type *)arg->addr_a, (const float_type *)arg->addr_b,
+      (const float_type *)arg->addr_q, (const float_type *)arg->addr_k,
       (float *)smem_S /*write result to SMEM */, arg->dim_m, arg->dim_n,
       arg->dim_k, tid_in_threadblock, threads_per_threadblock,
       threadblocks_per_cluster, threadblock_id_in_cluster,
@@ -284,7 +291,7 @@ void kernel_body(int task_id, kernel_arg_t *__UNIFORM__ arg) {
 
   float *tile_S = (float *)smem_S;
 #else
-  float *tile_S = (float *)arg->addr_a;
+  float *tile_S = (float *)arg->addr_q;
 #endif
 
   thread_block_flashattn(tile_S, tid_in_threadblock,
@@ -296,7 +303,8 @@ void kernel_body(int task_id, kernel_arg_t *__UNIFORM__ arg) {
 int main() {
   kernel_arg_t *arg = (kernel_arg_t *)KERNEL_ARG_DEV_MEM_ADDR;
 
-  const uint32_t problem_size = (arg->dim_m * arg->dim_n) / (ELEM_PER_THREAD);
+  // FIXME:: use actuall seqlen/headdim
+  const uint32_t problem_size = (B_ROW * B_COL) / (ELEM_PER_THREAD);
   const uint32_t hw_threads_per_cluster =
       CORES_PER_CLUSTER * vx_num_threads() * vx_num_warps();
   // prevent launching more threads than the necessary problem size
