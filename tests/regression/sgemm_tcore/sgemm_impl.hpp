@@ -293,8 +293,7 @@ inline void wmma_load_b(const volatile T *smem_B, const int local_k,
 
   // see comment in wmma_load_a
   constexpr int packed_factor = (std::is_same_v<T, float16_t> ? 2 : 1);
-  constexpr int BK_adjusted = BN / packed_factor;
-  constexpr int BN_adjusted = BN / packed_factor;
+  constexpr int BK_adjusted = BK / packed_factor;
   const int local_k_adjusted = local_k / packed_factor;
 
   // B is stored N-major in smem
