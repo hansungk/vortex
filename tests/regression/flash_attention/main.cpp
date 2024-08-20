@@ -99,7 +99,7 @@ int main(int argc, char *argv[]) {
   std::cout << "open device connection" << std::endl;
   RT_CHECK(vx_dev_open(&device));
 
-  uint32_t dim_seqlen = 64;
+  uint32_t dim_seqlen = 128;
   uint32_t dim_headdim = 64;
 
   using float_type = half;

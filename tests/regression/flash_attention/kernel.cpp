@@ -475,8 +475,11 @@ void kernel_body(int task_id, kernel_arg_t *__UNIFORM__ arg) {
     initialize_accum_regs<0>();
     initialize_accum_regs<1>();
 
-    load_tile_to_smem<float, MemLayout::MN_major, MemLayout::MN_major, BN, BK>(
-        B_COL, 0, 0, gmem_V, smem_V, tid_in_threadblock);
+    // V dimension is [seqlen, headdim], stored N(headdim)-major
+    load_tile_to_smem<float, MemLayout::MN_major, MemLayout::MN_major, B_COL,
+                      HEADDIM>(
+        HEADDIM, 0 /* 0 because always reads the full N-dimension */,
+        tile_k * B_COL, gmem_V, smem_V, tid_in_threadblock);
 
     threadblock_barrier(threadblock_id_in_cluster,
                         warps_per_threadblock_per_core);
