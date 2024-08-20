@@ -14,7 +14,9 @@ $(PROJECT).elf: $(SRCS) $(DEPS)
 	$(CC) $(CFLAGS) $(SRCS) $(LDFLAGS) -o $(PROJECT).elf
 	$(OBJCOPY) --set-section-flags .operand.a=$(OBJCOPY_FLAGS) $@
 	$(OBJCOPY) --set-section-flags .operand.b=$(OBJCOPY_FLAGS) $@
+	$(OBJCOPY) --set-section-flags .operand.c=$(OBJCOPY_FLAGS) $@
 	$(OBJCOPY) --set-section-flags .args=$(OBJCOPY_FLAGS) $@
 	$(OBJCOPY) --update-section .operand.a=input.a.bin $@ || true
 	$(OBJCOPY) --update-section .operand.b=input.b.bin $@ || true
+	$(OBJCOPY) --update-section .operand.c=input.c.bin $@ || true
 	$(OBJCOPY) --update-section .args=args.bin $@ || true
