@@ -46,14 +46,17 @@ def pack_fp16_by_row(array):
 if __name__ == "__main__":
     M, N, K = parse_mnk()
 
-    # A_array = np.arange(M * K).reshape([M, K])
-    # B_array = np.arange(K * N).reshape([K, N])
-    # C_array = np.zeros([M, N])
-
-    np.random.seed(0)
-    A_array = np.random.rand(M, K) - 0.5
-    B_array = np.random.rand(K, N) - 0.5
-    C_array = np.zeros([M, N])
+    rand = True
+    if not rand:
+        A_array = np.arange(M * K).reshape([M, K])
+        B_array = np.arange(K * N).reshape([K, N])
+        C_array = np.arange(M * N).reshape([M, N])
+    else:
+        np.random.seed(0)
+        A_array = np.random.rand(M, K) - 0.5
+        B_array = np.random.rand(K, N) - 0.5
+        C_array = np.random.rand(N, K) - 0.5
+        # C_array = np.zeros([M, N])
 
     with open('a_matrix.h', 'w') as f:
         for i in range(A_array.shape[0]):
@@ -73,40 +76,58 @@ if __name__ == "__main__":
 
     np.savez("abc", A_array=A_array, B_array=B_array, C_array=C_array)
 
-    C_expected = A_array @ B_array
-    C_expected.astype('float32').tofile("c_expected.bin")
-    print('C_expected:')
-    print(C_expected)
+    D_expected = A_array @ B_array
+    D_expected.astype('float32').tofile("d_expected.bin")
+    print('D_expected:')
+    print(D_expected)
 
-    fp16 = True
+    fp16 = False
     if fp16:
         A_packed = pack_fp16_by_row(A_array)
         AT_packed = A_packed.transpose([1, 0, 2])
         AT_array = AT_packed.reshape([-1, M * 2])
-        AT_array.astype('float16').tofile("input.a.bin")
+        AT_array.astype('float16').tofile("input.a.col.bin")
+        print('AT:')
         print(AT_array)
         B_packed = pack_fp16_by_column(B_array)
         B_array = B_packed.reshape([-1, N * 2])
-        B_array.astype('float16').tofile("input.b.bin")
+        B_array.astype('float16').tofile("input.b.row.bin")
+        print('B:')
         print(B_array)
     else:
+        A_array.astype('float32').tofile("input.a.row.bin")
         AT_array = A_array.transpose([1, 0])
-        # AT_array.astype('float32').tofile("input.a.bin")
-        A_array.astype('float32').tofile("input.a.bin")
+        AT_array.astype('float32').tofile("input.a.col.bin")
         B_array.astype('float32').tofile("input.b.bin")
+        C_array.astype('float32').tofile("input.c.bin")
+        print('AT:')
         print(AT_array)
+        print('B:')
         print(B_array)
 
     # generate rowmax result in online softmax
-    row_max = np.max(C_expected, axis=1)
+    row_max = np.max(D_expected, axis=1)
     row_max.astype('float32').tofile("rowmax.bin")
 
     # subtrace row_max from each row by broadcasting
     # (placeholder for exp)
-    P = C_expected - row_max[:, np.newaxis]
+    x = D_expected - row_max[:, np.newaxis]
+    P = (x**2) / 2.0 + x + 1.0
+    # for i in range(3, 4):
+    #     P += (x**i) / np.math.factorial(i)
+    # P = np.exp(exp)
     P.astype('float32').tofile("P_expected.bin")
+    # print('P error:')
+    # print(P / np.exp(x))
     print('P_expected:')
     print(P)
 
     row_sum = np.sum(P, axis=1)
     row_sum.astype('float32').tofile("rowsum.bin")
+
+    V = C_array
+    # O = P.transpose([1, 0]) @ V
+    O = P @ V
+    O.astype('float32').tofile("O_expected.bin")
+    print('O_expected:')
+    print(O)
