@@ -486,7 +486,8 @@ module VX_tensor_octet #(
         { halves.A_half[1], A_buffer[operands_wid_buf][1] },
         { halves.A_half[0], A_buffer[operands_wid_buf][0] }
     };
-    // B is a 2x4 fp32 matrix, shared between the two threadgroups
+    // B is a 2x4 fp32 matrix, shared between the two threadgroups.
+    // The two rows (along k) are combined between buffered and current data.
     wire [1:0][3:0][31:0] B_tile = {
         halves.B_half,
         B_buffer[operands_wid_buf]
@@ -497,6 +498,9 @@ module VX_tensor_octet #(
     wire  [3:0][3:0][31:0] D_tile;
     wire  [`NW_WIDTH-1:0]  D_wid_dpu;
     
+    // C follows the 1x2 "jagged" mapping in Figure 7(b).
+    // Buffered data are combined with the current data along the rows,
+    // forming an 1x2 block for each lane.
     always @(*) begin
         C_tile[3] = { halves.C_half[7], C_buffer[operands_wid_buf][7], halves.C_half[5], C_buffer[operands_wid_buf][5] };
         C_tile[2] = { halves.C_half[6], C_buffer[operands_wid_buf][6], halves.C_half[4], C_buffer[operands_wid_buf][4] };
