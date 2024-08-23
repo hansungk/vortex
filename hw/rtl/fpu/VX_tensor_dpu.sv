@@ -1,7 +1,8 @@
 `ifdef EXT_T_ENABLE
 `include "VX_fpu_define.vh"
 
-module VX_tensor_dpu #(
+// Module that contains the threadgroups with DPUs + operand buffer.
+module VX_tensor_threadgroups #(
     parameter ISW,
     parameter OCTET,
     // @perf: has big impact on throughput.  A rule of thumb is to set it to
@@ -15,6 +16,7 @@ module VX_tensor_dpu #(
     input valid_in,
     output ready_in,
     // [rows][cols][dtype]
+    // (m,n,k) = (4,4,2)
     input [3:0][1:0][31:0] A_tile,
     input [1:0][3:0][31:0] B_tile,
     input [3:0][3:0][31:0] C_tile,
@@ -172,6 +174,7 @@ module VX_tensor_threadgroup #(
     output ready_in,
     input stall,
     // all *_frag are row-major
+    // (m,n,k) = (2,4,2)
     input [1:0][1:0][31:0] A_frag,
     input [1:0][3:0][31:0] B_frag,
     input [1:0][3:0][31:0] C_frag,
@@ -269,8 +272,11 @@ module VX_tensor_threadgroup #(
 
     // 4 FEDPs per threadgroup
     for (genvar i = 0; i < 4; ++i) begin
-        // at substep == 0, the 0th and 2nd columns of D begins compute;
-        // at substep == 1, the 1st and 3rd columns of D begins compute.
+        // Determine which elements in the D matrix the dot-product units get
+        // mapped to.
+        //
+        // At substep == 0, the 0th and 2nd columns of D begins compute;
+        // At substep == 1, the 1st and 3rd columns of D begins compute.
         // There are two row elements for each column, rounding out to
         // 4 elements computed by 4 FEDPs at every cycle
         // (see Figure 10(b)).

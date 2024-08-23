@@ -75,8 +75,9 @@ module VX_tensor_core_block import VX_gpu_pkg::*; #(
 );
     localparam NUM_OCTETS = (`NUM_THREADS / 8);
     // offet in the lane numbers that get mapped to the two threadgroups in an
-    // octet. E.g. two tgs map lane 0-3 and lane 16-19 -> 16
-    // FIXME: not sure this is the right logic.  just filling in what works
+    // octet. E.g. two tgs map lane 0-3 and lane 16-19 ->
+    // LANE_OFFSET_THREADGROUP = 16
+    // FIXME: check logic; only verified for single octet
     localparam LANE_OFFSET_THREADGROUP = (4 * NUM_OCTETS);
     // this is only a rule of thumb
     localparam METADATA_QUEUE_DEPTH = 2 * `LATENCY_HMMA;
@@ -147,6 +148,10 @@ module VX_tensor_core_block import VX_gpu_pkg::*; #(
         // each octet produces 4x4 output partial sum, but the 8 lanes mapped
         // to the octet can only do 8 fp32 writeback at a time; so we need to
         // split writeback over two cycles
+        //
+        // octet_D matches the mathematical layout of the matrix (4x4 output
+        // per octet).  The logic below replicates the jagged 1x2 mapping in
+        // Figure 7(b) to map values to the lanes.
         assign wb_data_0[4*i+0] = octet_D[0][0];
         assign wb_data_0[4*i+1] = octet_D[1][0];
         assign wb_data_0[4*i+2] = octet_D[0][2];
@@ -511,7 +516,7 @@ module VX_tensor_octet #(
     wire dpu_valid;
 
     // this does (m,n,k)=(4,4,2) matmul, modeling compute of a single octet
-    VX_tensor_dpu #(
+    VX_tensor_threadgroups #(
         .ISW(ISW),
         .OCTET(OCTET),
         .OPERAND_BUFFER_DEPTH(4 /*@perf: arbtirary*/)
@@ -581,14 +586,14 @@ module VX_tensor_octet #(
     end
 
 `ifdef PERF_ENABLE
-    logic [`PERF_CTR_BITS-1:0] perf_tensor_dpu_total;
+    logic [`PERF_CTR_BITS-1:0] perf_tensor_ops_total;
 
     always @(posedge clk) begin
         if (reset) begin
-            perf_tensor_dpu_total <= '0;
+            perf_tensor_ops_total <= '0;
         end else begin
             if (do_hmma) begin
-                perf_tensor_dpu_total <= perf_tensor_dpu_total + 2'd2;
+                perf_tensor_ops_total <= perf_tensor_ops_total + 2'd2;
             end
         end
     end
