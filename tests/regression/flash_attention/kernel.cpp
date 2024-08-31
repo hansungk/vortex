@@ -26,7 +26,8 @@ inline void thread_block_init_sharedmem(const uint32_t tid_in_threadblock,
                                    const uint32_t threads_per_threadblock,
                                    float *smem_O,
                                    float *smem_rowmax,
-                                   float *smem_rowsum) {
+                                   float *smem_rowsum,
+                                   float *smem_O_row_scale) {
   asm volatile("threadblock_init_sharedmem_start_%=:" ::);
 
   const uint32_t tid_in_warp = tid_in_threadblock % NUM_THREADS;
@@ -49,6 +50,7 @@ inline void thread_block_init_sharedmem(const uint32_t tid_in_threadblock,
       smem_rowmax[offset + i * ROWMAX_SETS] = FLT_MIN;
     }
     smem_rowsum[offset] = 0.0f;
+    smem_O_row_scale[offset] = 0.0f;
   }
 
   // each warp clears out a row of smem_O
@@ -155,7 +157,7 @@ __attribute__((always_inline)) inline void thread_block_online_softmax(
     const float *smem_S, float *smem_O, float *smem_P,
     const uint32_t tid_in_threadblock, const uint32_t threads_per_threadblock,
     const uint32_t threadblock_id_in_cluster, float *smem_scratchpad,
-    float *smem_rowmax, float *smem_rowsum) {
+    float *smem_rowmax, float *smem_rowsum, float *smem_O_row_scale) {
   asm volatile("thread_block_online_softmax_start_%=:" ::);
 
   const uint32_t tid_in_warp = tid_in_threadblock % NUM_THREADS;
@@ -385,15 +387,14 @@ __attribute__((always_inline)) inline void thread_block_online_softmax(
     threadblock_barrier(threadblock_id_in_cluster,
                         warps_per_threadblock_per_core);
 
-    // Oi rescale
+    // compute Oi rescale factor
+    // FIXME: parallelize this across threads
     //
-    asm volatile("flashattn_o_rescale_start_%=:" ::);
+    asm volatile("flashattn_rescale_factor_start_%=:" ::);
 
     thread_offset = first_thread_offset + tid_in_warp;
 #pragma GCC unroll
     for (int i = 0; i < per_row_iter; i++) {
-      float o = smem_O[thread_offset];
-
       const float mi_prev = rowmax_prev;
       const float mi_new = rowmax_new;
 
@@ -404,21 +405,53 @@ __attribute__((always_inline)) inline void thread_block_online_softmax(
       exp += exponential_taylor_term<2>(x);
 
       // @perf: div vs. expansion on e(-x)?
-      o /= exp;
-
-      // update Oi in-place
-      smem_O[thread_offset] = o;
+      smem_O_row_scale[row] = 1.0f / exp;
 
       thread_offset += NUM_THREADS;
     }
 
-    asm volatile("flashattn_o_rescale_end_%=:" ::);
+    asm volatile("flashattn_rescale_factor_end_%=:" ::);
 
     threadblock_barrier(threadblock_id_in_cluster,
                         warps_per_threadblock_per_core);
   }
 
   asm volatile("thread_block_online_softmax_finish_%=:" ::);
+}
+
+__attribute__((always_inline)) inline void thread_block_O_rescale(
+    const float *smem_O_in, float *smem_O_out, const float *smem_O_row_scale,
+    const uint32_t tid_in_threadblock, const uint32_t threads_per_threadblock,
+    const uint32_t threadblock_id_in_cluster) {
+  asm volatile("thread_block_O_rescale_start_%=:" ::);
+
+  const uint32_t tid_in_warp = tid_in_threadblock % NUM_THREADS;
+  const uint32_t warp_id = tid_in_threadblock / NUM_THREADS;
+  const uint32_t warps_in_threadblock = threads_per_threadblock / NUM_THREADS;
+  const uint32_t warps_per_threadblock_per_core =
+      warps_in_threadblock / CORES_PER_CLUSTER;
+
+#pragma GCC unroll 1
+  for (int row_offset = 0; row_offset < B_ROW;
+       row_offset += warps_in_threadblock) {
+    const uint32_t row = row_offset + warp_id;
+    const uint32_t first_thread_offset = B_COL * row;
+    constexpr uint32_t per_row_iter = B_COL / NUM_THREADS;
+    uint32_t thread_offset = first_thread_offset + tid_in_warp;
+
+    // Oi rescale
+    //
+#pragma GCC unroll
+    for (int i = 0; i < per_row_iter; i++) {
+      const float o = smem_O_in[thread_offset];
+      const float scale = smem_O_row_scale[row];
+      smem_O_out[thread_offset] = (o * scale);
+
+      thread_offset += NUM_THREADS;
+    }
+  }
+
+  asm volatile("thread_block_O_rescale_finish_%=:" ::);
 }
 
 void kernel_body(int task_id, kernel_arg_t *__UNIFORM__ arg) {
@@ -483,9 +516,11 @@ void kernel_body(int task_id, kernel_arg_t *__UNIFORM__ arg) {
   // allocate rowmax/rowsum storage at the end of the sharedmem address space
   constexpr uint32_t smem_rowmax_size = B_ROW * ROWMAX_SETS;
   constexpr uint32_t smem_rowsum_size = B_ROW;
+  constexpr uint32_t smem_O_row_scale_size = B_ROW;
   float *smem_rowmax =
       reinterpret_cast<float *>(SMEM_ADDR_END) - smem_rowmax_size;
   float *smem_rowsum = smem_rowmax - smem_rowsum_size;
+  float *smem_O_row_scale = smem_rowsum - smem_O_row_scale_size;
 
   // sharedmem "scratchpad" area to put temporary data, e.g. for tree reduction
   // in rowsum
@@ -500,7 +535,8 @@ void kernel_body(int task_id, kernel_arg_t *__UNIFORM__ arg) {
 
   // initialize rowmax/rowsum values in sharedmem
   thread_block_init_sharedmem(tid_in_threadblock, threads_per_threadblock,
-                              smem_O, smem_rowmax, smem_rowsum);
+                              smem_O, smem_rowmax, smem_rowsum,
+                              smem_O_row_scale);
 
   const float *gmem_Q = reinterpret_cast<float *>(arg->addr_q);
   const float *gmem_K = reinterpret_cast<float *>(arg->addr_k);
@@ -581,7 +617,7 @@ void kernel_body(int task_id, kernel_arg_t *__UNIFORM__ arg) {
     thread_block_online_softmax(
         smem_S, smem_O, smem_P, tid_in_threadblock, threads_per_threadblock,
         threadblock_id_in_cluster, smem_scratchpad,
-        smem_rowmax, smem_rowsum);
+        smem_rowmax, smem_rowsum, smem_O_row_scale);
 
     // FIXME unnecessary?
     threadblock_barrier(threadblock_id_in_cluster,
@@ -592,9 +628,6 @@ void kernel_body(int task_id, kernel_arg_t *__UNIFORM__ arg) {
         thread_block_copy_tile(smem_P, gmem_tmp_d0, tid_in_threadblock,
                                threads_per_threadblock,
                                threadblock_id_in_cluster);
-        thread_block_copy_tile(smem_O, gmem_tmp_d2, tid_in_threadblock,
-                               threads_per_threadblock,
-                               threadblock_id_in_cluster);
         thread_block_copy_rowmax(smem_rowmax, gmem_tmp_e0, tid_in_threadblock,
                                  threads_per_threadblock,
                                  threadblock_id_in_cluster);
@@ -603,9 +636,6 @@ void kernel_body(int task_id, kernel_arg_t *__UNIFORM__ arg) {
                                  threadblock_id_in_cluster);
       } else if (tile_k == k_tiles - 1) {
         thread_block_copy_tile(smem_P, gmem_tmp_d1, tid_in_threadblock,
-                               threads_per_threadblock,
-                               threadblock_id_in_cluster);
-        thread_block_copy_tile(smem_O, gmem_tmp_d3, tid_in_threadblock,
                                threads_per_threadblock,
                                threadblock_id_in_cluster);
         thread_block_copy_rowmax(smem_rowmax, gmem_tmp_e1, tid_in_threadblock,
@@ -632,8 +662,34 @@ void kernel_body(int task_id, kernel_arg_t *__UNIFORM__ arg) {
         HEADDIM, 0 /* 0 because always reads the full N-dimension */, tile_k,
         gmem_V, smem_V, tid_in_threadblock);
 
+    // FIXME: should be removable
     threadblock_barrier(threadblock_id_in_cluster,
                         warps_per_threadblock_per_core);
+
+    // Oi rescale
+    thread_block_O_rescale(smem_O, smem_O /*in-place*/, smem_O_row_scale,
+                           tid_in_threadblock, threads_per_threadblock,
+                           threadblock_id_in_cluster);
+
+    // rescale-to-PV-GEMM barrier
+    threadblock_barrier(threadblock_id_in_cluster,
+                        warps_per_threadblock_per_core);
+
+    if constexpr (DEBUG) {
+      // O before PV
+      if (tile_k == 0) {
+        thread_block_copy_tile(smem_O, gmem_tmp_d2, tid_in_threadblock,
+                               threads_per_threadblock,
+                               threadblock_id_in_cluster);
+      } else if (tile_k == k_tiles - 1) {
+        thread_block_copy_tile(smem_O, gmem_tmp_d3, tid_in_threadblock,
+                               threads_per_threadblock,
+                               threadblock_id_in_cluster);
+      }
+
+      threadblock_barrier(threadblock_id_in_cluster,
+                          warps_per_threadblock_per_core);
+    }
 
     if constexpr (!DOUBLE_BUF) {
       thread_block_gemm_single_tile<float, MemLayout::K_major,
@@ -689,6 +745,7 @@ void kernel_body(int task_id, kernel_arg_t *__UNIFORM__ arg) {
                         warps_per_threadblock_per_core);
 
     if constexpr (DEBUG) {
+      // O after PV
       if (tile_k == 0) {
         thread_block_copy_tile(smem_O, gmem_tmp_d4, tid_in_threadblock,
                                threads_per_threadblock,
