@@ -52,7 +52,7 @@ VX_CFLAGS += -v -O3 -std=c++17
 VX_CFLAGS += -mcmodel=medany -fno-rtti -fno-exceptions -nostartfiles -fdata-sections -ffunction-sections
 # comment out below for regression/basic, which uses GCC that doesn't
 # understand these flags
-VX_CFLAGS += -mllvm -inline-threshold=8192
+VX_CFLAGS += -mllvm -inline-threshold=262144
 VX_CFLAGS += -I$(VORTEX_KN_PATH)/include -I$(VORTEX_KN_PATH)/../hw -I$(GEMMINI_SW_PATH)
 VX_CFLAGS += -DNDEBUG -DLLVM_VORTEX
 
@@ -107,23 +107,27 @@ kernel.bin: kernel.elf kernel.radiance.elf
 
 OBJCOPY ?= $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-objcopy
 OBJCOPY_FLAGS ?= "LOAD,ALLOC,DATA,CONTENTS"
-BINFILES :=  args.bin input.a.bin input.b.bin
-kernel.elf: $(VX_SRCS) $(BINFILES)
-	$(VX_CXX) $(VX_CFLAGS) $(VX_SRCS) $(VX_LDFLAGS) -o $@
+BINFILES :=  args.bin input.a.bin input.b.bin input.c.bin
+kernel.elf: $(VX_SRCS) $(VX_INCLUDES) $(BINFILES)
+	$(VX_CXX) $(VX_CFLAGS) -o $@ $(VX_SRCS) $(VX_LDFLAGS)
 	$(OBJCOPY) --set-section-flags .operand.a=$(OBJCOPY_FLAGS) $@
 	$(OBJCOPY) --set-section-flags .operand.b=$(OBJCOPY_FLAGS) $@
+	$(OBJCOPY) --set-section-flags .operand.c=$(OBJCOPY_FLAGS) $@
 	$(OBJCOPY) --set-section-flags .args=$(OBJCOPY_FLAGS) $@
 	$(OBJCOPY) --update-section .operand.a=input.a.bin $@ || true
 	$(OBJCOPY) --update-section .operand.b=input.b.bin $@ || true
+	$(OBJCOPY) --update-section .operand.c=input.c.bin $@ || true
 	$(OBJCOPY) --update-section .args=args.bin $@ || true
 
-kernel.radiance.elf: $(VX_SRCS) $(BINFILES)
+kernel.radiance.elf: $(VX_SRCS) $(VX_INCLUDES) $(BINFILES)
 	$(VX_CXX) $(VX_CFLAGS) $(VX_SRCS) $(VX_LDFLAGS) -DRADIANCE -o $@
 	$(OBJCOPY) --set-section-flags .operand.a=$(OBJCOPY_FLAGS) $@
 	$(OBJCOPY) --set-section-flags .operand.b=$(OBJCOPY_FLAGS) $@
+	$(OBJCOPY) --set-section-flags .operand.c=$(OBJCOPY_FLAGS) $@
 	$(OBJCOPY) --set-section-flags .args=$(OBJCOPY_FLAGS) $@
 	$(OBJCOPY) --update-section .operand.a=input.a.bin $@ || true
 	$(OBJCOPY) --update-section .operand.b=input.b.bin $@ || true
+	$(OBJCOPY) --update-section .operand.c=input.c.bin $@ || true
 	$(OBJCOPY) --update-section .args=args.bin $@ || true
 
 ifneq ($(CONFIG),)
