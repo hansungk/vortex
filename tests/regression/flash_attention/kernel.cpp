@@ -15,7 +15,7 @@
 
 constexpr uint32_t ROWMAX_SETS = 3;
 constexpr bool DEBUG = true;
-constexpr bool DOUBLE_BUF = true;
+constexpr bool WARP_SPECIALIZED = true;
 
 constexpr uint32_t DEV_FAKE_SMEM_START_ADDR = 0xf0000000;
 
@@ -28,8 +28,7 @@ inline void thread_block_init_sharedmem(const uint32_t tid_in_threadblock,
                                         const uint32_t threads_per_threadblock,
                                         float *smem_O, float *smem_rowmax,
                                         float *smem_rowsum,
-                                        float *smem_O_row_scale_0,
-                                        float *smem_O_row_scale_1) {
+                                        float *smem_O_row_scale) {
   asm volatile("threadblock_init_sharedmem_start_%=:" ::);
 
   const uint32_t tid_in_warp = tid_in_threadblock % NUM_THREADS;
@@ -39,7 +38,7 @@ inline void thread_block_init_sharedmem(const uint32_t tid_in_threadblock,
   static_assert((B_ROW % NUM_THREADS) == 0,
                 "B_ROW must be a multiple of NUM_THREADS");
   static_assert(B_ROW < (NUM_THREADS * CORES_PER_CLUSTER *
-                         (NUM_WARPS / (DOUBLE_BUF ? 2 : 1))),
+                         (NUM_WARPS / (WARP_SPECIALIZED ? 2 : 1))),
                 "not enough warps to initialize rowmax/rowsum");
 
   // each thread initializes one element in rowmax/rowsum
@@ -52,8 +51,7 @@ inline void thread_block_init_sharedmem(const uint32_t tid_in_threadblock,
       smem_rowmax[offset + i * ROWMAX_SETS] = FLT_MIN;
     }
     smem_rowsum[offset] = 0.0f;
-    smem_O_row_scale_0[offset] = 0.0f;
-    smem_O_row_scale_1[offset] = 0.0f;
+    smem_O_row_scale[offset] = 0.0f;
   }
 
   // each warp clears out a row of smem_O
@@ -502,16 +500,16 @@ void kernel_body(int task_id, kernel_arg_t *__UNIFORM__ arg) {
   const uint32_t tid_in_warpgroup = tid_in_threadblock % threads_per_warpgroup;
 
   // FIXME do proper software pipelining
-  // if (DOUBLE_BUF && warpgroup_id_in_cluster != 1) {
+  // if (WARP_SPECIALIZED && warpgroup_id_in_cluster != 1) {
   //   return;
   // }
 
   const uint32_t dim_seqlen = arg->dim_seqlen;
   const uint32_t dim_headdim = arg->dim_headdim;
 
-  // "static" shared memory allocation.  This would determine maximum
-  // threadblock occupancy in a cluster
+  // static shared memory allocation
   constexpr uint32_t smem_Q_size = B_ROW * HEADDIM;
+  constexpr uint32_t smem_K_size = B_COL * HEADDIM;
   constexpr uint32_t smem_QK_size = B_ROW * B_COL;
   constexpr uint32_t smem_V_size = B_COL * HEADDIM;
   constexpr uint32_t smem_O_size = B_COL * HEADDIM;
@@ -520,25 +518,48 @@ void kernel_body(int task_id, kernel_arg_t *__UNIFORM__ arg) {
       sizeof(float_type) *
           (smem_QK_size + smem_V_size + smem_O_size) *
           threadblock_id_in_cluster);
-
-  float *smem_Q = reinterpret_cast<float *>(smem_per_threadblock);
-  float *smem_K = smem_Q + smem_Q_size;
-  float *smem_S = reinterpret_cast<float *>(smem_per_threadblock);
-  float *smem_O = smem_S + smem_QK_size;
-  float *smem_P0 = reinterpret_cast<float *>(DEV_FAKE_SMEM_START_ADDR);
-  float *smem_P1 = smem_P0 + smem_QK_size;
-  float *smem_V0 = smem_P1 + smem_QK_size;
-  float *smem_V1 = smem_V0 + smem_QK_size;
+  float *smem_cursor = reinterpret_cast<float *>(DEV_FAKE_SMEM_START_ADDR);
+  float *smem_Q0 = smem_cursor;
+  smem_cursor += smem_Q_size;
+  float *smem_Q1 = smem_cursor;
+  smem_cursor += smem_Q_size;
+  float *smem_K0 = smem_cursor;
+  smem_cursor += smem_K_size;
+  float *smem_K1 = smem_cursor;
+  smem_cursor += smem_K_size;
+  float *smem_V0 = smem_cursor;
+  smem_cursor += smem_V_size;
+  float *smem_V1 = smem_cursor;
+  smem_cursor += smem_V_size;
+  float *smem_S0 = smem_cursor;
+  smem_cursor += smem_QK_size;
+  float *smem_S1 = smem_cursor;
+  smem_cursor += smem_QK_size;
+  float *smem_P0 = smem_S0; // in-place update
+  float *smem_P1 = smem_S1; // in-place update
+  float *smem_O0 = smem_cursor;
+  smem_cursor += smem_O_size;
+  float *smem_O1 = smem_cursor;
+  smem_cursor += smem_O_size;
 
   // allocate rowmax/rowsum storage at the end of the sharedmem address space
   constexpr uint32_t smem_rowmax_size = B_ROW * ROWMAX_SETS;
   constexpr uint32_t smem_rowsum_size = B_ROW;
   constexpr uint32_t smem_O_row_scale_size = B_ROW;
-  float *smem_rowmax =
-      reinterpret_cast<float *>(SMEM_ADDR_END) - smem_rowmax_size;
-  float *smem_rowsum = smem_rowmax - smem_rowsum_size;
-  float *smem_O_row_scale_0 = smem_rowsum - smem_O_row_scale_size;
-  float *smem_O_row_scale_1 = smem_O_row_scale_0 - smem_O_row_scale_size;
+  smem_cursor = reinterpret_cast<float *>(SMEM_ADDR_END);
+
+  smem_cursor -= smem_rowmax_size;
+  float *smem_rowmax_0 = smem_cursor;
+  smem_cursor -= smem_rowmax_size;
+  float *smem_rowmax_1 = smem_cursor;
+  smem_cursor -= smem_rowsum_size;
+  float *smem_rowsum_0 = smem_cursor;
+  smem_cursor -= smem_rowsum_size;
+  float *smem_rowsum_1 = smem_cursor;
+  smem_cursor -= smem_O_row_scale_size;
+  float *smem_O_row_scale_0 = smem_cursor;
+  smem_cursor -= smem_O_row_scale_size;
+  float *smem_O_row_scale_1 = smem_cursor;
 
   // sharedmem "scratchpad" area to put temporary data, e.g. for tree reduction
   // in rowsum
@@ -546,12 +567,19 @@ void kernel_body(int task_id, kernel_arg_t *__UNIFORM__ arg) {
   // TODO: reduce this from B_ROW to NUM_WARPS
   constexpr uint32_t smem_scratchpad_size =
       threads_per_warpgroup * 2 /*arbitrary slack*/;
-  float *smem_scratchpad = smem_O_row_scale_1 - smem_scratchpad_size;
+  smem_cursor -= smem_scratchpad_size;
+  float *smem_scratchpad_0 = smem_cursor;
+  smem_cursor -= smem_scratchpad_size;
+  float *smem_scratchpad_1 = smem_cursor;
 
   // initialize rowmax/rowsum values in sharedmem
-  thread_block_init_sharedmem(tid_in_warpgroup, threads_per_warpgroup, smem_O,
-                              smem_rowmax, smem_rowsum, smem_O_row_scale_0,
-                              smem_O_row_scale_1);
+  if (warpgroup_id == 0) {
+    thread_block_init_sharedmem(tid_in_warpgroup, threads_per_warpgroup, smem_O0,
+                                smem_rowmax_0, smem_rowsum_0, smem_O_row_scale_0);
+  } else {
+    thread_block_init_sharedmem(tid_in_warpgroup, threads_per_warpgroup, smem_O1,
+                                smem_rowmax_1, smem_rowsum_1, smem_O_row_scale_1);
+  }
 
   const float *gmem_Q = reinterpret_cast<float *>(arg->addr_q);
   const float *gmem_K = reinterpret_cast<float *>(arg->addr_k);
@@ -571,98 +599,101 @@ void kernel_body(int task_id, kernel_arg_t *__UNIFORM__ arg) {
   float *gmem_tmp_e2 = reinterpret_cast<float *>(0xe2000000UL);
   float *gmem_tmp_e3 = reinterpret_cast<float *>(0xe3000000UL);
 
+  constexpr uint32_t global_barrier_id = NUM_WARPS - 1; // arbitrary
+
   asm volatile ("tile_loop_start_%=:" :: );
 
   // "inner loop" along the columns of K^T
   const uint32_t k_tiles = (dim_seqlen / B_COL);
-  for (uint32_t tile_k = 0; tile_k < k_tiles + 1 /*pipeline latency*/;
-       tile_k++) {
-    float *smem_P_produce = (tile_k % 2) ? smem_P0 : smem_P1;
-    float *smem_P_consume = (tile_k % 2) ? smem_P1 : smem_P0;
-    float *smem_V_produce = (tile_k % 2) ? smem_V0 : smem_V1;
-    float *smem_V_consume = (tile_k % 2) ? smem_V1 : smem_V0;
-    float *smem_O_row_scale_produce =
-        (tile_k % 2) ? smem_O_row_scale_0 : smem_O_row_scale_1;
-    float *smem_O_row_scale_consume =
-        (tile_k % 2) ? smem_O_row_scale_1 : smem_O_row_scale_0;
-    // float *smem_P_produce = smem_P0;
-    // float *smem_P_consume = smem_P0;
-    // float *smem_V_produce = smem_V0;
-    // float *smem_V_consume = smem_V0;
+  for (uint32_t tile_k = 0; tile_k < k_tiles; tile_k++) {
+    asm volatile ("buf_select_start_%=:" :: );
 
-    if (warpgroup_id == 0) {
-      // Pipeline stage 1
-      //
-      // skip pipeline drain
-      if (tile_k == k_tiles) {
-        goto tile_iter_end;
-      }
-      const uint32_t tile_k_ = tile_k;
+    // float *smem_P_produce = (tile_k % 2) ? smem_P0 : smem_P1;
+    // float *smem_P_consume = (tile_k % 2) ? smem_P1 : smem_P0;
+    // float *smem_V_produce = (tile_k % 2) ? smem_V0 : smem_V1;
+    // float *smem_V_consume = (tile_k % 2) ? smem_V1 : smem_V0;
+    // float *smem_O_row_scale_produce =
+    //     (tile_k % 2) ? smem_O_row_scale_0 : smem_O_row_scale_1;
+    // float *smem_O_row_scale_consume =
+    //     (tile_k % 2) ? smem_O_row_scale_1 : smem_O_row_scale_0;
 
-      constexpr bool skip_gemm_qk = true;
-      if constexpr (!skip_gemm_qk) {
-        // clear out accumulators
-        initialize_accum_regs<0>();
-        initialize_accum_regs<1>();
+    float *smem_Q = (warpgroup_id % 2) ? smem_Q1 : smem_Q0;
+    float *smem_K = (warpgroup_id % 2) ? smem_K1 : smem_K0;
+    float *smem_V = (warpgroup_id % 2) ? smem_V1 : smem_V0;
+    float *smem_S = (warpgroup_id % 2) ? smem_S1 : smem_S0;
+    float *smem_O = (warpgroup_id % 2) ? smem_O1 : smem_O0;
+    float *smem_P = smem_S;
+    float *smem_O_row_scale =
+        (warpgroup_id % 2) ? smem_O_row_scale_1 : smem_O_row_scale_0;
+    float *smem_rowmax = (warpgroup_id % 2) ? smem_rowmax_1 : smem_rowmax_0;
+    float *smem_rowsum = (warpgroup_id % 2) ? smem_rowsum_1 : smem_rowsum_0;
+    float *smem_scratchpad =
+        (warpgroup_id % 2) ? smem_scratchpad_1 : smem_scratchpad_0;
 
-        static_assert(B_ROW == B_COL, "currently only supports square tiles");
+    asm volatile ("buf_select_finish_%=:" :: );
 
-        // load Q
-        load_tile_to_smem<float, MemLayout::MN_major, MemLayout::MN_major,
-                          B_ROW, HEADDIM, threads_per_warpgroup>(
-            dim_seqlen, 0 /*FIXME: only work on first B_ROW rows of Q for now*/,
-            0 /* always 0 because dim_k == headdim */, gmem_Q, smem_Q,
-            tid_in_warpgroup);
+    const uint32_t tile_k_ = tile_k;
 
-        // load K
-        load_tile_to_smem<float, MemLayout::MN_major, MemLayout::MN_major,
-                          B_COL, HEADDIM, threads_per_warpgroup>(
-            dim_seqlen, tile_k_, 0 /* always 0 because dim_k == headdim */,
-            gmem_K, smem_K, tid_in_warpgroup);
+    constexpr bool skip_gemm_qk = true;
+    if constexpr (!skip_gemm_qk) {
+      // clear out accumulators
+      initialize_accum_regs<0>();
+      initialize_accum_regs<1>();
 
-        // GMEM->SMEM and compute barrier
-        threadblock_barrier(warpgroup_id_in_cluster,
-                            warps_per_warpgroup_per_core);
+      static_assert(B_ROW == B_COL, "currently only supports square tiles");
 
-        // GEMM I: S = Q*K
-        thread_block_gemm_single_tile<float, MemLayout::MN_major,
-                                      MemLayout::MN_major, B_ROW, B_COL,
-                                      HEADDIM,
-                                      /*load_accum=*/false,
-                                      /*write_to_smem=*/true>(
-            smem_Q, smem_K, nullptr /*ignore accum*/, smem_S,
-            tid_in_warpgroup, threads_per_warpgroup,
-            warpgroups_per_cluster, warpgroup_id_in_cluster);
-      } else {
-        // load Q*K
-        load_tile_to_smem<float, MemLayout::K_major, MemLayout::K_major, B_COL,
-                          HEADDIM, threads_per_warpgroup>(
-            dim_seqlen, 0, tile_k_, gmem_Q /*=gmem_S*/, smem_S,
-            tid_in_warpgroup);
-        // the above should be equivalent to:
-        // load_tile_to_smem<float, MemLayout::MN_major, MemLayout::MN_major,
-        // B_COL,
-        //                   HEADDIM>(dim_seqlen, tile_k_, 0, gmem_Q
-        //                   /*=gmem_S*/,
-        //                            smem_S, tid_in_warpgroup);
-      }
+      // load Q
+      load_tile_to_smem<float, MemLayout::MN_major, MemLayout::MN_major, B_ROW,
+                        HEADDIM, threads_per_warpgroup>(
+          dim_seqlen, 0 /*FIXME: only work on first B_ROW rows of Q for now*/,
+          0 /* always 0 because dim_k == headdim */, gmem_Q, smem_Q,
+          tid_in_warpgroup);
 
-      // protect GEMM result writes (smem_S) before softmax
+      // load K
+      load_tile_to_smem<float, MemLayout::MN_major, MemLayout::MN_major, B_COL,
+                        HEADDIM, threads_per_warpgroup>(
+          dim_seqlen, tile_k_, 0 /* always 0 because dim_k == headdim */,
+          gmem_K, smem_K, tid_in_warpgroup);
+
+      // GMEM->SMEM and compute barrier
       threadblock_barrier(warpgroup_id_in_cluster,
                           warps_per_warpgroup_per_core);
 
-      thread_block_online_softmax(
-          smem_S, smem_P_produce, tid_in_warpgroup, threads_per_warpgroup,
-          warpgroup_id_in_cluster, smem_scratchpad, smem_rowmax, smem_rowsum,
-          smem_O_row_scale_produce);
+      // GEMM I: S = Q*K
+      thread_block_gemm_single_tile<float, MemLayout::MN_major,
+                                    MemLayout::MN_major, B_ROW, B_COL, HEADDIM,
+                                    /*load_accum=*/false,
+                                    /*write_to_smem=*/true>(
+          smem_Q, smem_K, nullptr /*ignore accum*/, smem_S, tid_in_warpgroup,
+          threads_per_warpgroup, warpgroups_per_cluster,
+          warpgroup_id_in_cluster);
+    } else {
+      // load Q*K
+      load_tile_to_smem<float, MemLayout::K_major, MemLayout::K_major, B_COL,
+                        HEADDIM, threads_per_warpgroup>(
+          dim_seqlen, warpgroup_id /* parallelize across rows */, tile_k_,
+          gmem_Q /*=gmem_S*/, smem_S, tid_in_warpgroup);
+    }
 
-      // FIXME unnecessary?
-      threadblock_barrier(warpgroup_id_in_cluster,
-                          warps_per_warpgroup_per_core);
+    // protect GEMM result writes (smem_S) before softmax
+    threadblock_barrier(warpgroup_id_in_cluster, warps_per_warpgroup_per_core);
 
-      if constexpr (DEBUG) {
+    threadblock_barrier(global_barrier_id, warps_per_threadblock_per_core);
+
+    // Online softmax
+    //
+    thread_block_online_softmax(smem_S, smem_P, tid_in_warpgroup,
+                                threads_per_warpgroup, warpgroup_id_in_cluster,
+                                smem_scratchpad, smem_rowmax, smem_rowsum,
+                                smem_O_row_scale);
+
+    // FIXME unnecessary?
+    threadblock_barrier(warpgroup_id_in_cluster, warps_per_warpgroup_per_core);
+
+    if constexpr (DEBUG) {
+      if (warpgroup_id == 0) {
         if (tile_k_ == 0) {
-          // thread_block_copy_tile(smem_P_produce, gmem_tmp_d0,
+          // thread_block_copy_tile(smem_P, gmem_tmp_d0,
           //                        tid_in_warpgroup, threads_per_warpgroup,
           //                        warpgroup_id_in_cluster);
           thread_block_copy_rowmax(smem_rowmax, gmem_tmp_e0, tid_in_warpgroup,
@@ -672,7 +703,7 @@ void kernel_body(int task_id, kernel_arg_t *__UNIFORM__ arg) {
                                    threads_per_warpgroup,
                                    warpgroup_id_in_cluster);
         } else if (tile_k_ == 1) {
-          // thread_block_copy_tile(smem_P_produce, gmem_tmp_d1,
+          // thread_block_copy_tile(smem_P, gmem_tmp_d1,
           //                        tid_in_warpgroup, threads_per_warpgroup,
           //                        warpgroup_id_in_cluster);
           thread_block_copy_rowmax(smem_rowmax, gmem_tmp_e1, tid_in_warpgroup,
@@ -686,55 +717,46 @@ void kernel_body(int task_id, kernel_arg_t *__UNIFORM__ arg) {
         threadblock_barrier(warpgroup_id_in_cluster,
                             warps_per_warpgroup_per_core);
       }
-    } else if (warpgroup_id == 1) {
-      // Pipeline stage 2
-      //
-      // skip pipeline start
-      if (tile_k == 0) {
-        goto tile_iter_end;
-      }
-      const uint32_t tile_k_ = tile_k - 1;
-      // const uint32_t tile_k_ = tile_k;
+    }
 
-      // GEMM II: O = O + P*V
+    // GEMM II: O = O + P*V
 
-      // V dimension is [seqlen, headdim], stored N(headdim)-major
-      load_tile_to_smem<float, MemLayout::MN_major, MemLayout::MN_major, B_COL,
-                        HEADDIM, threads_per_warpgroup>(
-          HEADDIM, 0 /* 0 because always reads the full N-dimension */, tile_k_,
-          gmem_V, smem_V_consume, tid_in_warpgroup);
+    // V dimension is [seqlen, headdim], stored N(headdim)-major
+    load_tile_to_smem<float, MemLayout::MN_major, MemLayout::MN_major, B_COL,
+                      HEADDIM, threads_per_warpgroup>(
+        HEADDIM, 0 /* 0 because always reads the full N-dimension */, tile_k_,
+        gmem_V, smem_V, tid_in_warpgroup);
 
-      // FIXME: should be removable
-      threadblock_barrier(warpgroup_id_in_cluster,
-                          warps_per_warpgroup_per_core);
+    // FIXME: should be removable
+    threadblock_barrier(warpgroup_id_in_cluster, warps_per_warpgroup_per_core);
 
-      // Oi rescale
-      thread_block_O_rescale(smem_O, smem_O /*in-place*/,
-                             smem_O_row_scale_consume, tid_in_warpgroup,
-                             threads_per_warpgroup, warpgroup_id_in_cluster);
+    // Oi rescale
+    thread_block_O_rescale(smem_O, smem_O /*in-place*/,
+                           smem_O_row_scale, tid_in_warpgroup,
+                           threads_per_warpgroup, warpgroup_id_in_cluster);
 
-      // rescale-to-PV-GEMM barrier
-      threadblock_barrier(warpgroup_id_in_cluster,
-                          warps_per_warpgroup_per_core);
+    // rescale-to-PV-GEMM barrier
+    threadblock_barrier(warpgroup_id_in_cluster, warps_per_warpgroup_per_core);
 
-      if constexpr (DEBUG) {
+    if constexpr (DEBUG) {
+      if (warpgroup_id == 0) {
         // O before PV
         if (tile_k_ == 0) {
-          thread_block_copy_tile(smem_P_consume, gmem_tmp_d0,
-                                 tid_in_warpgroup, threads_per_warpgroup,
+          thread_block_copy_tile(smem_P, gmem_tmp_d0, tid_in_warpgroup,
+                                 threads_per_warpgroup,
                                  warpgroup_id_in_cluster);
-          thread_block_copy_tile(smem_V_consume, gmem_tmp_d6,
-                                 tid_in_warpgroup, threads_per_warpgroup,
+          thread_block_copy_tile(smem_V, gmem_tmp_d6, tid_in_warpgroup,
+                                 threads_per_warpgroup,
                                  warpgroup_id_in_cluster);
           thread_block_copy_tile(smem_O, gmem_tmp_d2, tid_in_warpgroup,
                                  threads_per_warpgroup,
                                  warpgroup_id_in_cluster);
         } else if (tile_k_ == 1) {
-          thread_block_copy_tile(smem_P_consume, gmem_tmp_d1,
-                                 tid_in_warpgroup, threads_per_warpgroup,
+          thread_block_copy_tile(smem_P, gmem_tmp_d1, tid_in_warpgroup,
+                                 threads_per_warpgroup,
                                  warpgroup_id_in_cluster);
-          thread_block_copy_tile(smem_V_consume, gmem_tmp_d7,
-                                 tid_in_warpgroup, threads_per_warpgroup,
+          thread_block_copy_tile(smem_V, gmem_tmp_d7, tid_in_warpgroup,
+                                 threads_per_warpgroup,
                                  warpgroup_id_in_cluster);
           thread_block_copy_tile(smem_O, gmem_tmp_d3, tid_in_warpgroup,
                                  threads_per_warpgroup,
@@ -744,70 +766,70 @@ void kernel_body(int task_id, kernel_arg_t *__UNIFORM__ arg) {
         threadblock_barrier(warpgroup_id_in_cluster,
                             warps_per_warpgroup_per_core);
       }
+    }
 
-      if constexpr (!DOUBLE_BUF) {
-        // clear out accumulators
-        initialize_accum_regs<0>();
-        initialize_accum_regs<1>();
+    if constexpr (!WARP_SPECIALIZED) {
+      // clear out accumulators
+      initialize_accum_regs<0>();
+      initialize_accum_regs<1>();
 
-        thread_block_gemm_single_tile<float, MemLayout::K_major,
-                                      MemLayout::MN_major, B_ROW, HEADDIM,
-                                      B_COL,
-                                      /*load_accum=*/true,
-                                      /*write_to_smem=*/true>(
-            smem_P_consume, smem_V_consume, smem_O /*load accum*/, smem_O,
-            tid_in_warpgroup, threads_per_warpgroup,
-            warpgroups_per_cluster, warpgroup_id_in_cluster);
+      thread_block_gemm_single_tile<float, MemLayout::K_major,
+                                    MemLayout::MN_major, B_ROW, HEADDIM, B_COL,
+                                    /*load_accum=*/true,
+                                    /*write_to_smem=*/true>(
+          smem_P, smem_V, smem_O /*load accum*/, smem_O,
+          tid_in_warpgroup, threads_per_warpgroup, warpgroups_per_cluster,
+          warpgroup_id_in_cluster);
 
-        // FIXME: wrong but fast
-        // thread_block_gemm_single_tile<float, MemLayout::MN_major,
-        //                               MemLayout::MN_major,
-        //                               B_ROW, HEADDIM, B_COL,
-        //                               /*load_accum=*/true,
-        //                               /*write_to_smem=*/true>(
-        //     smem_P_consume, smem_V_consume, smem_O /*load accum*/, smem_O,
-        //     tid_in_warpgroup, threads_per_warpgroup,
-        //     warpgroups_per_cluster, warpgroup_id_in_cluster);
-      } else {
-        // when warp-specialized, there's only enough warps to do 64x32 tile
-        // size so we need to do 2 GEMM calls
-        static_assert(B_ROW / 2 == 32,
-                      "tile size assumption for warp-specialization not met");
+      // FIXME: wrong but fast
+      // thread_block_gemm_single_tile<float, MemLayout::MN_major,
+      //                               MemLayout::MN_major,
+      //                               B_ROW, HEADDIM, B_COL,
+      //                               /*load_accum=*/true,
+      //                               /*write_to_smem=*/true>(
+      //     smem_P, smem_V, smem_O /*load accum*/, smem_O,
+      //     tid_in_warpgroup, threads_per_warpgroup,
+      //     warpgroups_per_cluster, warpgroup_id_in_cluster);
+    } else {
+      // when warp-specialized, there's only enough warps to do 64x32 tile
+      // size so we need to do 2 GEMM calls
+      static_assert(B_ROW / 2 == 32,
+                    "tile size assumption for warp-specialization not met");
 
-        // assumes smem_P is K-major
-        float *smem_P_half0 = smem_P_consume;
-        float *smem_P_half1 = smem_P_consume + (B_ROW / 2) * B_COL;
-        float *smem_O_half0 = smem_O;
-        float *smem_O_half1 = smem_O + (B_ROW / 2) * HEADDIM;
+      // assumes smem_P is K-major
+      float *smem_P_half0 = smem_P;
+      float *smem_P_half1 = smem_P + (B_ROW / 2) * B_COL;
+      float *smem_O_half0 = smem_O;
+      float *smem_O_half1 = smem_O + (B_ROW / 2) * HEADDIM;
 
-        // clear out accumulators
-        initialize_accum_regs<0>();
-        initialize_accum_regs<1>();
+      // clear out accumulators
+      initialize_accum_regs<0>();
+      initialize_accum_regs<1>();
 
-        // split by rows into 2 chunks
-        thread_block_gemm_single_tile<float, MemLayout::K_major,
-                                      MemLayout::MN_major, B_ROW / 2, HEADDIM,
-                                      B_COL,
-                                      /*load_accum=*/true,
-                                      /*write_to_smem=*/true>(
-            smem_P_half0, smem_V_consume, smem_O_half0 /*load accum*/,
-            smem_O_half0, tid_in_warpgroup, threads_per_warpgroup,
-            warpgroups_per_cluster, warpgroup_id_in_cluster);
+      // split by rows into 2 chunks
+      thread_block_gemm_single_tile<float, MemLayout::K_major,
+                                    MemLayout::MN_major, B_ROW / 2, HEADDIM,
+                                    B_COL,
+                                    /*load_accum=*/true,
+                                    /*write_to_smem=*/true>(
+          smem_P_half0, smem_V, smem_O_half0 /*load accum*/,
+          smem_O_half0, tid_in_warpgroup, threads_per_warpgroup,
+          warpgroups_per_cluster, warpgroup_id_in_cluster);
 
-        thread_block_gemm_single_tile<float, MemLayout::K_major,
-                                      MemLayout::MN_major, B_ROW / 2, HEADDIM,
-                                      B_COL,
-                                      /*load_accum=*/true,
-                                      /*write_to_smem=*/true>(
-            smem_P_half1, smem_V_consume, smem_O_half1 /*load accum*/,
-            smem_O_half1, tid_in_warpgroup, threads_per_warpgroup,
-            warpgroups_per_cluster, warpgroup_id_in_cluster);
-      }
+      thread_block_gemm_single_tile<float, MemLayout::K_major,
+                                    MemLayout::MN_major, B_ROW / 2, HEADDIM,
+                                    B_COL,
+                                    /*load_accum=*/true,
+                                    /*write_to_smem=*/true>(
+          smem_P_half1, smem_V, smem_O_half1 /*load accum*/,
+          smem_O_half1, tid_in_warpgroup, threads_per_warpgroup,
+          warpgroups_per_cluster, warpgroup_id_in_cluster);
+    }
 
-      threadblock_barrier(warpgroup_id_in_cluster,
-                          warps_per_warpgroup_per_core);
+    threadblock_barrier(warpgroup_id_in_cluster, warps_per_warpgroup_per_core);
 
-      if constexpr (DEBUG) {
+    if constexpr (DEBUG) {
+      if (warpgroup_id == 0) {
         // O after PV
         if (tile_k_ == 0) {
           thread_block_copy_tile(smem_O, gmem_tmp_d4, tid_in_warpgroup,
@@ -828,8 +850,8 @@ void kernel_body(int task_id, kernel_arg_t *__UNIFORM__ arg) {
     // synchronize progress of two warpgroups
     // threadblock_barrier(threadblock_id_in_cluster,
     //                     warps_per_threadblock_per_core);
-    threadblock_barrier(3, // FIXME
-                        NUM_WARPS);
+    // threadblock_barrier(3, // FIXME
+    //                     NUM_WARPS);
   }
 
   asm volatile ("tile_loop_finish_%=:" :: );
