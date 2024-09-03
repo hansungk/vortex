@@ -120,7 +120,6 @@ inline void thread_block_copy_tile(const float *src, float *dest,
 
     constexpr uint32_t per_row_iter = B_COL / NUM_THREADS;
     uint32_t thread_offset = first_thread_offset + tid_in_warp;
-    float per_thread_max = FLT_MIN;
 #pragma GCC unroll
     for (int i = 0; i < per_row_iter; i++) {
       dest[thread_offset] = src[thread_offset];
