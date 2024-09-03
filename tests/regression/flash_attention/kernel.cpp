@@ -74,9 +74,9 @@ inline void thread_block_init_sharedmem(const uint32_t tid_in_threadblock,
 }
 
 inline void thread_block_copy_rowmax(const float *src, float *dest,
-                                   const uint32_t tid_in_threadblock,
-                                   const uint32_t threads_per_threadblock,
-                                   const uint32_t threadblock_id_in_cluster) {
+                                     const uint32_t tid_in_threadblock,
+                                     const uint32_t threads_per_threadblock,
+                                     const uint32_t threadblock_id_in_cluster) {
   asm volatile("threadblock_copy_rowmax_start_%=:" ::);
 
   const uint32_t tid_in_warp = tid_in_threadblock % NUM_THREADS;
@@ -615,6 +615,26 @@ void kernel_body(int task_id, kernel_arg_t *__UNIFORM__ arg) {
   // delay warpgroup 0 by 1 iteration to do ping-pong scheduling
   if (warpgroup_id == 1) {
     threadblock_barrier(global_barrier_id, warps_per_threadblock_per_core);
+  }
+
+  if constexpr (GEMMINI_DMA) {
+    if (tid_in_threadblock == 0) {
+      gemmini_extended_config_ex(WEIGHT_STATIONARY, 0, 0, 1, 0, 0);
+      // gemmini_extended_config_ex(dataflow, act & 3, 0, 1, a_transpose,
+      // b_transpose);
+
+      // configure DMA for Q tile
+      gemmini_extended3_config_ld(HEADDIM * sizeof(elem_t), MVIN_SCALE_IDENTITY,
+                                  false, 0);
+      // configure DMA for K tile
+      gemmini_extended3_config_ld(B_COL * sizeof(elem_t), MVIN_SCALE_IDENTITY,
+                                  false, 1);
+      // configure DMA for Q*K store
+      gemmini_extended_config_st(B_COL * sizeof(elem_t), 0,
+                                 MVIN_SCALE_IDENTITY);
+
+      gemmini_fence();
+    }
   }
 
   // read Q and K into SMEM before the loop starts
