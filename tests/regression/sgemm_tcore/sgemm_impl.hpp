@@ -72,7 +72,7 @@ using float_type = float16_t;
 #define TRANSPOSE_AT_PRODUCE 0
 #define TRANSPOSE_AT_CONSUME 0
 
-#define GEMMINI_DMA 0
+#define GEMMINI_DMA 1
 #if SMEM_SIZE == 0x4000
 #define SMEM_ADDR_Q0 ((float * const) 0xff000000)
 #define SMEM_ADDR_Q1 ((float * const) 0xff001000)
@@ -83,7 +83,7 @@ using float_type = float16_t;
 #define SPAD_ADDR_Q2 0x100
 #define SPAD_ADDR_Q3 0x180
 #define BOUND_INST 0x400040004ULL
-#elif SMEM_SIZE == 0x10000
+#elif SMEM_SIZE >= 0x10000
 #define SMEM_ADDR_Q0 ((float * const) 0xff000000)
 #define SMEM_ADDR_Q1 ((float * const) 0xff004000)
 #define SMEM_ADDR_Q2 ((float * const) 0xff008000)
