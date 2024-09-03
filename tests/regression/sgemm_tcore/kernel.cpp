@@ -84,11 +84,15 @@ void kernel_body(int task_id, kernel_arg_t *__UNIFORM__ arg) {
   // "static" shared memory allocation.  This would determine threadblock
   // occupancy of a single cluster
   uint8_t *sharedmem_per_threadblock = reinterpret_cast<uint8_t *>(
-      DEV_SMEM_START_ADDR + sizeof(float_type) * 2 /*overkill for non-dma*/ *
-                                (2 * BM * BK) * threadblock_id_in_cluster);
+      DEV_SMEM_START_ADDR +
+      sizeof(float_type) * 2 * (2 * BM * BK) * threadblock_id_in_cluster);
 
   thread_block_gemm<float_type, threads_per_threadblock,
-                    /*write_to_gmem=*/true>(
+                    /*write_to_gmem=*/true,
+                    /*smem_a_offset=*/0,
+                    /*smem_a_dbuf_offset=*/0,
+                    /*smem_b_offset=*/2 * BM * BK * sizeof(float),
+                    /*smem_b_dbuf_offset=*/2 * BM * BK * sizeof(float)>(
       (const float_type *)arg->addr_a, (const float_type *)arg->addr_b,
       (float *)arg->addr_c, arg->dim_m, arg->dim_n, arg->dim_k,
       tid_in_threadblock, threadblocks_per_cluster, threadblock_id_in_cluster,
