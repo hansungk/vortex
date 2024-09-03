@@ -70,9 +70,10 @@ using float_type = float16_t;
 // To model the case where the A matrix is already stored column-major in GMEM,
 // set both to 0.
 #define TRANSPOSE_AT_PRODUCE 0
-#define TRANSPOSE_AT_CONSUME 1
+#define TRANSPOSE_AT_CONSUME 0
 
-#define GEMMINI_DMA 1
+#define GEMMINI_DMA 0
+#define GEMMINI_DMA_MN_MAJOR 1
 #if SMEM_SIZE == 0x4000
 #define SMEM_ADDR_Q0 ((float * const) 0xff000000)
 #define SMEM_ADDR_Q1 ((float * const) 0xff001000)
@@ -230,7 +231,8 @@ inline void wmma_load_a(volatile const T *smem_A, const int local_k,
   constexpr int packed_factor = (std::is_same_v<T, float16_t> ? 2 : 1);
   const int local_k_adjusted = local_k / packed_factor;
 
-  static_assert(!GEMMINI_DMA || (layout == MemLayout::K_major),
+  static_assert(!GEMMINI_DMA || (layout == MemLayout::K_major) ||
+                    GEMMINI_DMA_MN_MAJOR,
                 "GEMMINI_DMA only supported for K-major A tile");
   static_assert((layout != MemLayout::K_major) || (FP_SIZE == 32),
                 "fp16 is not really tested for K-major A layout");
