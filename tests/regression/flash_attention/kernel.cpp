@@ -15,7 +15,7 @@
 
 constexpr uint32_t ROWMAX_SETS = 3;
 constexpr bool DEBUG = true;
-constexpr bool WARP_SPECIALIZED = true;
+constexpr bool WARP_SPECIALIZED = false;
 
 constexpr uint32_t DEV_FAKE_SMEM_START_ADDR = 0xf0000000;
 
@@ -562,6 +562,24 @@ void kernel_body(int task_id, kernel_arg_t *__UNIFORM__ arg) {
   float *smem_O1 = smem_cursor;
   smem_cursor += smem_O_size;
 
+  // NOTE: this has to match with smem_*
+  constexpr uint32_t spad_addr_factor = DIM * sizeof(elem_t);
+  constexpr uint32_t spad_addr_Q0 = 0;
+  constexpr uint32_t spad_addr_Q1 =
+      spad_addr_Q0 + (smem_Q_size * sizeof(float) / spad_addr_factor);
+  constexpr uint32_t spad_addr_K0 =
+      spad_addr_Q1 + (smem_Q_size * sizeof(float) / spad_addr_factor);
+  constexpr uint32_t spad_addr_K1 =
+      spad_addr_K0 + (smem_K_size * sizeof(float) / spad_addr_factor);
+  constexpr uint32_t spad_addr_V0 =
+      spad_addr_K1 + (smem_K_size * sizeof(float) / spad_addr_factor);
+  constexpr uint32_t spad_addr_V1 =
+      spad_addr_V0 + (smem_V_size * sizeof(float) / spad_addr_factor);
+  constexpr uint32_t spad_addr_S0 =
+      spad_addr_V1 + (smem_V_size * sizeof(float) / spad_addr_factor);
+  constexpr uint32_t spad_addr_S1 =
+      spad_addr_S0 + (smem_QK_size * sizeof(float) / spad_addr_factor);
+
   // allocate rowmax/rowsum storage at the end of the sharedmem address space
   constexpr uint32_t smem_rowmax_size = B_ROW * ROWMAX_SETS;
   constexpr uint32_t smem_rowsum_size = B_ROW;
@@ -607,21 +625,19 @@ void kernel_body(int task_id, kernel_arg_t *__UNIFORM__ arg) {
       (warpgroup_id % 2) ? smem_scratchpad_1 : smem_scratchpad_0;
 
   // initialize rowmax/rowsum values in sharedmem
-  thread_block_init_sharedmem(tid_in_warpgroup, threads_per_warpgroup, smem_O,
-                              smem_rowmax, smem_rowsum, smem_O_row_scale);
+  // thread_block_init_sharedmem(tid_in_warpgroup, threads_per_warpgroup, smem_O,
+  //                             smem_rowmax, smem_rowsum, smem_O_row_scale);
 
   constexpr uint32_t global_barrier_id = NUM_WARPS - 1; // arbitrary
 
   // delay warpgroup 0 by 1 iteration to do ping-pong scheduling
-  if (warpgroup_id == 1) {
-    threadblock_barrier(global_barrier_id, warps_per_threadblock_per_core);
-  }
+  // if (warpgroup_id == 1) {
+  //   threadblock_barrier(global_barrier_id, warps_per_threadblock_per_core);
+  // }
 
   if constexpr (GEMMINI_DMA) {
-    if (tid_in_threadblock == 0) {
+    if (tid_in_warpgroup == 0) {
       gemmini_extended_config_ex(WEIGHT_STATIONARY, 0, 0, 1, 0, 0);
-      // gemmini_extended_config_ex(dataflow, act & 3, 0, 1, a_transpose,
-      // b_transpose);
 
       // configure DMA for Q tile
       gemmini_extended3_config_ld(HEADDIM * sizeof(elem_t), MVIN_SCALE_IDENTITY,
@@ -632,30 +648,85 @@ void kernel_body(int task_id, kernel_arg_t *__UNIFORM__ arg) {
       // configure DMA for Q*K store
       gemmini_extended_config_st(B_COL * sizeof(elem_t), 0,
                                  MVIN_SCALE_IDENTITY);
-
       gemmini_fence();
     }
   }
 
-  // read Q and K into SMEM before the loop starts
+  // NOTE about barriers: placing barriers around thread-divergent branches may
+  // cause bugs, since the core doesn't check tmask for barriers.  The compiler
+  // might decide to replicate vx_bar into both paths of a conditional branch,
+  // which will get evaluated twice along the split/join process and result in
+  // a different number of calls w.r.t other non-divergent warps and therefore
+  // stalls.
+  // threadblock_barrier(warpgroup_id_in_cluster, warps_per_warpgroup_per_core);
+
+  // move Q and K into SMEM before the loop starts
   //
   static_assert(B_ROW == B_COL, "currently only supports square tiles");
 
-  // load Q; this stays in SMEM for the entire loop
-  load_tile_to_smem<float, MemLayout::MN_major, MemLayout::MN_major, B_ROW,
-                    HEADDIM, threads_per_warpgroup>(
-      dim_seqlen, warpgroup_id, 0 /* dim_k == headdim */, gmem_Q, smem_Q,
-      tid_in_warpgroup);
+  static_assert(warps_per_warpgroup_per_core == 8); // FIXME nocheckin
 
-  // load K
-  load_tile_to_smem<float, MemLayout::MN_major, MemLayout::MN_major, B_COL,
-                    HEADDIM, threads_per_warpgroup>(
-      dim_seqlen, /*tile_k=*/0, 0 /* dim_k == headdim */, gmem_K, smem_K,
-      tid_in_warpgroup);
+  if constexpr (GEMMINI_DMA) {
+    asm volatile("dma_move_start_%=:" ::);
+
+    if (tid_in_threadblock == 0) {
+      // configure the GMEM addresses for the DMA to read from
+      ROCC_INSTRUCTION_RS1_RS2(XCUSTOM_ACC, (uint64_t)(gmem_Q),
+                               (uint64_t)(gmem_K), k_LOOP_WS_CONFIG_ADDRS_AB)
+      // configure address strides for the DMA
+      GEMMINI_CISC_CMD_R((B_COL << 16) | (HEADDIM << 8) |
+                         8 /*k_LOOP_WS_CONFIG_STRIDES_AB*/);
+      gemmini_fence();
+
+#define GEMMINI_DMA_CISC
+#ifdef GEMMINI_DMA_CISC
+      GEMMINI_CISC_CMD_I(10);
+      gemmini_fence();
+#else
+      // skip everything except DMA in the loop FSM
+      constexpr uint32_t skips =
+          loop_matmul_skips(/*skip_lda=*/0, /*skip_ldb=*/0, /*skip_ldd=*/1,
+                            /*skip_ex=*/1, /*skip_stc=*/1);
+
+      // among other things, this also configures CONFIG_BOUNDS so that the
+      // DMA knows the full matrix dimensions
+      sp_tiled_matmul_full_spad_ws(
+          spad_addr_Q0, spad_addr_K0,
+          /*spad_D=*/0, /*spad_C=*/spad_addr_S0,
+          /*I=*/(B_ROW / DIM), /*J=*/(HEADDIM / DIM), /*K=*/(B_COL / DIM),
+          /*pad_I=*/0, /*pad_J=*/0, /*pad_K=*/0,
+          /*a_transpose=*/0, /*b_transpose=*/0, /*full_C=*/0, /*low_D=*/0,
+          /*acc=*/0, /*act=*/NO_ACTIVATION, /*skips=*/skips);
+      gemmini_fence();
+#endif
+    }
+
+    asm volatile("dma_move_end_%=:" ::);
+  } else {
+    // load Q; this stays in SMEM for the entire loop
+    load_tile_to_smem<float, MemLayout::MN_major, MemLayout::MN_major, B_ROW,
+                      HEADDIM, threads_per_warpgroup>(
+        dim_seqlen, warpgroup_id, 0 /* dim_k == headdim */, gmem_Q, smem_Q,
+        tid_in_warpgroup);
+
+    // load K
+    load_tile_to_smem<float, MemLayout::MN_major, MemLayout::MN_major, B_COL,
+                      HEADDIM, threads_per_warpgroup>(
+        dim_seqlen, /*tile_k=*/0, 0 /* dim_k == headdim */, gmem_K, smem_K,
+        tid_in_warpgroup);
+  }
 
   // protect write to SMEM
   threadblock_barrier(warpgroup_id_in_cluster, warps_per_warpgroup_per_core);
 
+  if constexpr (DEBUG) {
+    thread_block_copy_tile(smem_Q, gmem_tmp_d0, tid_in_warpgroup,
+                           threads_per_warpgroup, warpgroup_id_in_cluster);
+
+    // threadblock_barrier(warpgroup_id_in_cluster, warps_per_warpgroup_per_core);
+  }
+
+#if 0
   asm volatile ("tile_loop_start_%=:" :: );
 
   // "inner loop" along the columns of K^T
@@ -944,6 +1015,7 @@ void kernel_body(int task_id, kernel_arg_t *__UNIFORM__ arg) {
   if (warpgroup_id == 0) {
     threadblock_barrier(global_barrier_id, warps_per_threadblock_per_core);
   }
+#endif
 }
 
 int main() {
