@@ -5,8 +5,12 @@
 #endif
 
 #define SMEM_BASE 0xff000000
-//#define SMEM_SIZE 0x4000
-#define SMEM_SIZE 0x10000
+// 16KB
+// #define SMEM_SIZE 0x4000
+// 64KB
+// #define SMEM_SIZE 0x10000
+// 256KB
+#define SMEM_SIZE 0x40000
 
 #define SMEM_MASK (SMEM_SIZE - 1)
 #define SMEM_ADDR_END (SMEM_BASE + SMEM_SIZE)
