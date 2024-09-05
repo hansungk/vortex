@@ -13,6 +13,7 @@ MEMORY {
   DRAMARG  (rwx): ORIGIN = 0x9fff0000, LENGTH = 8K
   DRAM1    (rwx): ORIGIN = 0xa0000000, LENGTH = 16M
   DRAM2    (rwx): ORIGIN = 0xa1000000, LENGTH = 16M
+  DRAM3    (rwx): ORIGIN = 0xa2000000, LENGTH = 16M
 }
 
 SECTIONS
@@ -288,4 +289,8 @@ SECTIONS
     *(.operand.b)
     . += 32K;
   }> DRAM2
+  .operand.c : {
+    *(.operand.c)
+    . += 32K;
+  }> DRAM3
 }
