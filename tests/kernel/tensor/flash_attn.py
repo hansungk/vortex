@@ -133,6 +133,7 @@ if __name__ == "__main__":
             print('P_expected:')
             print(P)
             P.astype('float32').tofile("P_expected.bin")
+            P.transpose([1, 0]).astype('float32').tofile("P_expected.col.bin")
 
         rowsum_this = np.sum(P, axis=1)
         x = rowmax_prev - rowmax_this
