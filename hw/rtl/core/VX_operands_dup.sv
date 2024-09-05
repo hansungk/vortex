@@ -35,18 +35,26 @@ module VX_operands_dup import VX_gpu_pkg::*; #(
     logic [`ISSUE_WIDTH-1:0][`PERF_CTR_BITS-1:0] perf_rf_write_per_warp;
 `endif
 
+    logic [`ISSUE_WIDTH-1:0][DATAW-1:0] scoreboard_if_stored;
+    logic [`ISSUE_WIDTH-1:0] scoreboard_if_stored_valid;
+    logic [`ISSUE_WIDTH-1:0] full1;
+    logic [`ISSUE_WIDTH-1:0][`NUM_THREADS-1:0] full2;
+    logic [`ISSUE_WIDTH-1:0] empty1;
+    logic [`ISSUE_WIDTH-1:0][`NUM_THREADS-1:0] empty2;
+    logic [`ISSUE_WIDTH-1:0][2:0] size1;
+
     for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin
-        VX_stream_buffer #(
-            .DATAW (DATAW)
-        ) staging_buffer (
-            .clk       (clk),
-            .reset     (reset),
-            .valid_in  (scoreboard_if[i].valid),
-            .data_in   ({
+
+        always @(posedge clk) begin
+            if (reset) begin
+              scoreboard_if_stored[i] <= '0;
+              scoreboard_if_stored_valid[i] <= '0;
+            end else begin
+              scoreboard_if_stored[i] <= {
                 scoreboard_if[i].data.uuid,
                 scoreboard_if[i].data.wis,
                 scoreboard_if[i].data.tmask,
-                scoreboard_if[i].data.PC, 
+                scoreboard_if[i].data.PC,
                 scoreboard_if[i].data.wb,
                 scoreboard_if[i].data.ex_type,
                 scoreboard_if[i].data.op_type,
@@ -55,14 +63,27 @@ module VX_operands_dup import VX_gpu_pkg::*; #(
                 scoreboard_if[i].data.use_imm,
                 scoreboard_if[i].data.imm,
                 scoreboard_if[i].data.rd
-            }),
-            .ready_in  (scoreboard_if[i].ready),
-            .valid_out (operands_if[i].valid),
-            .data_out  ({
+              };
+              scoreboard_if_stored_valid[i] <= scoreboard_if[i].valid && scoreboard_if[i].ready;
+            end
+        end
+
+        VX_fifo_queue #(
+            .DATAW   (DATAW),
+            .DEPTH   (4), // could be 3 but limited by power of 2
+            .OUT_REG (0),
+            .LUTRAM  (0)
+        ) fifo_queue (
+            .clk      (clk),
+            .reset    (reset),
+            .push     (scoreboard_if_stored_valid[i]),
+            .pop      (operands_if[i].ready && ~empty1[i]),
+            .data_in  (scoreboard_if_stored[i]),
+            .data_out ({
                 operands_if[i].data.uuid,
                 operands_if[i].data.wis,
                 operands_if[i].data.tmask,
-                operands_if[i].data.PC, 
+                operands_if[i].data.PC,
                 operands_if[i].data.wb,
                 operands_if[i].data.ex_type,
                 operands_if[i].data.op_type,
@@ -72,31 +93,52 @@ module VX_operands_dup import VX_gpu_pkg::*; #(
                 operands_if[i].data.imm,
                 operands_if[i].data.rd
             }),
-            .ready_out (operands_if[i].ready)
+            .empty    (empty1[i]),
+            .full     (full1[i]),
+            `UNUSED_PIN (alm_empty),
+            `UNUSED_PIN (alm_full),
+            .size     (size1[i])
         );
+        assign operands_if[i].valid = ~empty1[i];
+        assign scoreboard_if[i].ready = (size1[i] < 2'd2);
+
+        // assert (full1[i] == full2[i]);
+        // assert (empty1[i] == empty2[i]);
 
         wire [`NUM_THREADS-1:0][`XLEN-1:0] rs1_data;
         wire [`NUM_THREADS-1:0][`XLEN-1:0] rs2_data;
         wire [`NUM_THREADS-1:0][`XLEN-1:0] rs3_data;
 
+        reg [RAM_ADDRW-1:0] gpr_rd_addr_rs1_stored;
+        reg [RAM_ADDRW-1:0] gpr_rd_addr_rs2_stored;
+        reg [RAM_ADDRW-1:0] gpr_rd_addr_rs3_stored;
+
         for (genvar j = 0; j < `NUM_THREADS; ++j) begin
-            VX_stream_buffer #(
-                .DATAW (`XLEN + `XLEN + `XLEN)
-            ) staging_data_buffer (
-                .clk       (clk),
-                .reset     (reset),
-                .valid_in  (scoreboard_if[i].valid),
-                .data_in   ({
-                   rs1_data[j], rs2_data[j], rs3_data[j]
+            VX_fifo_queue #(
+                .DATAW   (`XLEN + `XLEN + `XLEN),
+                .DEPTH   (4),
+                .OUT_REG (0),
+                .LUTRAM  (0)
+            ) fifo_queue (
+                .clk      (clk),
+                .reset    (reset),
+                .push     (scoreboard_if_stored_valid[i]),
+                .pop      (operands_if[i].ready && ~empty2[i][0]),
+                .data_in  ({
+                    (gpr_rd_addr_rs1_stored == '0) ? 32'd0 : rs1_data[j],
+                    (gpr_rd_addr_rs2_stored == '0) ? 32'd0 : rs2_data[j],
+                    (gpr_rd_addr_rs3_stored == '0) ? 32'd0 : rs3_data[j]
                 }),
-                `UNUSED_PIN (ready_in),
-                `UNUSED_PIN (valid_out),
-                .data_out  ({
-                   operands_if[i].data.rs1_data[j],
-                   operands_if[i].data.rs2_data[j],
-                   operands_if[i].data.rs3_data[j]
+                .data_out ({
+                    operands_if[i].data.rs1_data[j],
+                    operands_if[i].data.rs2_data[j],
+                    operands_if[i].data.rs3_data[j]
                 }),
-                .ready_out (operands_if[i].ready)
+                .empty    (empty2[i][j]),
+                .full     (full2[i][j]),
+                `UNUSED_PIN (alm_empty),
+                `UNUSED_PIN (alm_full),
+                `UNUSED_PIN (size)
             );
         end
 
@@ -106,6 +148,19 @@ module VX_operands_dup import VX_gpu_pkg::*; #(
         wire [RAM_ADDRW-1:0] gpr_rd_addr_rs2;
         wire [RAM_ADDRW-1:0] gpr_rd_addr_rs3;
         wire [RAM_ADDRW-1:0] gpr_wr_addr;
+
+        always @(posedge clk) begin
+            if (reset) begin
+                gpr_rd_addr_rs1_stored <= '0;
+                gpr_rd_addr_rs2_stored <= '0;
+                gpr_rd_addr_rs3_stored <= '0;
+            end else begin
+                gpr_rd_addr_rs1_stored <= gpr_rd_addr_rs1;
+                gpr_rd_addr_rs2_stored <= gpr_rd_addr_rs2;
+                gpr_rd_addr_rs3_stored <= gpr_rd_addr_rs3;
+            end
+        end
+
         if (ISSUE_WIS != 0) begin
             assign gpr_wr_addr = {writeback_if[i].data.wis, writeback_if[i].data.rd};
             assign gpr_rd_addr_rs1 = {scoreboard_if[i].data.wis, scoreboard_if[i].data.rs1};
@@ -165,6 +220,7 @@ module VX_operands_dup import VX_gpu_pkg::*; #(
             VX_dp_ram #(
                 .DATAW (`XLEN),
                 .SIZE (`NUM_REGS * ISSUE_RATIO),
+                .OUT_REG (1),
             `ifdef GPR_RESET
                 .INIT_ENABLE (1),
                 .INIT_VALUE (0),
@@ -188,6 +244,7 @@ module VX_operands_dup import VX_gpu_pkg::*; #(
             VX_dp_ram #(
                 .DATAW (`XLEN),
                 .SIZE (`NUM_REGS * ISSUE_RATIO),
+                .OUT_REG (1),
             `ifdef GPR_RESET
                 .INIT_ENABLE (1),
                 .INIT_VALUE (0),
@@ -211,6 +268,7 @@ module VX_operands_dup import VX_gpu_pkg::*; #(
             VX_dp_ram #(
                 .DATAW (`XLEN),
                 .SIZE (`NUM_REGS * ISSUE_RATIO),
+                .OUT_REG (1),
             `ifdef GPR_RESET
                 .INIT_ENABLE (1),
                 .INIT_VALUE (0),

@@ -33,7 +33,7 @@
 
 `ifdef SYNTHESIS
 `define NUM_BARRIERS 8
-`define NUM_CORES 4
+`define NUM_CORES 8
 `define NUM_THREADS 8
 `define NUM_WARPS 8
 
@@ -60,6 +60,8 @@
 `endif
 
 `ifdef SYNTHESIS
+`define TRACE(level, args) $write args
+`define TRACE_STARTTIME 32'd10
 `define TRACING_ON
 `define TRACING_OFF
 `ifndef NDEBUG

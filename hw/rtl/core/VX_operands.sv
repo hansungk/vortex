@@ -53,7 +53,7 @@ module VX_operands import VX_gpu_pkg::*; #(
         reg [`NUM_THREADS-1:0][`XLEN-1:0] rs2_data, rs2_data_n;
         reg [`NUM_THREADS-1:0][`XLEN-1:0] rs3_data, rs3_data_n;
 
-        reg [STATE_BITS-1:0] state, state_n;
+        reg [STATE_BITS-1:0] state, state_n, state_p;
         reg [`NR_BITS-1:0] rs2, rs2_n;
         reg [`NR_BITS-1:0] rs3, rs3_n;
         reg rs2_ready, rs2_ready_n;
@@ -175,10 +175,12 @@ module VX_operands import VX_gpu_pkg::*; #(
         always @(posedge clk)  begin
             if (reset) begin 
                 state       <= STATE_IDLE;
+                state_p     <= STATE_IDLE;
                 cache_eop   <= {ISSUE_RATIO{1'b1}};
                 data_ready  <= 0;
             end else begin
                 state       <= state_n;
+                state_p     <= state;
                 cache_eop   <= cache_eop_n;
                 data_ready  <= data_ready_n;
             end
@@ -190,7 +192,7 @@ module VX_operands import VX_gpu_pkg::*; #(
             rs3         <= rs3_n;
             rs1_data    <= rs1_data_n;
             rs2_data    <= rs2_data_n;
-            rs3_data    <= rs3_data_n;          
+            rs3_data    <= rs3_data_n;
             cache_data  <= cache_data_n;
             cache_reg   <= cache_reg_n;
             cache_tmask <= cache_tmask_n;
@@ -242,9 +244,9 @@ module VX_operands import VX_gpu_pkg::*; #(
             .ready_out (operands_if[i].ready)
         );
 
-        assign operands_if[i].data.rs1_data = rs1_data;
-        assign operands_if[i].data.rs2_data = rs2_data;
-        assign operands_if[i].data.rs3_data = rs3_data;
+        assign operands_if[i].data.rs1_data = (state_p == STATE_FETCH1) ? gpr_rd_data : rs1_data;
+        assign operands_if[i].data.rs2_data = (state_p == STATE_FETCH2) ? gpr_rd_data : rs2_data;
+        assign operands_if[i].data.rs3_data = (state_p == STATE_FETCH3) ? gpr_rd_data : rs3_data;
 
         // GPR banks
 
@@ -279,7 +281,8 @@ module VX_operands import VX_gpu_pkg::*; #(
                 .INIT_ENABLE (1),
                 .INIT_VALUE (0),
             `endif
-                .NO_RWCHECK (1)
+                .NO_RWCHECK (1),
+                .OUT_REG (1),
             ) gpr_ram (
                 .clk   (clk),
                 .read  (1'b1),

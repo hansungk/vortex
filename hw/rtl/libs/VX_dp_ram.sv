@@ -161,75 +161,76 @@ module VX_dp_ram #(
             end
         end else begin
             `ifndef FIRESIM
-            if (DATAW == 1024 && SIZE == 16) begin // dcache data
-                (* dont_touch = "yes" *) dcache_data ram (
+            // if (DATAW == 1024 && SIZE == 16) begin // dcache data
+            //     (* dont_touch = "yes" *) dcache_data ram (
+            //         .R0_addr(raddr),
+            //         .R0_clk(clk),
+            //         .R0_data(/*rdata*/),
+            //         .R0_en(read),
+            //         .W0_addr(waddr),
+            //         .W0_clk(clk),
+            //         .W0_data(wdata),
+            //         .W0_en(write),
+            //         .W0_mask(wren)
+            //     );
+            // end else if (DATAW == 305 && SIZE == 8) begin // mshr
+            //     (* dont_touch = "yes" *) cache_mshr ram (
+            //         .R0_addr(raddr),
+            //         .R0_clk(clk),
+            //         .R0_data(/*rdata*/),
+            //         .R0_en(read),
+            //         .W0_addr(waddr),
+            //         .W0_clk(clk),
+            //         .W0_data(wdata),
+            //         .W0_en(write)
+            //     );
+            // end else if (DATAW == 24 && SIZE == 16) begin // dcache tags
+            //     (* dont_touch = "yes" *) dcache_tags ram (
+            //         .R0_addr(raddr),
+            //         .R0_clk(clk),
+            //         .R0_data(/*rdata*/),
+            //         .R0_en(read),
+            //         .W0_addr(waddr),
+            //         .W0_clk(clk),
+            //         .W0_data(wdata),
+            //         .W0_en(write)
+            //     );
+            // end else if (DATAW == 1024 && SIZE == 128) begin // icache data
+            //     (* dont_touch = "yes" *) icache_data ram (
+            //         .R0_addr(raddr),
+            //         .R0_clk(clk),
+            //         .R0_data(/*rdata*/),
+            //         .R0_en(read),
+            //         .W0_addr(waddr),
+            //         .W0_clk(clk),
+            //         .W0_data(wdata),
+            //         .W0_en(write),
+            //         .W0_mask(wren)
+            //     );
+            // end else if (DATAW == 21 && SIZE == 128) begin // icache tags
+            //     (* dont_touch = "yes" *) icache_tags ram (
+            //         .R0_addr(raddr),
+            //         .R0_clk(clk),
+            //         .R0_data(/*rdata*/),
+            //         .R0_en(read),
+            //         .W0_addr(waddr),
+            //         .W0_clk(clk),
+            //         .W0_data(wdata),
+            //         .W0_en(write)
+            //     );
+            // end else if (DATAW == 32 && SIZE == 64) begin // register file
+            if (DATAW == 32 && SIZE == 64) begin // register file
+                rf_bank ram (
                     .R0_addr(raddr),
                     .R0_clk(clk),
-                    .R0_data(/*rdata*/),
-                    .R0_en(read),
-                    .W0_addr(waddr),
-                    .W0_clk(clk),
-                    .W0_data(wdata),
-                    .W0_en(write),
-                    .W0_mask(wren)
-                );
-            end else if (DATAW == 305 && SIZE == 8) begin // mshr
-                (* dont_touch = "yes" *) cache_mshr ram (
-                    .R0_addr(raddr),
-                    .R0_clk(clk),
-                    .R0_data(/*rdata*/),
+                    .R0_data(rdata),
                     .R0_en(read),
                     .W0_addr(waddr),
                     .W0_clk(clk),
                     .W0_data(wdata),
                     .W0_en(write)
                 );
-            end else if (DATAW == 24 && SIZE == 16) begin // dcache tags
-                (* dont_touch = "yes" *) dcache_tags ram (
-                    .R0_addr(raddr),
-                    .R0_clk(clk),
-                    .R0_data(/*rdata*/),
-                    .R0_en(read),
-                    .W0_addr(waddr),
-                    .W0_clk(clk),
-                    .W0_data(wdata),
-                    .W0_en(write)
-                );
-            end else if (DATAW == 1024 && SIZE == 128) begin // icache data
-                (* dont_touch = "yes" *) icache_data ram (
-                    .R0_addr(raddr),
-                    .R0_clk(clk),
-                    .R0_data(/*rdata*/),
-                    .R0_en(read),
-                    .W0_addr(waddr),
-                    .W0_clk(clk),
-                    .W0_data(wdata),
-                    .W0_en(write),
-                    .W0_mask(wren)
-                );
-            end else if (DATAW == 21 && SIZE == 128) begin // icache tags
-                (* dont_touch = "yes" *) icache_tags ram (
-                    .R0_addr(raddr),
-                    .R0_clk(clk),
-                    .R0_data(/*rdata*/),
-                    .R0_en(read),
-                    .W0_addr(waddr),
-                    .W0_clk(clk),
-                    .W0_data(wdata),
-                    .W0_en(write)
-                );
-            end else if (DATAW == 32 && SIZE == 64) begin // register file
-                (* dont_touch = "yes" *) rf_bank ram (
-                    .R0_addr(raddr),
-                    .R0_clk(clk),
-                    .R0_data(/*rdata*/),
-                    .R0_en(read),
-                    .W0_addr(waddr),
-                    .W0_clk(clk),
-                    .W0_data(wdata),
-                    .W0_en(write)
-                );
-            end // else begin
+            end else begin
             `endif
                 if (OUT_REG != 0) begin
                     reg [DATAW-1:0] ram [SIZE-1:0];
@@ -275,7 +276,7 @@ module VX_dp_ram #(
                     end
                 end
             `ifndef FIRESIM
-            // end
+            end
             `endif
         end
     `endif
@@ -304,51 +305,52 @@ module VX_dp_ram #(
                 assign rdata = ram[raddr];
             end
         end else begin
-            if (DATAW == 305 && SIZE == 8) begin // mshr
-                (* dont_touch = "yes" *) cache_mshr ram (
+            // if (DATAW == 305 && SIZE == 8) begin // mshr
+            //     (* dont_touch = "yes" *) cache_mshr ram (
+            //         .R0_addr(raddr),
+            //         .R0_clk(clk),
+            //         .R0_data(/*rdata*/),
+            //         .R0_en(read),
+            //         .W0_addr(waddr),
+            //         .W0_clk(clk),
+            //         .W0_data(wdata),
+            //         .W0_en(write)
+            //     );
+            // end else if (DATAW == 24 && SIZE == 16) begin // dcache tags
+            //     (* dont_touch = "yes" *) dcache_tags ram (
+            //         .R0_addr(raddr),
+            //         .R0_clk(clk),
+            //         .R0_data(/*rdata*/),
+            //         .R0_en(read),
+            //         .W0_addr(waddr),
+            //         .W0_clk(clk),
+            //         .W0_data(wdata),
+            //         .W0_en(write)
+            //     );
+            // end else if (DATAW == 21 && SIZE == 128) begin // icache tags
+            //     (* dont_touch = "yes" *) icache_tags ram (
+            //         .R0_addr(raddr),
+            //         .R0_clk(clk),
+            //         .R0_data(/*rdata*/),
+            //         .R0_en(read),
+            //         .W0_addr(waddr),
+            //         .W0_clk(clk),
+            //         .W0_data(wdata),
+            //         .W0_en(write)
+            //     );
+            // end else if (DATAW == 32 && SIZE == 64) begin // register file
+            if (DATAW == 32 && SIZE == 64) begin // register file
+                rf_bank ram (
                     .R0_addr(raddr),
                     .R0_clk(clk),
-                    .R0_data(/*rdata*/),
+                    .R0_data(rdata),
                     .R0_en(read),
                     .W0_addr(waddr),
                     .W0_clk(clk),
                     .W0_data(wdata),
                     .W0_en(write)
                 );
-            end else if (DATAW == 24 && SIZE == 16) begin // dcache tags
-                (* dont_touch = "yes" *) dcache_tags ram (
-                    .R0_addr(raddr),
-                    .R0_clk(clk),
-                    .R0_data(/*rdata*/),
-                    .R0_en(read),
-                    .W0_addr(waddr),
-                    .W0_clk(clk),
-                    .W0_data(wdata),
-                    .W0_en(write)
-                );
-            end else if (DATAW == 21 && SIZE == 128) begin // icache tags
-                (* dont_touch = "yes" *) icache_tags ram (
-                    .R0_addr(raddr),
-                    .R0_clk(clk),
-                    .R0_data(/*rdata*/),
-                    .R0_en(read),
-                    .W0_addr(waddr),
-                    .W0_clk(clk),
-                    .W0_data(wdata),
-                    .W0_en(write)
-                );
-            end else if (DATAW == 32 && SIZE == 64) begin // register file
-                (* dont_touch = "yes" *) rf_bank ram (
-                    .R0_addr(raddr),
-                    .R0_clk(clk),
-                    .R0_data(/*rdata*/),
-                    .R0_en(read),
-                    .W0_addr(waddr),
-                    .W0_clk(clk),
-                    .W0_data(wdata),
-                    .W0_en(write)
-                );
-            end // else begin
+            end else
             if (OUT_REG != 0) begin
                 reg [DATAW-1:0] ram [SIZE-1:0];
                 reg [DATAW-1:0] rdata_r;

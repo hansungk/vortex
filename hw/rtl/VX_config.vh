@@ -83,7 +83,7 @@
 `endif
 
 `ifndef NUM_CORES
-`define NUM_CORES 4
+`define NUM_CORES 8
 `endif
 
 `ifndef NUM_WARPS
@@ -179,7 +179,7 @@
 `endif
 
 `ifndef SMEM_LOG_SIZE
-`define SMEM_LOG_SIZE   17
+`define SMEM_LOG_SIZE   19
 `endif
 
 `ifndef IO_BASE_ADDR
