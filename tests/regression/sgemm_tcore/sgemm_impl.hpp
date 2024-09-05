@@ -52,10 +52,10 @@ using float_type = float16_t;
 #define WMITER (WM / TCM)
 #define WNITER (WN / TCN)
 #define ELEM_PER_THREAD (WM * WN / NUM_THREADS)
-// FIXME: NUM_THREADS and NUM_WARPS hardcoded
-#if ((BM * BN / ELEM_PER_THREAD) > (CORES_PER_CLUSTER * 8 * 8))
-#error "threadblock size too big for cluster"
-#endif
+
+static_assert(WMITER * WNITER * TCM * TCN * NUM_WARPS * CORES_PER_CLUSTER ==
+                  BM * BN,
+              "tile parameter condition not met (1 threadblock per cluster)");
 
 // number of loop around the inner 0..TCK..BK loop to simulate perfect-DRAM
 // scenario
