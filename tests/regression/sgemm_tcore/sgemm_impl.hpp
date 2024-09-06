@@ -6,7 +6,7 @@
 #include "include/gemmini.h"
 #include "gemmini_mmio.h"
 
-#define FP_SIZE 32
+#define FP_SIZE 16
 
 // "fake" fp16 type that only has the correct data width.
 using float16_t = uint16_t;
@@ -1038,7 +1038,6 @@ inline void thread_block_gemm(const T *A, const T *B, float *C,
                             warps_per_threadblock_per_core);
 #endif
 
-#if 0
         // consumer code: SMEM->RF and compute
         // ----------------------------------------------------------------------
         // @perf: this loop spills to stack a lot because of all the flws in
@@ -1087,7 +1086,6 @@ inline void thread_block_gemm(const T *A, const T *B, float *C,
 
         threadblock_barrier(threadblock_id_in_cluster,
                             warps_per_threadblock_per_core);
-#endif
       }
 
       if constexpr (write_to_gmem) {
