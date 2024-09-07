@@ -6,7 +6,7 @@
 #include "include/gemmini.h"
 #include "gemmini_mmio.h"
 
-#define FP_SIZE 16
+#define FP_SIZE 32
 
 // "fake" fp16 type that only has the correct data width.
 using float16_t = uint16_t;
@@ -29,7 +29,7 @@ using float_type = float16_t;
 //   (BM*BN) / (TM*TN) == threadblock size >= NT * CORES_PER_CLUSTER
 // * Combining BM * BK >= (BM*BN) / (TM*TN) == threadblock yields
 //   BM <= BK*TM*TN
-#define BM 128
+#define BM 64
 #define BN 64
 #if (FP_SIZE == 32)
 #define BK 64
@@ -62,18 +62,18 @@ static_assert(WMITER * WNITER * TCM * TCN * NUM_WARPS * CORES_PER_CLUSTER ==
 #define BK_LOOP 1
 // Whether to transpose smem A tile at GMEM->SMEM (produce), or SMEM->RF
 // (consume).  This is because the tensor core expects the A tile to be stored
-// in column-major order in SMEM, whereas it will be ultimately stored in
-// row-major in the RF.
+// in column-major order in SMEM, so a transpose is necessary if A was stored
+// row-major in GMEM.
 //
 // For correctness, only one of either should be 1.  E.g., PRODUCE 1 CONSUME 0
 // generates the NN kernel where both A and B are stored row-major in GMEM.
 // To model the case where the A matrix is already stored column-major in GMEM,
 // set both to 0.
 #define TRANSPOSE_AT_PRODUCE 0
-#define TRANSPOSE_AT_CONSUME 0
+#define TRANSPOSE_AT_CONSUME 1
 
-#define GEMMINI_DMA 0
-#define GEMMINI_DMA_MN_MAJOR 1
+#define GEMMINI_DMA 1
+#define GEMMINI_DMA_MN_MAJOR 0
 #if SMEM_SIZE == 0x4000
 #define SMEM_ADDR_Q0 ((float * const) 0xff000000)
 #define SMEM_ADDR_Q1 ((float * const) 0xff001000)
