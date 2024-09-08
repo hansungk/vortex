@@ -10,7 +10,7 @@
 
 constexpr uint32_t ROWMAX_SETS = 3;
 constexpr bool DEBUG = true;
-constexpr bool WARP_SPECIALIZED = true;
+constexpr bool WARP_SPECIALIZED = false;
 
 constexpr uint32_t DEV_FAKE_SMEM_START_ADDR = 0xf0000000;
 
