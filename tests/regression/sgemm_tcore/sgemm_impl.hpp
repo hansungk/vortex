@@ -29,7 +29,7 @@ using float_type = float16_t;
 //   (BM*BN) / (TM*TN) == threadblock size >= NT * CORES_PER_CLUSTER
 // * Combining BM * BK >= (BM*BN) / (TM*TN) == threadblock yields
 //   BM <= BK*TM*TN
-#define BM 128
+#define BM ((NUM_CORES == 8) ? 128 : 64)
 #define BN 64
 #if (FP_SIZE == 32)
 #define BK 64
