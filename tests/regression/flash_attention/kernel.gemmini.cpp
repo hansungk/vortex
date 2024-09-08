@@ -319,8 +319,8 @@ void kernel_body(int task_id, kernel_arg_t *__UNIFORM__ arg) {
       gemmini_fence();
       gemmini_fence();
 
-#if 0
-// weight-stationary matmul loop
+#if 0 // TODO
+// loop_ws variant that skips configuring strides
 #define gemmini_loop_ws(I, J, K, pad_I, pad_J, pad_K, A, B, D, C, A_stride, B_stride, D_stride, C_stride, A_transpose, B_transpose, full_C, low_D, ex_accumulate, act, a_spad_id, b_spad_id, is_resadd) \
   { \
     ROCC_INSTRUCTION_RS1_RS2(XCUSTOM_ACC, ((uint64_t)(pad_K) << 32) | ((uint64_t)(pad_J) << 16) | (uint64_t)(pad_I), ((uint64_t)(K) << 32) | ((uint64_t)(J) << 16) | (uint64_t)(I), k_LOOP_WS_CONFIG_BOUNDS) \
@@ -373,17 +373,40 @@ void kernel_body(int task_id, kernel_arg_t *__UNIFORM__ arg) {
     // inter-warpgroup barrier before online softmax
     threadblock_barrier(global_barrier_id, warps_per_threadblock_per_core);
 
-#if 0
     // Online softmax
     //
-    thread_block_online_softmax(smem_S, smem_P, tid_in_warpgroup,
-                                threads_per_warpgroup, warpgroup_id_in_cluster,
-                                smem_scratchpad, smem_rowmax, smem_rowsum,
-                                smem_O_row_scale);
+    thread_block_online_softmax</*block_row_major=*/GEMMINI_DMA>(
+        smem_S, smem_P, tid_in_warpgroup, threads_per_warpgroup,
+        warpgroup_id_in_cluster, smem_scratchpad, smem_rowmax, smem_rowsum,
+        smem_O_row_scale);
 
     // FIXME: unnecessary?
     threadblock_barrier(warpgroup_id_in_cluster, warps_per_warpgroup_per_core);
 
+    if constexpr (DEBUG) {
+      if (warpgroup_id == 0) {
+        if (tile_k == 0) {
+          thread_block_copy_rowmax(smem_rowmax, gmem_tmp_e0, tid_in_warpgroup,
+                                   threads_per_warpgroup,
+                                   warpgroup_id_in_cluster);
+          thread_block_copy_rowmax(smem_rowsum, gmem_tmp_e2, tid_in_warpgroup,
+                                   threads_per_warpgroup,
+                                   warpgroup_id_in_cluster);
+        } else if (tile_k == 1) {
+          thread_block_copy_rowmax(smem_rowmax, gmem_tmp_e1, tid_in_warpgroup,
+                                   threads_per_warpgroup,
+                                   warpgroup_id_in_cluster);
+          thread_block_copy_rowmax(smem_rowsum, gmem_tmp_e3, tid_in_warpgroup,
+                                   threads_per_warpgroup,
+                                   warpgroup_id_in_cluster);
+        }
+
+        threadblock_barrier(warpgroup_id_in_cluster,
+                            warps_per_warpgroup_per_core);
+      }
+    }
+
+#if 0
     // data movement for K and V
     //
     // Q stays in SMEM for the entire loop
@@ -433,32 +456,6 @@ void kernel_body(int task_id, kernel_arg_t *__UNIFORM__ arg) {
           tid_in_warpgroup);
     }
     asm volatile("move_k_v_finish_%=:" ::);
-
-    // protect write to SMEM
-    threadblock_barrier(warpgroup_id_in_cluster, warps_per_warpgroup_per_core);
-
-    if constexpr (DEBUG) {
-      if (warpgroup_id == 0) {
-        if (tile_k == 0) {
-          thread_block_copy_rowmax(smem_rowmax, gmem_tmp_e0, tid_in_warpgroup,
-                                   threads_per_warpgroup,
-                                   warpgroup_id_in_cluster);
-          thread_block_copy_rowmax(smem_rowsum, gmem_tmp_e2, tid_in_warpgroup,
-                                   threads_per_warpgroup,
-                                   warpgroup_id_in_cluster);
-        } else if (tile_k == 1) {
-          thread_block_copy_rowmax(smem_rowmax, gmem_tmp_e1, tid_in_warpgroup,
-                                   threads_per_warpgroup,
-                                   warpgroup_id_in_cluster);
-          thread_block_copy_rowmax(smem_rowsum, gmem_tmp_e3, tid_in_warpgroup,
-                                   threads_per_warpgroup,
-                                   warpgroup_id_in_cluster);
-        }
-
-        threadblock_barrier(warpgroup_id_in_cluster,
-                            warps_per_warpgroup_per_core);
-      }
-    }
 
     // inter-warpgroup barrier before GEMM II
     threadblock_barrier(global_barrier_id, warps_per_threadblock_per_core);
