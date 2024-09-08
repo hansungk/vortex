@@ -165,7 +165,7 @@ endmodule
 // does (m,n,k) = (2,4,2) matmul compute over 2 cycles.
 // see Figure 10(b) of the paper.
 module VX_tensor_threadgroup #(
-    parameter HALF_PRECISION = 0
+    parameter HALF_PRECISION = 1
 ) (
     input clk,
     input reset,
