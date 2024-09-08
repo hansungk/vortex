@@ -9,12 +9,10 @@
 #define HEADDIM 64
 
 constexpr uint32_t ROWMAX_SETS = 3;
-constexpr bool DEBUG = true;
 constexpr bool WARP_SPECIALIZED = false;
 
 constexpr uint32_t DEV_FAKE_SMEM_START_ADDR = 0xf0000000;
 
-constexpr bool GEMMINI_DMA_FAST = false;
 constexpr bool Q_IS_K_MAJOR = true;
 
 // temporary safety stop for wrong configs

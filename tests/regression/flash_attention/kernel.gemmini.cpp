@@ -8,6 +8,8 @@
 #include "gemmini_mmio.h"
 #include "flash_impl.hpp"
 
+constexpr bool DEBUG = true;
+
 static_assert(GEMMINI_DMA && !WARP_SPECIALIZED,
               "GEMMINI_DMA should be set and WARP_SPECIALIZED unset");
 
@@ -227,7 +229,7 @@ void kernel_body(int task_id, kernel_arg_t *__UNIFORM__ arg) {
     ROCC_INSTRUCTION_RS1_RS2(XCUSTOM_ACC, (uint64_t)(gmem_Q_tile),
                              (uint64_t)(gmem_K_tile), k_LOOP_WS_CONFIG_ADDRS_AB)
     // configure address strides for the DMA
-    GEMMINI_CISC_CMD_R((dim_seqlen << 16) | (HEADDIM << 8) |
+    GEMMINI_CISC_CMD_R((dim_seqlen << 20) | (HEADDIM << 8) |
                        8 /*k_LOOP_WS_CONFIG_STRIDES_AB*/);
     gemmini_fence();
 
@@ -313,7 +315,6 @@ void kernel_body(int task_id, kernel_arg_t *__UNIFORM__ arg) {
         GEMMINI_CISC_CMD_I(1);
       }
 
-      // mvout to SMEM
       gemmini_fence();
       gemmini_fence();
       gemmini_fence();
@@ -332,6 +333,7 @@ void kernel_body(int task_id, kernel_arg_t *__UNIFORM__ arg) {
   }
 #endif
 
+      // mvout to SMEM
       // GEMMINI_CISC_CMD_I(9);
       sp_tiled_matmul_full_spad_ws(
           /*spad_A=*/spad_addr_Q, /*spad_B=*/spad_addr_K,
@@ -427,7 +429,7 @@ void kernel_body(int task_id, kernel_arg_t *__UNIFORM__ arg) {
                                  k_LOOP_WS_CONFIG_ADDRS_AB)
         // configure address strides for the DMA
         // FIXME: unnecessary?
-        GEMMINI_CISC_CMD_R((HEADDIM /*V*/ << 16) | (dim_seqlen /*KT*/ << 8) |
+        GEMMINI_CISC_CMD_R((HEADDIM /*V*/ << 20) | (dim_seqlen /*KT*/ << 8) |
                            8 /*k_LOOP_WS_CONFIG_STRIDES_AB*/);
         gemmini_fence();
 
