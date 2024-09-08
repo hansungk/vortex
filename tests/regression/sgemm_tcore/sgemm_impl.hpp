@@ -254,9 +254,6 @@ inline void wmma_load_a(volatile const T *smem_A, const int local_k,
   constexpr int packed_factor = (std::is_same_v<T, float16_t> ? 2 : 1);
   const int local_k_adjusted = local_k / packed_factor;
 
-  static_assert(!GEMMINI_DMA || (layout == MemLayout::block_row_major) ||
-                    GEMMINI_DMA_FLEXIBLE_LAYOUT,
-                "wrong memory layout selected for DMA");
   static_assert((layout != MemLayout::K_major) || (FP_SIZE == 32),
                 "fp16 is not really tested for K-major A layout");
 
