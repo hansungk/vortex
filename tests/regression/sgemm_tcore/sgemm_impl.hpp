@@ -6,7 +6,7 @@
 #include "include/gemmini.h"
 #include "gemmini_mmio.h"
 
-#define FP_SIZE 32
+#define FP_SIZE 16
 
 // "fake" fp16 type that only has the correct data width.
 using float16_t = uint16_t;
@@ -29,7 +29,7 @@ using float_type = float16_t;
 //   (BM*BN) / (TM*TN) == threadblock size >= NT * CORES_PER_CLUSTER
 // * Combining BM * BK >= (BM*BN) / (TM*TN) == threadblock yields
 //   BM <= BK*TM*TN
-#define BM 64
+#define BM 128
 #define BN 64
 #if (FP_SIZE == 32)
 #define BK 64
@@ -72,7 +72,7 @@ static_assert(WMITER * WNITER * TCM * TCN * NUM_WARPS * CORES_PER_CLUSTER ==
 #define TRANSPOSE_AT_PRODUCE 0
 #define TRANSPOSE_AT_CONSUME 0
 
-#define GEMMINI_DMA 1
+#define GEMMINI_DMA 0
 #define GEMMINI_DMA_FLEXIBLE_LAYOUT 0
 #if SMEM_SIZE == 0x4000
 #define SMEM_ADDR_Q0 ((float * const) 0xff000000)
@@ -847,9 +847,9 @@ template <
     uint32_t smem_a_dbuf_offset = 0, // byte offset of A
                                      // double-buffer tile in shared
                                      // memory
-    uint32_t smem_b_offset = sizeof(float) * BM * BK, // byte offset of B tile
+    uint32_t smem_b_offset = sizeof(T) * BM * BK, // byte offset of B tile
                                                       // in shared memory
-    uint32_t smem_b_dbuf_offset = sizeof(float) * BM *
+    uint32_t smem_b_dbuf_offset = sizeof(T) * BM *
                                   BK // byte offset of B double-buffer
                                      // tile in shared memory
     >
