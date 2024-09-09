@@ -538,6 +538,7 @@ wmma_store(const int thread_in_warp, const int warp_col, const int warp_row,
 
 __attribute__((convergent)) inline void
 threadblock_barrier(const uint32_t barrier_id, const uint32_t count) {
+  asm volatile("" ::: "memory");
   vx_fence();
   vx_barrier(barrier_id, count);
 }

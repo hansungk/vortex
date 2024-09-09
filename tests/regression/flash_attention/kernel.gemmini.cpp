@@ -676,15 +676,10 @@ void kernel_body(int task_id, kernel_arg_t *__UNIFORM__ arg) {
 int main() {
   kernel_arg_t *arg = (kernel_arg_t *)KERNEL_ARG_DEV_MEM_ADDR;
 
-  // FIXME:: use actuall seqlen/headdim
-  const uint32_t problem_size = (B_ROW * B_COL) / (ELEM_PER_THREAD);
   const uint32_t hw_threads_per_cluster =
       CORES_PER_CLUSTER * vx_num_threads() * vx_num_warps();
-  // prevent launching more threads than the necessary problem size
-  // TODO: this does not take into account multiple clusters
-  const uint32_t grid_size = (problem_size > hw_threads_per_cluster)
-                                 ? hw_threads_per_cluster
-                                 : problem_size;
+  // fix to 1 threadblock per cluster
+  const uint32_t grid_size = hw_threads_per_cluster;
 
 #ifdef RADIANCE
   vx_spawn_tasks_cluster(grid_size, (vx_spawn_tasks_cb)kernel_body, arg);
