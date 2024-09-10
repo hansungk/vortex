@@ -89,8 +89,9 @@ inline void thread_block_copy_rowmax(const float *src, float *dest,
     dest[offset] = src[offset];
   }
 
-  threadblock_barrier(threadblock_id_in_cluster,
-                      warps_per_threadblock_per_core);
+  // threadblock_barrier(threadblock_id_in_cluster,
+  //                     warps_per_threadblock_per_core);
+  threadblock_barrier(1, 7);
 
   asm volatile("threadblock_copy_rowmax_finish_%=:" ::);
 }
@@ -127,8 +128,9 @@ inline void thread_block_copy_tile(const float *src, float *dest,
       dest[gmem_offset] = src[smem_offset];
     }
 
-    threadblock_barrier(threadblock_id_in_cluster,
-                        warps_per_threadblock_per_core);
+    // threadblock_barrier(threadblock_id_in_cluster,
+    //                     warps_per_threadblock_per_core);
+    threadblock_barrier(1, 7);
   }
 
   asm volatile("threadblock_copy_tile_finish_%=:" ::);
