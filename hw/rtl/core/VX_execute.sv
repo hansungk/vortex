@@ -14,7 +14,8 @@
 `include "VX_define.vh"
 
 module VX_execute import VX_gpu_pkg::*; #(
-    parameter CORE_ID = 0
+    parameter CORE_ID = 0,
+    parameter TENSOR_FP16 = 0
 ) (
     `SCOPE_IO_DECL
 
@@ -144,7 +145,7 @@ module VX_execute import VX_gpu_pkg::*; #(
 
 `ifdef EXT_T_ENABLE
     VX_tensor_core #(
-        
+        .FP16 (TENSOR_FP16)
     ) tensor_core (
         .clk(clk),
         .reset(reset),

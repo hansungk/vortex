@@ -18,7 +18,8 @@
 `endif
 
 module VX_core import VX_gpu_pkg::*; #( 
-    parameter CORE_ID = 0
+    parameter CORE_ID = 0,
+    parameter TENSOR_FP16 = 0
 ) (        
     `SCOPE_IO_DECL
     
@@ -191,7 +192,8 @@ module VX_core import VX_gpu_pkg::*; #(
     );
 
     VX_execute #(
-        .CORE_ID (CORE_ID)
+        .CORE_ID (CORE_ID),
+        .TENSOR_FP16 (TENSOR_FP16)
     ) execute (
         `SCOPE_IO_BIND  (2)
         

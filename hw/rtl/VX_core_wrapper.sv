@@ -4,6 +4,7 @@
 
 module Vortex import VX_gpu_pkg::*; #(
     parameter CORE_ID = 0,
+    parameter TENSOR_FP16 = 0,
     parameter BOOTROM_HANG100 = 32'h10100,
     parameter NUM_THREADS = 0
 ) (
@@ -394,7 +395,8 @@ module Vortex import VX_gpu_pkg::*; #(
 
     // TODO: SCOPE_IO_BIND should be socket id
     VX_core #(
-        .CORE_ID (CORE_ID)
+        .CORE_ID (CORE_ID),
+        .TENSOR_FP16 (TENSOR_FP16)
     ) core (
         `SCOPE_IO_BIND  (0)
 

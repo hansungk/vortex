@@ -5,6 +5,7 @@
 module VX_tensor_threadgroups #(
     parameter ISW,
     parameter OCTET,
+    parameter FP16,
     // @perf: has big impact on throughput.  A rule of thumb is to set it to
     // the pipeline length of FEDPs in order to make sure there are enough
     // entries to fully saturate the pipeline, but this is still rough
@@ -102,6 +103,7 @@ module VX_tensor_threadgroups #(
     // threadgroup DPUs; B_tile is shared across the two threadgroups. See
     // Figure 13 in paper
     VX_tensor_threadgroup #(
+        .FP16(FP16)
     ) threadgroup_0 (
         .clk   (clk),
         .reset (reset),
@@ -115,6 +117,7 @@ module VX_tensor_threadgroups #(
         .D_frag    (D_tile[1:0])
     );
     VX_tensor_threadgroup #(
+        .FP16(FP16)
     ) threadgroup_1 (
         .clk   (clk),
         .reset (reset),
@@ -165,7 +168,7 @@ endmodule
 // does (m,n,k) = (2,4,2) matmul compute over 2 cycles.
 // see Figure 10(b) of the paper.
 module VX_tensor_threadgroup #(
-    parameter HALF_PRECISION = 1
+    parameter FP16
 ) (
     input clk,
     input reset,
@@ -297,7 +300,7 @@ module VX_tensor_threadgroup #(
         wire [31:0] d_col_sel = (substep_in == 1'b0) ? d_col : (d_col + 1);
 
         // Dot product (FEDP) unit generated from Chisel
-        if (HALF_PRECISION != 0) begin
+        if (FP16 != 0) begin
             TensorDotProductUnit fedp (
               .clock (clk),
               .reset (reset),

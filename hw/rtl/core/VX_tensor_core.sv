@@ -2,7 +2,7 @@
 `include "VX_fpu_define.vh"
 
 module VX_tensor_core import VX_gpu_pkg::*; #(
-
+    parameter FP16
 ) (
     input clk,
     input reset,
@@ -52,7 +52,8 @@ module VX_tensor_core import VX_gpu_pkg::*; #(
 
     for (genvar block_idx = 0; block_idx < BLOCK_SIZE; ++block_idx) begin
         VX_tensor_core_block #(
-            .ISW(1) // FIXME: not block_idx
+            .ISW(1), // FIXME: not block_idx
+            .FP16(FP16)
         ) tensor_core (
             .clk(clk),
             .reset(reset),
@@ -65,7 +66,8 @@ module VX_tensor_core import VX_gpu_pkg::*; #(
 endmodule
 
 module VX_tensor_core_block import VX_gpu_pkg::*; #(
-    parameter ISW
+    parameter ISW,
+    parameter FP16
 ) (
     input clk,
     input reset,
@@ -121,7 +123,8 @@ module VX_tensor_core_block import VX_gpu_pkg::*; #(
 
         VX_tensor_octet #(
             .ISW(ISW),
-            .OCTET(i)
+            .OCTET(i),
+            .FP16(FP16)
         ) octet (
             .clk(clk),
             .reset(reset),
@@ -329,6 +332,7 @@ endmodule
 module VX_tensor_octet #(
     parameter ISW,
     parameter OCTET,
+    parameter FP16,
     parameter RESULT_BUFFER_DEPTH = 2
 ) (
     input clk,
@@ -519,6 +523,7 @@ module VX_tensor_octet #(
     VX_tensor_threadgroups #(
         .ISW(ISW),
         .OCTET(OCTET),
+        .FP16(FP16),
         .OPERAND_BUFFER_DEPTH(4 /*@perf: arbtirary*/)
     ) dpu (
         .clk(clk),
