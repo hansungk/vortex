@@ -1022,6 +1022,10 @@ inline void thread_block_gemm(const T *A, const T *B, float *C,
               /*acc=*/0, /*act=*/NO_ACTIVATION, /*skips=*/skips)
 #endif
         }
+
+        // reconverge after mmio divergence
+        threadblock_barrier(threadblock_id_in_cluster,
+                            warps_per_threadblock_per_core);
 #else
         // move A
         if constexpr (!TRANSPOSE_AT_PRODUCE) {
@@ -1038,9 +1042,6 @@ inline void thread_block_gemm(const T *A, const T *B, float *C,
         load_tile_to_smem<T, MemLayout::MN_major, MemLayout::MN_major, BN, BK,
                           threads_per_threadblock>(dim_n, block_n, block_k, B,
                                                    local_b, tid_in_threadblock);
-
-        threadblock_barrier(threadblock_id_in_cluster,
-                            warps_per_threadblock_per_core);
 #endif
 
         // consumer code: SMEM->RF and compute
