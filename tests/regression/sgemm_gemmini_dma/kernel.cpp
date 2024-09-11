@@ -8,9 +8,9 @@
 
 // fp16 16x16
 #define TILE_M 128
-#define TILE_N 128
+#define TILE_N 64
 #define TILE_K 128
-#define BOUND_INST 0x800080008ULL
+#define BOUND_INST 0x800040008ULL
 #define NUM_THREADS_IN_CLUSTER 512
 
 // fp32 8x8
