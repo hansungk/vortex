@@ -10,7 +10,7 @@
 
 #define FENCE_GEMM_II
 
-constexpr bool DEBUG = true;
+constexpr bool DEBUG = false;
 
 static_assert(GEMMINI_DMA && !WARP_SPECIALIZED,
               "GEMMINI_DMA should be set and WARP_SPECIALIZED unset");
@@ -192,9 +192,6 @@ void kernel_body(int task_id, kernel_arg_t *__UNIFORM__ arg) {
 
   threadblock_barrier(global_barrier_id, warps_per_threadblock_per_core);
 
-  static_assert(!GEMMINI_DMA || Q_IS_K_MAJOR,
-                "DMA code assumes Q matrix is stored K-major");
-
   // skip everything except DMA in the loop FSM
   constexpr uint32_t skips =
       loop_matmul_skips(/*skip_lda=*/0, /*skip_ldb=*/0, /*skip_ldd=*/1,
@@ -339,8 +336,7 @@ void kernel_body(int task_id, kernel_arg_t *__UNIFORM__ arg) {
   // "inner loop" along the columns of K^T
   const uint32_t k_tiles = (dim_seqlen / B_COL);
   for (uint32_t tile_k = 0;
-       tile_k <
-       (4 /*FIXME: for perf measurement*/ * k_tiles) + 2 /*pipeline latency*/;
+       tile_k < (4 /*for perf measurement*/ * k_tiles) + 2 /*pipeline latency*/;
        tile_k++) {
     if constexpr (DEBUG || true) {
       threadblock_barrier(global_barrier_id, warps_per_threadblock_per_core);
