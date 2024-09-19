@@ -7,7 +7,6 @@
 #include "gemmini_mmio.h"
 
 #define NUM_CLUSTERS 1
-#define NUM_THREADS_IN_CLUSTER 256
 
 #define HW_TID() ({uint32_t gtid; asm volatile ("csrr %0, mhartid" : "=r" (gtid)); gtid;})
 
