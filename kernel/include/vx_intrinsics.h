@@ -149,6 +149,7 @@ inline void vx_join(unsigned stack_ptr) {
 }
 
 // Warp Barrier
+__attribute__((convergent))
 inline void vx_barrier(unsigned barried_id, unsigned num_warps) {
     asm volatile (".insn r %0, 4, 0, x0, %1, %2" :: "i"(RISCV_CUSTOM0), "r"(barried_id), "r"(num_warps));
 }

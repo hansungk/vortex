@@ -9,6 +9,8 @@
 // #define SMEM_SIZE 0x4000
 // 64KB
 // #define SMEM_SIZE 0x10000
+// 128KB
+// #define SMEM_SIZE 0x20000
 // 256KB
 #define SMEM_SIZE 0x40000
 
