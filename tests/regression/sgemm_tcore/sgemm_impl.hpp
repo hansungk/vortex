@@ -6,7 +6,7 @@
 #include "include/gemmini.h"
 #include "gemmini_mmio.h"
 
-#define FP_SIZE 16
+#define FP_SIZE 32
 
 // "fake" fp16 type that only has the correct data width.
 using float16_t = uint16_t;
@@ -822,6 +822,10 @@ __attribute__((always_inline)) inline void thread_block_gemm_single_tile(
     if (tid_in_threadblock == 0) {
       gemmini_fence();
     }
+
+    // reconverge after mmio
+    threadblock_barrier(threadblock_id_in_cluster,
+                        warps_per_threadblock_per_core);
   }
 
   if constexpr (write_to_mem) {
