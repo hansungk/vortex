@@ -33,7 +33,7 @@
 
 `ifdef SYNTHESIS
 `define NUM_BARRIERS 8
-`define NUM_CORES 8
+`define NUM_CORES 4
 `define NUM_THREADS 8
 `define NUM_WARPS 8
 

@@ -74,6 +74,14 @@ module Vortex import VX_gpu_pkg::*; #(
     output [(DCACHE_NUM_REQS * 4) - 1:0]                     smem_a_bits_mask,
     output [(DCACHE_NUM_REQS * 32) - 1:0]                    smem_a_bits_data,
 
+    // tc --------------------------------------------------
+    input  [1:0]   tc_a_ready,
+    output [1:0]   tc_a_valid,
+    output [63:0]  tc_a_bits_address,
+    input  [511:0] tc_d_bits_data,
+    output [1:0]   tc_d_ready,
+    input  [1:0]   tc_d_valid,
+
     // gbar ------------------------------------------------
 
     output                   gbar_req_valid,
@@ -289,6 +297,19 @@ module Vortex import VX_gpu_pkg::*; #(
         end
     endgenerate
 
+    // tc ---------------------------------------------------------------------
+    VX_tc_bus_if tc_p0_bus_if();
+    VX_tc_bus_if tc_p1_bus_if();
+    assign tc_a_valid = {tc_p1_bus_if.req_valid, tc_p0_bus_if.req_valid};
+    assign tc_a_bits_address = {tc_p1_bus_if.req_data, tc_p0_bus_if.req_data};
+    assign tc_p0_bus_if.req_ready = tc_a_ready[0];
+    assign tc_p0_bus_if.rsp_valid = tc_d_valid[0];
+    assign tc_p0_bus_if.rsp_data = tc_d_bits_data[0];
+    assign tc_p1_bus_if.req_ready = tc_a_ready[1];
+    assign tc_p1_bus_if.rsp_valid = tc_d_valid[1];
+    assign tc_p1_bus_if.rsp_data = tc_d_bits_data[1];
+    assign tc_d_ready = {tc_p1_bus_if.rsp_ready, tc_p0_bus_if.rsp_ready};
+
     // gbar -------------------------------------------------------------------
 `ifdef GBAR_ENABLE
     VX_gbar_bus_if gbar_bus_if();
@@ -419,6 +440,9 @@ module Vortex import VX_gpu_pkg::*; #(
     `ifdef GBAR_ENABLE
         .gbar_bus_if    (gbar_bus_if),
     `endif
+
+        .tc_p0_bus_if   (tc_p0_bus_if),
+        .tc_p1_bus_if   (tc_p1_bus_if),
 
         .sim_ebreak     (sim_ebreak),
         .sim_wb_value   (sim_wb_value),

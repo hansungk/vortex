@@ -39,6 +39,9 @@ module VX_core import VX_gpu_pkg::*; #(
 
     VX_mem_bus_if.master    icache_bus_if,
 
+    VX_tc_bus_if.master     tc_p0_bus_if,
+    VX_tc_bus_if.master     tc_p1_bus_if,
+
 `ifdef GBAR_ENABLE
     VX_gbar_bus_if.master   gbar_bus_if,
 `endif
