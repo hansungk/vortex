@@ -173,30 +173,15 @@ module VX_commit import VX_gpu_pkg::*; #(
 
     // Committed instructions
 
-    // temporary hack to not underflow the pending instructions buffer
-    // relies on 1 cycle delay of arbiter and continuous issuing of tensor instructions, 
-    // so probably want to change this at some point 
+    // prevent underflow of the VX_pending_instr buffer
+    // probably want to change this at some point
     // (i.e. pass a "don't count this towards pending instructions" signal down the pipeline)
-    // logic [`ISSUE_WIDTH-1:0][4:0] hmma_ctr, hmma_ctr_n;
     wire [`ISSUE_WIDTH-1:0] final_hmma;
 `ifdef EXT_T_ENABLE
     for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin
-        // assign hmma_ctr_n[i] = (tensor_commit_if[i].valid && tensor_commit_if[i].ready) ? hmma_ctr[i] + 5'b1 : hmma_ctr[i];
-        // assign final_hmma[i] = (commit_sel[i] != `EX_BITS'(2) || hmma_ctr == '0);
-        // i suppose this is now a feature and not a bug
         // if PC is 0, this means it is not final step of a wmma, shouldn't be committed
         assign final_hmma[i] = (commit_if[i].data.PC != 32'b0); 
     end
-    /*
-    always @(posedge clk) begin
-        if (reset) begin
-            hmma_ctr <= '0;
-        end
-        else begin
-            hmma_ctr <= hmma_ctr_n;
-        end 
-    end
-    */
 `else
     assign final_hmma = '1;
 `endif
