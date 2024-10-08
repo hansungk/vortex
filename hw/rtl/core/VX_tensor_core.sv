@@ -12,7 +12,7 @@ module VX_tensor_core import VX_gpu_pkg::*; #(
 );
     localparam BLOCK_SIZE = 1;
     localparam NUM_LANES  = `NUM_THREADS;
-    // FIXME: @perf: PARTIAL_BW==1 increases power instantiating
+    // @perf: PARTIAL_BW==1 increases power instantiating
     // stream_buffers for ISSUE_WIDTH times
     localparam PARTIAL_BW = (BLOCK_SIZE != `ISSUE_WIDTH) || (NUM_LANES != `NUM_THREADS);
 
@@ -51,16 +51,27 @@ module VX_tensor_core import VX_gpu_pkg::*; #(
     );
 
     for (genvar block_idx = 0; block_idx < BLOCK_SIZE; ++block_idx) begin
-        VX_tensor_core_block #(
+`ifdef EXT_T_HOPPER
+        VX_tensor_hopper_core_block #(
             .ISW(1), // FIXME: not block_idx
+            .FP16(FP16)
+        ) tensor_hopper_core (
+            .clk(clk),
+            .reset(reset),
+            .execute_if(execute_if[block_idx]),
+            .commit_if(commit_block_if[block_idx])
+        );
+`else
+        VX_tensor_core_block #(
+            .ISW(1), // FIXME: use block_idx
             .FP16(FP16)
         ) tensor_core (
             .clk(clk),
             .reset(reset),
-
             .execute_if(execute_if[block_idx]),
             .commit_if(commit_block_if[block_idx])
         );
+`endif
     end
     
 endmodule
@@ -275,7 +286,6 @@ module VX_tensor_core_block import VX_gpu_pkg::*; #(
     localparam COMMIT_DATAW = `UUID_WIDTH + `NW_WIDTH + `NUM_THREADS + `XLEN + 1 + `NR_BITS + (`NUM_THREADS * `XLEN) + 1 + 1 + 1;
     wire [COMMIT_DATAW-1:0] commit_if_data = {
         execute_if_data_deq[wb_wid], /* uuid ~ rd */
-        // execute_if_data_deq, /* uuid ~ rd */
         subcommit == 1'b0 ? wb_data_0 : wb_data_1, /* data */
         1'b0, /* pid */
         1'b1, /* sop */
