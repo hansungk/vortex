@@ -542,30 +542,16 @@ module VX_decode  #(
                 endcase
             end
         `ifdef EXT_T_ENABLE
-            `ifdef EXT_T_HOPPER
-                // TODO
-                `INST_EXT4: begin
-                    ex_type = `EX_TENSOR;
-                    op_type = `INST_TENSOR_HMMA;
-                    // tensor core macroop is encoded as r-type
-                    use_rd = 1;
-                    `USED_IREG (rd);
-                    `USED_IREG (rs1);
-                    `USED_IREG (rs2);
-                    `USED_IREG (rs3);
-                end
-            `else
-                `INST_EXT4: begin
-                    ex_type = `EX_TENSOR;
-                    op_type = `INST_TENSOR_HMMA;
-                    // tensor core macroop is encoded as r-type
-                    use_rd = 1;
-                    `USED_IREG (rd);
-                    `USED_IREG (rs1);
-                    `USED_IREG (rs2);
-                    `USED_IREG (rs3);
-                end
-            `endif
+            `INST_EXT4: begin
+                ex_type = `EX_TENSOR;
+                op_type = `INST_TENSOR_HMMA;
+                // tensor core macroop is encoded as r-type
+                use_rd = 1;
+                `USED_IREG (rd);
+                `USED_IREG (rs1);
+                `USED_IREG (rs2);
+                `USED_IREG (rs3);
+            end
         `endif
             default:;
         endcase
