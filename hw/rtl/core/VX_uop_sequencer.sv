@@ -183,7 +183,13 @@ end
     // merging the 2 always blocks leads to spurious UNOPTFLAT verilator lint,
     // but conceptually they should be linked
     always @(*) begin
+`ifdef EXT_T_HOPPER
+        // for Hopper, disable micro-op blitzing.  Set/step is managed
+        // microarchitecturally in an FSM inside the tensor core.
+        use_uop = 1'b0;
+`else
         use_uop = uop_sequencer_if.valid && uop_sequencer_if.data.ex_type == `EX_BITS'(`EX_TENSOR);
+`endif
 
         if (uop_start) begin
             // 1st cycle of microcoded operation, use op_type to determine entry point into microcode table
