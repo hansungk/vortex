@@ -225,8 +225,9 @@ end
 
         if (uop_sequencer_if.valid && use_uop &&
             uop_sequencer_if.data.rd  == `NR_BITS'(1)) begin
-            // a little sketchy? but shouldn't create any loop
-            ibuffer_if.data.rd  = ibuffer_if.data.rd  + `NR_BITS'(8); // FIXME: 8 is hardcoded
+            // if rd is '1', use a separate set of 8 fp registers as the
+            // destination accumulator data.
+            ibuffer_if.data.rd  = ibuffer_if.data.rd  + `NR_BITS'(8); // note 8 is hardcoded
             ibuffer_if.data.rs3 = ibuffer_if.data.rs3 + `NR_BITS'(8);
         end
     end
