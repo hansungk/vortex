@@ -283,10 +283,11 @@ module VX_tensor_core_block import VX_gpu_pkg::*; #(
     assign commit_if_ready_override = commit_if.ready && (counter == 2'b0);
 `endif
 
-    localparam COMMIT_DATAW = `UUID_WIDTH + `NW_WIDTH + `NUM_THREADS + `XLEN + 1 + `NR_BITS + (`NUM_THREADS * `XLEN) + 1 + 1 + 1;
+    localparam COMMIT_DATAW = `UUID_WIDTH + `NW_WIDTH + `NUM_THREADS + `XLEN + 1 + `NR_BITS + (`NUM_THREADS * `XLEN) + 1 + 1 + 1 + 1;
     wire [COMMIT_DATAW-1:0] commit_if_data = {
         execute_if_data_deq[wb_wid], /* uuid ~ rd */
         subcommit == 1'b0 ? wb_data_0 : wb_data_1, /* data */
+        1'b0, /* tensor */
         1'b0, /* pid */
         1'b1, /* sop */
         1'b1  /* eop */

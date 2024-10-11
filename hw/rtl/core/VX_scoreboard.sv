@@ -142,6 +142,9 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
 
     for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin
         reg [`UP(ISSUE_RATIO)-1:0][`NUM_REGS-1:0] inuse_regs;
+        // busy bit for the asynchronous Tensor unit.  Since the ISA does not
+        // have an explicit destination register, use a separate status bit.
+        reg [`UP(ISSUE_RATIO)-1:0] inuse_tensor;
 
         wire writeback_fire = writeback_if[i].valid && writeback_if[i].data.eop;
 
@@ -227,6 +230,7 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
         always @(posedge clk) begin
             if (reset) begin
                 inuse_regs <= '0;
+                inuse_tensor <= '0;
             end else begin
                 if (writeback_fire) begin
                     inuse_regs[writeback_if[i].data.wis][writeback_if[i].data.rd] <= 0;            

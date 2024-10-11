@@ -41,7 +41,7 @@ module VX_commit import VX_gpu_pkg::*; #(
     output wire [`NUM_REGS-1:0][`XLEN-1:0] sim_wb_value
 );
     `UNUSED_PARAM (CORE_ID)
-    localparam DATAW = `UUID_WIDTH + `NW_WIDTH + `NUM_THREADS + `XLEN + 1 + `NR_BITS + `NUM_THREADS * `XLEN + 1 + 1 + 1;
+    localparam DATAW = `UUID_WIDTH + `NW_WIDTH + `NUM_THREADS + `XLEN + 1 + `NR_BITS + `NUM_THREADS * `XLEN + 1 + 1 + 1 + 1;
     localparam COMMIT_SIZEW = `CLOG2(`NUM_THREADS + 1);
     localparam COMMIT_ALL_SIZEW = COMMIT_SIZEW + `ISSUE_WIDTH - 1;
 
@@ -210,6 +210,7 @@ module VX_commit import VX_gpu_pkg::*; #(
         assign writeback_if[i].data.tmask= commit_if[i].data.tmask; 
         assign writeback_if[i].data.rd   = commit_if[i].data.rd; 
         assign writeback_if[i].data.data = commit_if[i].data.data; 
+        assign writeback_if[i].data.tensor = commit_if[i].data.tensor;
         assign writeback_if[i].data.sop  = commit_if[i].data.sop; 
         assign writeback_if[i].data.eop  = commit_if[i].data.eop;
         assign commit_if[i].ready = 1'b1; // writeback has no backpressure

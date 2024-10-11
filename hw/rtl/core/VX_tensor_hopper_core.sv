@@ -128,11 +128,12 @@ module VX_tensor_hopper_core_block import VX_gpu_pkg::*; #(
 
     wire [`NUM_THREADS-1:0][`XLEN-1:0] wb_data = '0;
 
-    localparam COMMIT_DATAW = `UUID_WIDTH + `NW_WIDTH + `NUM_THREADS + `XLEN + 1 + `NR_BITS + (`NUM_THREADS * `XLEN) + 1 + 1 + 1;
+    localparam COMMIT_DATAW = `UUID_WIDTH + `NW_WIDTH + `NUM_THREADS + `XLEN + 1 + `NR_BITS + (`NUM_THREADS * `XLEN) + 1 + 1 + 1 + 1;
     wire [COMMIT_DATAW-1:0] commit_if_data = {
         // write-back to the correct rd only when eop
         ((state == 2'b11) ? execute_if_data_deq[0/*FIXME*/] : execute_if_data_new_rd), /* uuid ~ rd */
         wb_data, /* data */
+        1'b0, /* tensor */
         1'b0, /* pid */
         1'b1, /* sop */
         (state == 2'b11)  /* eop */

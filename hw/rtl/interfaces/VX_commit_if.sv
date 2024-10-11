@@ -26,6 +26,7 @@ interface VX_commit_if #(
         logic                       wb;
         logic [`NR_BITS-1:0]        rd;
         logic [NUM_LANES-1:0][`XLEN-1:0] data;
+        logic                       tensor;
         logic [PID_WIDTH-1:0]       pid;
         logic                       sop;
         logic                       eop;
