@@ -55,7 +55,7 @@ module VX_tensor_core import VX_gpu_pkg::*; #(
         VX_tensor_hopper_core_block #(
             .ISW(1), // FIXME: not block_idx
             .FP16(FP16)
-        ) tensor_hopper_core (
+        ) tensor_hopper_core_block (
             .clk(clk),
             .reset(reset),
             .execute_if(execute_if[block_idx]),
