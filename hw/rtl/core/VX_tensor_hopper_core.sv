@@ -144,17 +144,28 @@ module VX_tensor_hopper_core #(
 );
     // dummy FSM that generates commits
     localparam STATE_IDLE = 4'd0;
-    logic [1:0] state, state_n;
+    localparam STATE_FINISH = 4'd15;
+    logic [3:0] state, state_n;
 
     assign initiate_ready = (state == STATE_IDLE);
 
     always @(*) begin
         state_n = state;
 
-        // when incremented to 1, count up until wrap-around to 0
-        if (state != STATE_IDLE) begin
-            state_n = state + 1'd1;
-        end
+        case (state)
+            STATE_IDLE: begin
+                state_n = state;
+            end
+            STATE_FINISH: begin
+                // hold until writeback_ready
+                if (writeback_ready) begin
+                    state_n = STATE_IDLE;
+                end
+            end
+            default: begin
+                state_n = state + 4'd1;
+            end
+        endcase
 
         // kick-off
         if (initiate_valid && initiate_ready) begin
@@ -172,7 +183,7 @@ module VX_tensor_hopper_core #(
 
     assign writeback_valid = (state != STATE_IDLE);
     assign writeback_wid = '0; // TODO
-    assign writeback_last = (state == 4'd15);
+    assign writeback_last = (state == STATE_FINISH);
 
 endmodule
 
