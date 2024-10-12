@@ -146,7 +146,7 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
         // have an explicit destination register, use a separate status bit.
         reg [`UP(ISSUE_RATIO)-1:0] inuse_tensor;
 
-        wire hgmma_start = (ibuffer_if[i].data.ex_type == `EX_TENSOR) &&
+        wire hgmma_start = (ibuffer_if[i].data.ex_type == `EX_BITS'(`EX_TENSOR)) &&
             (ibuffer_if[i].data.op_type == `INST_TENSOR_HGMMA);
 
         wire writeback_fire = writeback_if[i].valid && writeback_if[i].data.eop;
@@ -213,7 +213,7 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
         wire [3:0] operands_busy = {inuse_rd, inuse_rs1, inuse_rs2, inuse_rs3};
     `ifdef EXT_T_HOPPER
         wire hgmma_wait = ibuffer_if[i].valid &&
-            (ibuffer_if[i].data.ex_type == `EX_TENSOR) &&
+            (ibuffer_if[i].data.ex_type == `EX_BITS'(`EX_TENSOR)) &&
             (ibuffer_if[i].data.op_type == `INST_TENSOR_HGMMA_WAIT);
         wire hgmma_ready = ~(hgmma_wait && inuse_tensor[ibuffer_if[i].data.wis]);
         wire operands_ready = (~(| operands_busy)) && hgmma_ready;
@@ -250,6 +250,9 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
                     inuse_regs[ibuffer_if[i].data.wis][ibuffer_if[i].data.rd] <= 1;
                 end
             `ifdef EXT_T_HOPPER
+                if (writeback_fire && writeback_if[i].data.tensor) begin
+                    inuse_tensor[ibuffer_if[i].data.wis] <= 1'b0;
+                end
                 if (ibuffer_if[i].valid && ibuffer_if[i].ready && hgmma_start) begin
                     inuse_tensor[ibuffer_if[i].data.wis] <= 1'b1;
                 end

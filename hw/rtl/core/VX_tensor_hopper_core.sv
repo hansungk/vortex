@@ -11,6 +11,7 @@ module VX_tensor_hopper_core_block import VX_gpu_pkg::*; #(
     VX_execute_if.slave execute_if,
     VX_commit_if.master commit_if
 );
+    localparam NUM_LANES = `NUM_THREADS;
     localparam METADATA_QUEUE_DEPTH = 16; // FIXME: arbitrary
 
     /* commit_if.data_t parts that we need to keep around:
@@ -21,22 +22,17 @@ module VX_tensor_hopper_core_block import VX_gpu_pkg::*; #(
         - wb
         - rd
     */
-
     localparam DATAW = `UUID_WIDTH + `NW_WIDTH + `NUM_THREADS + `XLEN + 1 + `NR_BITS;
 
     wire operand_enq_fire = execute_if.valid && execute_if.ready;
     wire commit_if_fire = commit_if.valid && commit_if.ready;
-    wire [DATAW-1:0] execute_if_data_enq = {
-        execute_if.data.uuid,
-        execute_if.data.wid,
-        execute_if.data.tmask,
-        execute_if.data.PC,
-        execute_if.data.wb,
-        execute_if.data.rd
-        // pid/sop/eop set later
-    };
 
-    wire [`NUM_WARPS-1:0][DATAW-1:0] execute_if_data_deq;
+    wire [`NUM_WARPS-1:0][`UUID_WIDTH-1:0] execute_if_data_uuid;
+    wire [`NUM_WARPS-1:0][`NW_WIDTH-1:0]   execute_if_data_wid;
+    wire [`NUM_WARPS-1:0][NUM_LANES-1:0]   execute_if_data_tmask;
+    wire [`NUM_WARPS-1:0][`XLEN-1:0]       execute_if_data_PC;
+    wire [`NUM_WARPS-1:0]                  execute_if_data_wb;
+    wire [`NUM_WARPS-1:0][`NR_BITS-1:0]    execute_if_data_rd;
     logic [DATAW-1:0] execute_if_data_new_rd;
 
     wire [`NUM_WARPS-1:0] metadata_queue_fulls;
@@ -71,8 +67,12 @@ module VX_tensor_hopper_core_block import VX_gpu_pkg::*; #(
             .reset(reset),
             .push(enq),
             .pop(deq),
-            .data_in(execute_if_data_enq),
-            .data_out(execute_if_data_deq[i]),
+            .data_in({execute_if.data.uuid,  execute_if.data.wid,
+                      execute_if.data.tmask, execute_if.data.PC,
+                      execute_if.data.wb,    execute_if.data.rd}),
+            .data_out({execute_if_data_uuid[i],  execute_if_data_wid[i],
+                       execute_if_data_tmask[i], execute_if_data_PC[i],
+                       execute_if_data_wb[i],    execute_if_data_rd[i]}),
             .empty(metadata_queue_emptys[i]),
             `UNUSED_PIN(alm_empty),
             .full(metadata_queue_fulls[i]),
@@ -108,11 +108,6 @@ module VX_tensor_hopper_core_block import VX_gpu_pkg::*; #(
         if ((state != STATE_IDLE) && (state_n == STATE_IDLE)) begin
             metadata_deq = 1'b1;
         end
-
-        // change rd of the commit data according to state
-        execute_if_data_new_rd =
-            {execute_if_data_deq[0/*FIXME*/][DATAW-1:`NR_BITS],
-             (`NR_BITS'(`NUM_IREGS) + `NR_BITS'(state))};
     end
 
     always @(posedge clk) begin
@@ -128,19 +123,18 @@ module VX_tensor_hopper_core_block import VX_gpu_pkg::*; #(
 
     wire [`NUM_THREADS-1:0][`XLEN-1:0] wb_data = '0;
 
-    localparam COMMIT_DATAW = `UUID_WIDTH + `NW_WIDTH + `NUM_THREADS + `XLEN + 1 + `NR_BITS + (`NUM_THREADS * `XLEN) + 1 + 1 + 1 + 1;
-    wire [COMMIT_DATAW-1:0] commit_if_data = {
-        // write-back to the correct rd only when eop
-        ((state == 2'b11) ? execute_if_data_deq[0/*FIXME*/] : execute_if_data_new_rd), /* uuid ~ rd */
-        wb_data, /* data */
-        1'b0, /* tensor */
-        1'b0, /* pid */
-        1'b1, /* sop */
-        (state == 2'b11)  /* eop */
-        // 1'b1  /* eop */
-    };
-
-    assign commit_if.data = commit_if_data;
+    assign commit_if.data.uuid   = execute_if_data_uuid[0];
+    assign commit_if.data.wid    = execute_if_data_wid[0];
+    assign commit_if.data.tmask  = execute_if_data_tmask[0];
+    assign commit_if.data.PC     = execute_if_data_PC[0];
+    assign commit_if.data.wb     = (state == 2'b11);
+    // custom rd
+    assign commit_if.data.rd     = (`NR_BITS'(`NUM_IREGS) + `NR_BITS'(state));
+    assign commit_if.data.data   = wb_data;
+    assign commit_if.data.tensor = (state == 2'b11);
+    assign commit_if.data.pid    = 1'b0;
+    assign commit_if.data.sop    = 1'b1;
+    assign commit_if.data.eop    = (state == 2'b11);
 endmodule
 
 `endif
