@@ -177,17 +177,22 @@ module VX_commit import VX_gpu_pkg::*; #(
     // probably want to change this at some point
     // (i.e. pass a "don't count this towards pending instructions" signal down the pipeline)
     wire [`ISSUE_WIDTH-1:0] final_hmma;
+    // if this is a "ghost" commit generated from the tensor core, don't count
+    // toward committed
+    wire [`ISSUE_WIDTH-1:0] tensor_ghost;
 `ifdef EXT_T_ENABLE
     for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin
         // if PC is 0, this means it is not final step of a wmma, shouldn't be committed
         assign final_hmma[i] = (commit_if[i].data.PC != 32'b0); 
+        // handle 'x' with ===.  FIXME fix unitialization
+        assign tensor_ghost[i] = (commit_if[i].data.tensor == 1'b1);
     end
 `else
     assign final_hmma = '1;
+    assign tensor_ghost = '0;
 `endif
 
-
-    wire [`ISSUE_WIDTH-1:0] committed = (commit_fire & commit_eop) & final_hmma;
+    wire [`ISSUE_WIDTH-1:0] committed = (commit_fire & commit_eop) & final_hmma & (~tensor_ghost);
 
     VX_pipe_register #(
         .DATAW  (`ISSUE_WIDTH * (1 + `NW_WIDTH)),
