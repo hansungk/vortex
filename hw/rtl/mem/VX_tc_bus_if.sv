@@ -15,15 +15,18 @@
 
 interface VX_tc_bus_if #(
     parameter DATA_SIZE  = 32,
-    parameter ADDR_WIDTH = `MEM_ADDR_WIDTH
+    parameter ADDR_WIDTH = `MEM_ADDR_WIDTH,
+    parameter TAG_WIDTH = 4
 )();
 
     typedef struct packed {
         logic [ADDR_WIDTH-1:0] addr;
+        logic [TAG_WIDTH-1:0] tag;
     } req_data_t;
 
     typedef struct packed {
         logic [DATA_SIZE*8-1:0] data;
+        logic [TAG_WIDTH-1:0] tag;
     } rsp_data_t;
 
     logic  req_valid;

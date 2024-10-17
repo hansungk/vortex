@@ -420,6 +420,32 @@ module VX_core import VX_gpu_pkg::*; #(
         end
     end
 
+    /*
+    // fake fsm driving tc output
+    reg [15:0] cycles_till_request;
+    always @(posedge clk) begin
+        if (reset) begin
+            cycles_till_request <= 16'd127;
+        end else begin
+            if (cycles_till_request == 0) begin
+                cycles_till_request <= 16'd127;
+            end else begin
+                cycles_till_request <= cycles_till_request - 1;
+            end
+        end
+    end
+    assign tc_p0_bus_if.req_valid = (cycles_till_request == 16'd0);
+    assign tc_p1_bus_if.req_valid = (cycles_till_request == 16'd64);
+    assign tc_p0_bus_if.req_data.addr = 32'hff008100;
+    assign tc_p1_bus_if.req_data.addr = 32'hff018100;
+    assign tc_p0_bus_if.req_data.tag = 4'h0;
+    assign tc_p1_bus_if.req_data.tag = 4'h1;
+    assign tc_p0_bus_if.rsp_ready = 1'b1;
+    assign tc_p1_bus_if.rsp_ready = 1'b1;
+    // `RUNTIME_ASSERT(!tc_p0_bus_if.rsp_data.valid || (tc_p0_bus_if.rsp_data.tag === 4'h0));
+    // `RUNTIME_ASSERT(!tc_p1_bus_if.rsp_data.valid || (tc_p1_bus_if.rsp_data.tag === 4'h1));
+    */
+
     always @(posedge clk) begin
         if (!reset && (busy_negedge || (report_counter == 32'd0))) begin
             $display("====================CORE : %d===================",CORE_ID);

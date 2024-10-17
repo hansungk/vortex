@@ -6,7 +6,8 @@ module Vortex import VX_gpu_pkg::*; #(
     parameter CORE_ID = 0,
     parameter TENSOR_FP16 = 0,
     parameter BOOTROM_HANG100 = 32'h10100,
-    parameter NUM_THREADS = 0
+    parameter NUM_THREADS = 0,
+    parameter TC_TAG_WIDTH = 4
 ) (
 
     /* adapt to CoreIO bundle at src/main/scala/tile/Core.scala */
@@ -78,9 +79,11 @@ module Vortex import VX_gpu_pkg::*; #(
     input  [1:0]   tc_a_ready,
     output [1:0]   tc_a_valid,
     output [63:0]  tc_a_bits_address,
-    input  [511:0] tc_d_bits_data,
+    output [2 * TC_TAG_WIDTH - 1:0] tc_a_bits_tag,
     output [1:0]   tc_d_ready,
     input  [1:0]   tc_d_valid,
+    input  [511:0] tc_d_bits_data,
+    input  [2 * TC_TAG_WIDTH - 1:0] tc_d_bits_tag,
 
     // gbar ------------------------------------------------
 
@@ -298,16 +301,19 @@ module Vortex import VX_gpu_pkg::*; #(
     endgenerate
 
     // tc ---------------------------------------------------------------------
-    VX_tc_bus_if tc_p0_bus_if();
-    VX_tc_bus_if tc_p1_bus_if();
+    VX_tc_bus_if #(.TAG_WIDTH(TC_TAG_WIDTH)) tc_p0_bus_if();
+    VX_tc_bus_if #(.TAG_WIDTH(TC_TAG_WIDTH)) tc_p1_bus_if();
     assign tc_a_valid = {tc_p1_bus_if.req_valid, tc_p0_bus_if.req_valid};
-    assign tc_a_bits_address = {tc_p1_bus_if.req_data, tc_p0_bus_if.req_data};
+    assign tc_a_bits_address = {tc_p1_bus_if.req_data.addr, tc_p0_bus_if.req_data.addr};
+    assign tc_a_bits_tag = {tc_p1_bus_if.req_data.tag, tc_p0_bus_if.req_data.tag};
     assign tc_p0_bus_if.req_ready = tc_a_ready[0];
     assign tc_p0_bus_if.rsp_valid = tc_d_valid[0];
-    assign tc_p0_bus_if.rsp_data = tc_d_bits_data[0];
+    assign tc_p0_bus_if.rsp_data.data = tc_d_bits_data[0];
+    assign tc_p0_bus_if.rsp_data.tag = tc_d_bits_tag[0];
     assign tc_p1_bus_if.req_ready = tc_a_ready[1];
     assign tc_p1_bus_if.rsp_valid = tc_d_valid[1];
-    assign tc_p1_bus_if.rsp_data = tc_d_bits_data[1];
+    assign tc_p1_bus_if.rsp_data.data = tc_d_bits_data[1];
+    assign tc_p1_bus_if.rsp_data.tag = tc_d_bits_tag[1];
     assign tc_d_ready = {tc_p1_bus_if.rsp_ready, tc_p0_bus_if.rsp_ready};
 
     // gbar -------------------------------------------------------------------
