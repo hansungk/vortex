@@ -97,20 +97,61 @@ module VX_tensor_hopper_core_block import VX_gpu_pkg::*; #(
     `STATIC_ASSERT((`INST_ALU_BITS == `INST_OP_BITS),
         ("static assertion failed: `INST_ALU_BITS != `INST_OP_BITS"))
 
-    VX_tensor_hopper_core #(
-    ) tensor_hopper_core (
-        .clk(clk),
+    TensorCoreDecoupled tensor_hopper_core (
+        .clock(clk),
         .reset(reset),
 
-        .initiate_valid(initiate_valid),
-        .initiate_wid(`NW_WIDTH'(0)/*FIXME*/),
-        .initiate_ready(initiate_ready),
+        .io_initiate_ready(initiate_ready),
+        .io_initiate_valid(initiate_valid),
+        .io_initiate_bits_wid(`NW_WIDTH'(0)/*FIXME*/),
 
-        .writeback_valid(writeback_valid),
-        `UNUSED_PIN(writeback_wid),
-        .writeback_last(writeback_last),
-        .writeback_ready(writeback_ready)
+        .io_writeback_ready(writeback_ready),
+        .io_writeback_valid(writeback_valid),
+        .io_writeback_bits_last(/*unused*/),
+        .io_writeback_bits_wid(/*unused*/),
+        .io_writeback_bits_rd(/*unused*/),
+        .io_writeback_bits_data_0(/*unused*/),
+        .io_writeback_bits_data_1(/*unused*/),
+        .io_writeback_bits_data_2(/*unused*/),
+        .io_writeback_bits_data_3(/*unused*/),
+        .io_writeback_bits_data_4(/*unused*/),
+        .io_writeback_bits_data_5(/*unused*/),
+        .io_writeback_bits_data_6(/*unused*/),
+        .io_writeback_bits_data_7(/*unused*/),
+
+        .io_respA_ready(/*unused*/),
+        .io_respA_valid(1'b0/*FIXME*/),
+        .io_respA_bits_source(2'b0/*FIXME*/),
+        .io_respA_bits_data(256'b0/*FIXME*/),
+        .io_respB_ready(/*unused*/),
+        .io_respB_valid(1'b0/*FIXME*/),
+        .io_respB_bits_source(2'b0/*FIXME*/),
+        .io_respB_bits_data(256'b0/*FIXME*/),
+
+        .io_reqA_ready(1'b0/*FIXME*/),
+        .io_reqA_valid(/*unused*/),
+        .io_reqA_bits_source(/*unused*/),
+        .io_reqA_bits_address(/*unused*/),
+        .io_reqB_ready(1'b0/*FIXME*/),
+        .io_reqB_valid(/*unused*/),
+        .io_reqB_bits_source(/*unused*/),
+        .io_reqB_bits_address(/*unused*/)
     );
+
+    // VX_tensor_hopper_core #(
+    // ) tensor_hopper_core (
+    //     .clk(clk),
+    //     .reset(reset),
+
+    //     .initiate_valid(initiate_valid),
+    //     .initiate_wid(`NW_WIDTH'(0)/*FIXME*/),
+    //     .initiate_ready(initiate_ready),
+
+    //     .writeback_valid(writeback_valid),
+    //     `UNUSED_PIN(writeback_wid),
+    //     .writeback_last(writeback_last),
+    //     .writeback_ready(writeback_ready)
+    // );
 
     wire [`NUM_THREADS-1:0][`XLEN-1:0] wb_data = '0;
 
