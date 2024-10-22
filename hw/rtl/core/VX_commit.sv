@@ -41,7 +41,7 @@ module VX_commit import VX_gpu_pkg::*; #(
     output wire [`NUM_REGS-1:0][`XLEN-1:0] sim_wb_value
 );
     `UNUSED_PARAM (CORE_ID)
-    localparam DATAW = `UUID_WIDTH + `NW_WIDTH + `NUM_THREADS + `XLEN + 1 + `NR_BITS + `NUM_THREADS * `XLEN + 1 + 1 + 1;
+    localparam DATAW = `UUID_WIDTH + `NW_WIDTH + `NUM_THREADS + `XLEN + 1 + `NR_BITS + `NUM_THREADS * `XLEN + 1 + 1 + 1 + 1;
     localparam COMMIT_SIZEW = `CLOG2(`NUM_THREADS + 1);
     localparam COMMIT_ALL_SIZEW = COMMIT_SIZEW + `ISSUE_WIDTH - 1;
 
@@ -173,36 +173,26 @@ module VX_commit import VX_gpu_pkg::*; #(
 
     // Committed instructions
 
-    // temporary hack to not underflow the pending instructions buffer
-    // relies on 1 cycle delay of arbiter and continuous issuing of tensor instructions, 
-    // so probably want to change this at some point 
+    // prevent underflow of the VX_pending_instr buffer
+    // probably want to change this at some point
     // (i.e. pass a "don't count this towards pending instructions" signal down the pipeline)
-    // logic [`ISSUE_WIDTH-1:0][4:0] hmma_ctr, hmma_ctr_n;
     wire [`ISSUE_WIDTH-1:0] final_hmma;
+    // if this is a "ghost" commit generated at the tensor core, don't count
+    // toward committed
+    wire [`ISSUE_WIDTH-1:0] tensor_ghost;
 `ifdef EXT_T_ENABLE
     for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin
-        // assign hmma_ctr_n[i] = (tensor_commit_if[i].valid && tensor_commit_if[i].ready) ? hmma_ctr[i] + 5'b1 : hmma_ctr[i];
-        // assign final_hmma[i] = (commit_sel[i] != `EX_BITS'(2) || hmma_ctr == '0);
-        // i suppose this is now a feature and not a bug
         // if PC is 0, this means it is not final step of a wmma, shouldn't be committed
         assign final_hmma[i] = (commit_if[i].data.PC != 32'b0); 
+        // handle 'x' with ===.  FIXME fix unitialization
+        assign tensor_ghost[i] = (commit_if[i].data.tensor == 1'b1);
     end
-    /*
-    always @(posedge clk) begin
-        if (reset) begin
-            hmma_ctr <= '0;
-        end
-        else begin
-            hmma_ctr <= hmma_ctr_n;
-        end 
-    end
-    */
 `else
     assign final_hmma = '1;
+    assign tensor_ghost = '0;
 `endif
 
-
-    wire [`ISSUE_WIDTH-1:0] committed = (commit_fire & commit_eop) & final_hmma;
+    wire [`ISSUE_WIDTH-1:0] committed = (commit_fire & commit_eop) & final_hmma & (~tensor_ghost);
 
     VX_pipe_register #(
         .DATAW  (`ISSUE_WIDTH * (1 + `NW_WIDTH)),
@@ -225,6 +215,7 @@ module VX_commit import VX_gpu_pkg::*; #(
         assign writeback_if[i].data.tmask= commit_if[i].data.tmask; 
         assign writeback_if[i].data.rd   = commit_if[i].data.rd; 
         assign writeback_if[i].data.data = commit_if[i].data.data; 
+        assign writeback_if[i].data.tensor = commit_if[i].data.tensor;
         assign writeback_if[i].data.sop  = commit_if[i].data.sop; 
         assign writeback_if[i].data.eop  = commit_if[i].data.eop;
         assign commit_if[i].ready = 1'b1; // writeback has no backpressure

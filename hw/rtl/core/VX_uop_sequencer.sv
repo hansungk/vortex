@@ -183,7 +183,13 @@ end
     // merging the 2 always blocks leads to spurious UNOPTFLAT verilator lint,
     // but conceptually they should be linked
     always @(*) begin
+`ifdef EXT_T_HOPPER
+        // for Hopper, disable micro-op blitzing.  Set/step is managed
+        // microarchitecturally in an FSM inside the tensor core.
+        use_uop = 1'b0;
+`else
         use_uop = uop_sequencer_if.valid && uop_sequencer_if.data.ex_type == `EX_BITS'(`EX_TENSOR);
+`endif
 
         if (uop_start) begin
             // 1st cycle of microcoded operation, use op_type to determine entry point into microcode table
@@ -225,8 +231,9 @@ end
 
         if (uop_sequencer_if.valid && use_uop &&
             uop_sequencer_if.data.rd  == `NR_BITS'(1)) begin
-            // a little sketchy? but shouldn't create any loop
-            ibuffer_if.data.rd  = ibuffer_if.data.rd  + `NR_BITS'(8); // FIXME: 8 is hardcoded
+            // if rd is '1', use a separate set of 8 fp registers as the
+            // destination accumulator data.
+            ibuffer_if.data.rd  = ibuffer_if.data.rd  + `NR_BITS'(8); // note 8 is hardcoded
             ibuffer_if.data.rs3 = ibuffer_if.data.rs3 + `NR_BITS'(8);
         end
     end

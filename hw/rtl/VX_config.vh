@@ -40,8 +40,13 @@
 `define EXT_F_ENABLE
 `endif
 
+// core-coupled tensor core
 `ifndef EXT_T_DISABLE
 `define EXT_T_ENABLE
+// decoupled Hopper-style tensor core
+`ifndef EXT_T_HOPPER
+`define EXT_T_HOPPER
+`endif
 `endif
 
 `ifndef XLEN_32

@@ -269,7 +269,7 @@ module VX_reduce_unit #(
     );
 
     VX_elastic_buffer #(
-        .DATAW(`UUID_WIDTH + `NW_WIDTH + NUM_LANES + `XLEN + 1 + `NR_BITS + (`XLEN * NUM_LANES) + PID_WIDTH + 1 + 1)
+        .DATAW(`UUID_WIDTH + `NW_WIDTH + NUM_LANES + `XLEN + 1 + `NR_BITS + (`XLEN * NUM_LANES) + 1 + PID_WIDTH + 1 + 1)
     ) output_buffer (
         .clk(clk),
         .reset(reset),
@@ -277,7 +277,7 @@ module VX_reduce_unit #(
         .ready_in(commit_if_ready),
         .data_in({execute_if.data.uuid, execute_if.data.wid, stored_tmask, execute_if.data.PC, execute_if.data.wb, execute_if.data.rd, broadcasted_accumulator, stored_pid, stored_sop, stored_eop}),
 
-        .data_out({commit_if.data.uuid, commit_if.data.wid, commit_if.data.tmask, commit_if.data.PC, commit_if.data.wb, commit_if.data.rd, commit_if.data.data, commit_if.data.pid, commit_if.data.sop, commit_if.data.eop}),
+        .data_out({commit_if.data.uuid, commit_if.data.wid, commit_if.data.tmask, commit_if.data.PC, commit_if.data.wb, commit_if.data.rd, commit_if.data.data, commit_if.data.tensor, commit_if.data.pid, commit_if.data.sop, commit_if.data.eop}),
         .ready_out(commit_if.ready),
         .valid_out(commit_if.valid)
     );

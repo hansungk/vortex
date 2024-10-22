@@ -254,7 +254,10 @@
 `define INST_SFU_IS_WCTL(op) (op <= 5)
 `define INST_SFU_IS_CSR(op)  (op >= 6 && op <= 8)
 
-`define INST_TENSOR_HMMA     4'b0000
+`define INST_TENSOR_HMMA       4'b0000
+// Hopper WGMMA-style asynchronous op
+`define INST_TENSOR_HGMMA      4'b0001
+`define INST_TENSOR_HGMMA_WAIT 4'b0010
 
 ///////////////////////////////////////////////////////////////////////////////
 

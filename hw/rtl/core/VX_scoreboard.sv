@@ -142,6 +142,12 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
 
     for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin
         reg [`UP(ISSUE_RATIO)-1:0][`NUM_REGS-1:0] inuse_regs;
+        // busy bit for the asynchronous Tensor unit.  Since the ISA does not
+        // have an explicit destination register, use a separate status bit.
+        reg [`UP(ISSUE_RATIO)-1:0] inuse_tensor;
+
+        wire hgmma_start = (ibuffer_if[i].data.ex_type == `EX_BITS'(`EX_TENSOR)) &&
+            (ibuffer_if[i].data.op_type == `INST_TENSOR_HGMMA);
 
         wire writeback_fire = writeback_if[i].valid && writeback_if[i].data.eop;
 
@@ -205,7 +211,15 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
 
         // NOTE(hansung): why is inuse_rd checked? to prevent WAW?
         wire [3:0] operands_busy = {inuse_rd, inuse_rs1, inuse_rs2, inuse_rs3};
+    `ifdef EXT_T_HOPPER
+        wire hgmma_wait = ibuffer_if[i].valid &&
+            (ibuffer_if[i].data.ex_type == `EX_BITS'(`EX_TENSOR)) &&
+            (ibuffer_if[i].data.op_type == `INST_TENSOR_HGMMA_WAIT);
+        wire hgmma_ready = ~(hgmma_wait && inuse_tensor[ibuffer_if[i].data.wis]);
+        wire operands_ready = (~(| operands_busy)) && hgmma_ready;
+    `else
         wire operands_ready = ~(| operands_busy);
+    `endif
         
         wire stg_valid_in, stg_ready_in;
         assign stg_valid_in = ibuffer_if[i].valid && operands_ready;
@@ -227,6 +241,7 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
         always @(posedge clk) begin
             if (reset) begin
                 inuse_regs <= '0;
+                inuse_tensor <= '0;
             end else begin
                 if (writeback_fire) begin
                     inuse_regs[writeback_if[i].data.wis][writeback_if[i].data.rd] <= 0;            
@@ -234,6 +249,14 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
                 if (ibuffer_if[i].valid && ibuffer_if[i].ready && ibuffer_if[i].data.wb) begin
                     inuse_regs[ibuffer_if[i].data.wis][ibuffer_if[i].data.rd] <= 1;
                 end
+            `ifdef EXT_T_HOPPER
+                if (writeback_fire && writeback_if[i].data.tensor) begin
+                    inuse_tensor[ibuffer_if[i].data.wis] <= 1'b0;
+                end
+                if (ibuffer_if[i].valid && ibuffer_if[i].ready && hgmma_start) begin
+                    inuse_tensor[ibuffer_if[i].data.wis] <= 1'b1;
+                end
+            `endif
             end
         `ifdef PERF_ENABLE
             if (ibuffer_if[i].valid && ibuffer_if[i].ready && ibuffer_if[i].data.wb) begin

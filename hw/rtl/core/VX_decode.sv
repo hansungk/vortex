@@ -543,14 +543,28 @@ module VX_decode  #(
             end
         `ifdef EXT_T_ENABLE
             `INST_EXT4: begin
+            `ifdef EXT_T_HOPPER
+                ex_type = `EX_TENSOR;
+                // tensor core macroop is encoded as r-type
+                if (func3[0]) begin
+                    op_type = `INST_TENSOR_HGMMA_WAIT;
+                end else begin
+                    op_type = `INST_TENSOR_HGMMA;
+                end
+                // rd/rs1/rs2/rs3 unused to prevent hazard stalls at the
+                // scoreboard
+            `else
                 ex_type = `EX_TENSOR;
                 op_type = `INST_TENSOR_HMMA;
                 // tensor core macroop is encoded as r-type
+                // hazard stall logic in the scoreboard will handle
+                // read-after-write dependency on rd -> rs3
                 use_rd = 1;
                 `USED_IREG (rd);
                 `USED_IREG (rs1);
                 `USED_IREG (rs2);
                 `USED_IREG (rs3);
+            `endif
             end
         `endif
             default:;
