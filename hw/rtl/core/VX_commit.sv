@@ -177,7 +177,7 @@ module VX_commit import VX_gpu_pkg::*; #(
     // probably want to change this at some point
     // (i.e. pass a "don't count this towards pending instructions" signal down the pipeline)
     wire [`ISSUE_WIDTH-1:0] final_hmma;
-    // if this is a "ghost" commit generated from the tensor core, don't count
+    // if this is a "ghost" commit generated at the tensor core, don't count
     // toward committed
     wire [`ISSUE_WIDTH-1:0] tensor_ghost;
 `ifdef EXT_T_ENABLE

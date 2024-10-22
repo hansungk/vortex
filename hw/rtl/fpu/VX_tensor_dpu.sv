@@ -290,7 +290,7 @@ module VX_tensor_threadgroup #(
         // d_col_sel: 1, 3, 1, 3
         //
         // substep 0:
-        // [ 0 x 2 x ]
+        // [ 0 x 2 x ] (0~3 is 'i', the dpu id)
         // [ 1 x 3 x ]
         // substep 1:
         // [ x 0 x 2 ]

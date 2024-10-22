@@ -158,9 +158,6 @@ module VX_tensor_hopper_core_block import VX_gpu_pkg::*; #(
             // mark as "ghost" commit.  This will prevent this commit from
             // decrementing from pending_instr buffer
             commit_if.data.tensor = 1'b1;
-            // eop is deliberately set so that we don't underflow the pending_instr
-            // buffer in VX_schedule.  An instruction is considered committed only
-            // when the eop bit is set to one (see VX_commit).
             // only the last ghost commit has eop set, which will trigger
             // scoreboard to clear out the busy bit.
             commit_if.data.eop    = writeback_last;
