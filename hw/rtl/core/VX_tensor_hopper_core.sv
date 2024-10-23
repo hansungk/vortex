@@ -24,65 +24,58 @@ module VX_tensor_hopper_core_block import VX_gpu_pkg::*; #(
         - wb
         - rd
     */
-    wire [`NUM_WARPS-1:0][`UUID_WIDTH-1:0]    execute_if_data_uuid;
-    wire [`NUM_WARPS-1:0][`NW_WIDTH-1:0]      execute_if_data_wid;
-    wire [`NUM_WARPS-1:0][NUM_LANES-1:0]      execute_if_data_tmask;
-    wire [`NUM_WARPS-1:0][`INST_ALU_BITS-1:0] execute_if_data_op_type;
-    wire [`NUM_WARPS-1:0][`XLEN-1:0]          execute_if_data_PC;
-    wire [`NUM_WARPS-1:0]                     execute_if_data_wb;
-    wire [`NUM_WARPS-1:0][`NR_BITS-1:0]       execute_if_data_rd;
+    wire [`UUID_WIDTH-1:0]    execute_if_data_uuid;
+    wire [`NW_WIDTH-1:0]      execute_if_data_wid;
+    wire [NUM_LANES-1:0]      execute_if_data_tmask;
+    wire [`INST_ALU_BITS-1:0] execute_if_data_op_type;
+    wire [`XLEN-1:0]          execute_if_data_PC;
+    wire                      execute_if_data_wb;
+    wire [`NR_BITS-1:0]       execute_if_data_rd;
 
-    wire [`NUM_WARPS-1:0] metadata_queue_fulls;
-    wire [`NUM_WARPS-1:0] metadata_queue_emptys;
+    wire metadata_queue_full;
+    wire metadata_queue_empty;
     // OR not AND; we don't want any warp to be full
-    wire metadata_queue_full = |(metadata_queue_fulls);
     assign execute_if.ready = !metadata_queue_full;
-
-    `RUNTIME_ASSERT((!execute_if.valid || execute_if.data.wid == `NW_WIDTH'(0)),
-        ("runtime error: WGMMA execute not supported for warps other than 0!"))
 
     logic metadata_deq;
 
-    for (genvar i = 0; i < `NUM_WARPS; i++) begin
-        // Metadata queue for commit_if.  This simply copies execute_if's
-        // metadata and pops them in conjunction with commit fire.
-        //
-        // This has to be separated per-warp, as otherwise requests from
-        // multiple warps can be enqueued interleaved, which makes it hard to
-        // ensure two consecutive dequeues are associated with the same warp for
-        // commit. (FIXME: this is not strictly necessary though.)
+    // Metadata queue for commit_if.  This simply copies execute_if's
+    // metadata and pops them in conjunction with commit fire.
+    //
+    // Note both HGMMA and HGMMA_WAIT will be enqueued here, interleaved
+    // between different warps.  There is a slight chance that an HGMMA_WAIT
+    // might be blocked from commit when there are multiple different-warp
+    // HGMMAs blocking the dequeue end, so keep an eye on those cases.
 
-        wire operand_enq_fire = execute_if.valid && execute_if.ready;
-        wire enq = operand_enq_fire && (execute_if.data.wid == `NW_WIDTH'(i));
-        // FIXME: commit only warp 0
-        wire deq = metadata_deq && (`NW_WIDTH'(i) == `NW_WIDTH'(0));
+    wire operand_enq_fire = execute_if.valid && execute_if.ready;
+    wire enq = operand_enq_fire;
+    wire deq = metadata_deq;
 
-        localparam DATAW = `UUID_WIDTH + `NW_WIDTH + `NUM_THREADS + `INST_ALU_BITS + `XLEN + 1 + `NR_BITS;
-        VX_fifo_queue #(
-            .DATAW(DATAW),
-            .DEPTH(METADATA_QUEUE_DEPTH)
-        ) pending_uops (
-            .clk(clk),
-            .reset(reset),
-            .push(enq),
-            .pop(deq),
-            .data_in({execute_if.data.uuid,  execute_if.data.wid,
-                      execute_if.data.tmask, execute_if.data.op_type, execute_if.data.PC,
-                      execute_if.data.wb,    execute_if.data.rd}),
-            .data_out({execute_if_data_uuid[i],  execute_if_data_wid[i],
-                       execute_if_data_tmask[i], execute_if_data_op_type[i], execute_if_data_PC[i],
-                       execute_if_data_wb[i],    execute_if_data_rd[i]}),
-            .empty(metadata_queue_emptys[i]),
-            `UNUSED_PIN(alm_empty),
-            .full(metadata_queue_fulls[i]),
-            `UNUSED_PIN(alm_full),
-            `UNUSED_PIN(size)
-        );
-    end
+    localparam DATAW = `UUID_WIDTH + `NW_WIDTH + `NUM_THREADS + `INST_ALU_BITS + `XLEN + 1 + `NR_BITS;
+    VX_fifo_queue #(
+        .DATAW(DATAW),
+        .DEPTH(METADATA_QUEUE_DEPTH)
+    ) pending_uops (
+        .clk(clk),
+        .reset(reset),
+        .push(enq),
+        .pop(deq),
+        .data_in({execute_if.data.uuid,  execute_if.data.wid,
+                  execute_if.data.tmask, execute_if.data.op_type, execute_if.data.PC,
+                  execute_if.data.wb,    execute_if.data.rd}),
+        .data_out({execute_if_data_uuid,  execute_if_data_wid,
+                   execute_if_data_tmask, execute_if_data_op_type, execute_if_data_PC,
+                   execute_if_data_wb,    execute_if_data_rd}),
+        .empty(metadata_queue_empty),
+        `UNUSED_PIN(alm_empty),
+        .full(metadata_queue_full),
+        `UNUSED_PIN(alm_full),
+        `UNUSED_PIN(size)
+    );
 
     // NOTE: this is not an error but tells us if backend doesn't keep up with
     // HGMMA calls from the kernel
-    `RUNTIME_ASSERT(!(!reset && metadata_queue_full), ("tensor core uop queue is full!"))
+    // `RUNTIME_ASSERT(!(!reset && metadata_queue_full), ("tensor core uop queue is full!"))
 
     wire initiate_ready;
     wire writeback_valid;
@@ -92,12 +85,12 @@ module VX_tensor_hopper_core_block import VX_gpu_pkg::*; #(
     logic writeback_ready;
     wire [`NUM_THREADS-1:0][`XLEN-1:0] writeback_data;
 
-    wire metadata_valid = ~metadata_queue_emptys[0/*FIXME*/];
+    wire metadata_valid = !metadata_queue_empty;
     wire hmma_wait = metadata_valid &&
-                     (execute_if_data_op_type[0/*FIXME*/] == `INST_TENSOR_HGMMA_WAIT);
+                     (execute_if_data_op_type == `INST_TENSOR_HGMMA_WAIT);
     // skip HGMMA_WAIT for kickoff
     wire initiate_valid = metadata_valid && !hmma_wait;
-    wire [`NW_WIDTH-1:0] initiate_wid = execute_if_data_wid[0/*FIXME*/];
+    wire [`NW_WIDTH-1:0] initiate_wid = execute_if_data_wid;
 
     // we're recycling execute_if.op_type as operands_if.op_type which might
     // have a different width; let's be safe
@@ -216,12 +209,12 @@ module VX_tensor_hopper_core_block import VX_gpu_pkg::*; #(
             commit_if.data.eop    = writeback_last;
         end else begin
             commit_if.valid       = metadata_valid;
-            commit_if.data.uuid   = execute_if_data_uuid[0];
-            commit_if.data.wid    = execute_if_data_wid[0];
-            commit_if.data.tmask  = execute_if_data_tmask[0];
-            commit_if.data.PC     = execute_if_data_PC[0];
-            commit_if.data.wb     = execute_if_data_wb[0];
-            commit_if.data.rd     = execute_if_data_rd[0];
+            commit_if.data.uuid   = execute_if_data_uuid;
+            commit_if.data.wid    = execute_if_data_wid;
+            commit_if.data.tmask  = execute_if_data_tmask;
+            commit_if.data.PC     = execute_if_data_PC;
+            commit_if.data.wb     = execute_if_data_wb;
+            commit_if.data.rd     = execute_if_data_rd;
             commit_if.data.data   = '0; // can be arbitrary as rd is zero
             commit_if.data.tensor = 1'b0;
             commit_if.data.pid    = 1'b0;
