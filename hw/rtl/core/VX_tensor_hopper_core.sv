@@ -87,18 +87,27 @@ module VX_tensor_hopper_core_block import VX_gpu_pkg::*; #(
     wire initiate_ready;
     wire writeback_valid;
     wire writeback_last;
+    wire [`NW_WIDTH-1:0] writeback_wid;
+    wire [4:0] writeback_rd; // tensor writeback IO has 0~31 rd
     logic writeback_ready;
+    wire [`NUM_THREADS-1:0][`XLEN-1:0] writeback_data;
 
     wire metadata_valid = ~metadata_queue_emptys[0/*FIXME*/];
     wire hmma_wait = metadata_valid &&
-                     (execute_if_data_op_type[0] == `INST_TENSOR_HGMMA_WAIT);
+                     (execute_if_data_op_type[0/*FIXME*/] == `INST_TENSOR_HGMMA_WAIT);
     // skip HGMMA_WAIT for kickoff
     wire initiate_valid = metadata_valid && !hmma_wait;
+    wire [`NW_WIDTH-1:0] initiate_wid = execute_if_data_wid[0/*FIXME*/];
 
     // we're recycling execute_if.op_type as operands_if.op_type which might
     // have a different width; let's be safe
     `STATIC_ASSERT((`INST_ALU_BITS == `INST_OP_BITS),
         ("static assertion failed: `INST_ALU_BITS != `INST_OP_BITS"))
+
+    `STATIC_ASSERT((`NUM_THREADS == 8),
+        ("static assertion failed: tensor_hopper_core only supports NUM_THREADS == 8"))
+    `STATIC_ASSERT((`XLEN == 32),
+        ("static assertion failed: tensor_hopper_core only supports XLEN == 32"))
 
     TensorCoreDecoupled tensor_hopper_core (
         .clock(clk),
@@ -106,21 +115,21 @@ module VX_tensor_hopper_core_block import VX_gpu_pkg::*; #(
 
         .io_initiate_ready(initiate_ready),
         .io_initiate_valid(initiate_valid),
-        .io_initiate_bits_wid(`NW_WIDTH'(0)/*FIXME*/),
+        .io_initiate_bits_wid(initiate_wid),
 
         .io_writeback_ready(writeback_ready),
         .io_writeback_valid(writeback_valid),
         .io_writeback_bits_last(writeback_last),
-        .io_writeback_bits_wid(/*unused*/),
-        .io_writeback_bits_rd(/*unused*/),
-        .io_writeback_bits_data_0(/*unused*/),
-        .io_writeback_bits_data_1(/*unused*/),
-        .io_writeback_bits_data_2(/*unused*/),
-        .io_writeback_bits_data_3(/*unused*/),
-        .io_writeback_bits_data_4(/*unused*/),
-        .io_writeback_bits_data_5(/*unused*/),
-        .io_writeback_bits_data_6(/*unused*/),
-        .io_writeback_bits_data_7(/*unused*/),
+        .io_writeback_bits_wid(writeback_wid),
+        .io_writeback_bits_rd(writeback_rd),
+        .io_writeback_bits_data_0(writeback_data[0]),
+        .io_writeback_bits_data_1(writeback_data[1]),
+        .io_writeback_bits_data_2(writeback_data[2]),
+        .io_writeback_bits_data_3(writeback_data[3]),
+        .io_writeback_bits_data_4(writeback_data[4]),
+        .io_writeback_bits_data_5(writeback_data[5]),
+        .io_writeback_bits_data_6(writeback_data[6]),
+        .io_writeback_bits_data_7(writeback_data[7]),
 
         .io_respA_ready(smem_A_if.rsp_ready),
         .io_respA_valid(smem_A_if.rsp_valid),
@@ -156,7 +165,6 @@ module VX_tensor_hopper_core_block import VX_gpu_pkg::*; #(
     //     .writeback_ready(writeback_ready)
     // );
 
-    wire [`NUM_THREADS-1:0][`XLEN-1:0] wb_data = '0;
     logic commit_select_tensor;
 
     always @(*) begin
@@ -193,12 +201,13 @@ module VX_tensor_hopper_core_block import VX_gpu_pkg::*; #(
         if (commit_select_tensor) begin
             commit_if.valid       = writeback_valid;
             commit_if.data.uuid   = '0;
-            commit_if.data.wid    = '0; // FIXME
+            commit_if.data.wid    = writeback_wid;
             commit_if.data.tmask  = {NUM_LANES{1'b1}};
             commit_if.data.PC     = '0;
             commit_if.data.wb     = writeback_last;
-            commit_if.data.rd     = (`NR_BITS'(`NUM_IREGS) + `NR_BITS'(4'd3/*FIXME*/));
-            commit_if.data.data   = wb_data;
+            // writeback_rd is 0-based
+            commit_if.data.rd     = (`NR_BITS'(`NUM_IREGS) + {1'b0, writeback_rd});
+            commit_if.data.data   = writeback_data;
             // mark as "ghost" commit.  This will prevent this commit from
             // decrementing from pending_instr buffer
             commit_if.data.tensor = 1'b1;
@@ -213,7 +222,7 @@ module VX_tensor_hopper_core_block import VX_gpu_pkg::*; #(
             commit_if.data.PC     = execute_if_data_PC[0];
             commit_if.data.wb     = execute_if_data_wb[0];
             commit_if.data.rd     = execute_if_data_rd[0];
-            commit_if.data.data   = wb_data; // FIXME ?
+            commit_if.data.data   = '0; // FIXME ?
             commit_if.data.tensor = 1'b0;
             commit_if.data.pid    = 1'b0;
             commit_if.data.sop    = 1'b1;
