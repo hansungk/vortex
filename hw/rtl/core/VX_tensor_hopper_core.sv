@@ -80,8 +80,8 @@ module VX_tensor_hopper_core_block import VX_gpu_pkg::*; #(
         );
     end
 
-    // this shouldn't really happen unless there's a big contention over
-    // the commit stage
+    // NOTE: this is not an error but tells us if backend doesn't keep up with
+    // HGMMA calls from the kernel
     `RUNTIME_ASSERT(!(!reset && metadata_queue_full), ("tensor core uop queue is full!"))
 
     wire initiate_ready;
@@ -222,7 +222,7 @@ module VX_tensor_hopper_core_block import VX_gpu_pkg::*; #(
             commit_if.data.PC     = execute_if_data_PC[0];
             commit_if.data.wb     = execute_if_data_wb[0];
             commit_if.data.rd     = execute_if_data_rd[0];
-            commit_if.data.data   = '0; // FIXME ?
+            commit_if.data.data   = '0; // can be arbitrary as rd is zero
             commit_if.data.tensor = 1'b0;
             commit_if.data.pid    = 1'b0;
             commit_if.data.sop    = 1'b1;

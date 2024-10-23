@@ -209,13 +209,15 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
         assign perf_issue_fires_per_cycle[i] = ibuffer_if[i].valid && ibuffer_if[i].ready;
     `endif
 
-        // NOTE(hansung): why is inuse_rd checked? to prevent WAW?
         wire [3:0] operands_busy = {inuse_rd, inuse_rs1, inuse_rs2, inuse_rs3};
     `ifdef EXT_T_HOPPER
         wire hgmma_wait = ibuffer_if[i].valid &&
             (ibuffer_if[i].data.ex_type == `EX_BITS'(`EX_TENSOR)) &&
             (ibuffer_if[i].data.op_type == `INST_TENSOR_HGMMA_WAIT);
-        wire hgmma_ready = ~(hgmma_wait && inuse_tensor[ibuffer_if[i].data.wis]);
+        // block both HGMMA and HGMMA_WAIT until inuse goes down.  If we pass
+        // HGMMA through, we can't accurately keep track of the busy state of
+        // the tensor core and block WAITs accordingly.
+        wire hgmma_ready = !inuse_tensor[ibuffer_if[i].data.wis];
         wire operands_ready = (~(| operands_busy)) && hgmma_ready;
     `else
         wire operands_ready = ~(| operands_busy);
