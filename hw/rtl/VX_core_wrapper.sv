@@ -7,6 +7,7 @@ module Vortex import VX_gpu_pkg::*; #(
     parameter TENSOR_FP16 = 0,
     parameter BOOTROM_HANG100 = 32'h10100,
     parameter NUM_THREADS = 0,
+    parameter TC_DATA_WIDTH = 256,
     parameter TC_TAG_WIDTH = 4
 ) (
 
@@ -82,7 +83,7 @@ module Vortex import VX_gpu_pkg::*; #(
     output [2 * TC_TAG_WIDTH - 1:0] tc_a_bits_tag,
     output [1:0]   tc_d_ready,
     input  [1:0]   tc_d_valid,
-    input  [511:0] tc_d_bits_data,
+    input  [2 * TC_DATA_WIDTH - 1:0] tc_d_bits_data,
     input  [2 * TC_TAG_WIDTH - 1:0] tc_d_bits_tag,
 
     // gbar ------------------------------------------------
@@ -308,12 +309,12 @@ module Vortex import VX_gpu_pkg::*; #(
     assign tc_a_bits_tag = {tc_p1_bus_if.req_data.tag, tc_p0_bus_if.req_data.tag};
     assign tc_p0_bus_if.req_ready = tc_a_ready[0];
     assign tc_p0_bus_if.rsp_valid = tc_d_valid[0];
-    assign tc_p0_bus_if.rsp_data.data = tc_d_bits_data[0];
-    assign tc_p0_bus_if.rsp_data.tag = tc_d_bits_tag[0];
+    assign tc_p0_bus_if.rsp_data.data = tc_d_bits_data[0 * TC_DATA_WIDTH +: TC_DATA_WIDTH];
+    assign tc_p0_bus_if.rsp_data.tag = tc_d_bits_tag[0 * TC_TAG_WIDTH +: TC_TAG_WIDTH];
     assign tc_p1_bus_if.req_ready = tc_a_ready[1];
     assign tc_p1_bus_if.rsp_valid = tc_d_valid[1];
-    assign tc_p1_bus_if.rsp_data.data = tc_d_bits_data[1];
-    assign tc_p1_bus_if.rsp_data.tag = tc_d_bits_tag[1];
+    assign tc_p1_bus_if.rsp_data.data = tc_d_bits_data[1 * TC_DATA_WIDTH +: TC_DATA_WIDTH];
+    assign tc_p1_bus_if.rsp_data.tag = tc_d_bits_tag[1 * TC_TAG_WIDTH +: TC_TAG_WIDTH];
     assign tc_d_ready = {tc_p1_bus_if.rsp_ready, tc_p0_bus_if.rsp_ready};
 
     // gbar -------------------------------------------------------------------
@@ -447,8 +448,8 @@ module Vortex import VX_gpu_pkg::*; #(
         .gbar_bus_if    (gbar_bus_if),
     `endif
 
-        .tc_p0_bus_if   (tc_p0_bus_if),
-        .tc_p1_bus_if   (tc_p1_bus_if),
+        .tensor_smem_A_if (tc_p0_bus_if),
+        .tensor_smem_B_if (tc_p1_bus_if),
 
         .sim_ebreak     (sim_ebreak),
         .sim_wb_value   (sim_wb_value),
