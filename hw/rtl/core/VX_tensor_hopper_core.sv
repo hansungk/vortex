@@ -90,9 +90,10 @@ module VX_tensor_hopper_core_block import VX_gpu_pkg::*; #(
     logic writeback_ready;
 
     wire metadata_valid = ~metadata_queue_emptys[0/*FIXME*/];
-    wire not_wait = metadata_valid && (execute_if_data_op_type[0] != `INST_TENSOR_HGMMA_WAIT);
+    wire hmma_wait = metadata_valid &&
+                     (execute_if_data_op_type[0] == `INST_TENSOR_HGMMA_WAIT);
     // skip HGMMA_WAIT for kickoff
-    wire initiate_valid = metadata_valid && not_wait;
+    wire initiate_valid = metadata_valid && !hmma_wait;
 
     // we're recycling execute_if.op_type as operands_if.op_type which might
     // have a different width; let's be safe
@@ -156,40 +157,40 @@ module VX_tensor_hopper_core_block import VX_gpu_pkg::*; #(
     // );
 
     wire [`NUM_THREADS-1:0][`XLEN-1:0] wb_data = '0;
+    logic commit_select_tensor;
 
     always @(*) begin
         metadata_deq = 1'b0;
 
-        // if there's something in the meta queue, give it priority for commit,
-        // since every HGMMA instructions are asynchronous and should not
-        // block
+        // 1'b0: commit from metadata queue
+        // 1'b1: commit from tensor core writeback output
+        commit_select_tensor = 1'b0;
+
+        writeback_ready = commit_if.ready;
+
+        // if there's something in the meta queue, give it priority for commit
+        // to keep asynchrony of HGMMA instructions.  note HGMMA's should be
+        // stalled if the tensor core is already busy.
         if (metadata_valid) begin
-            // block tensor core writeback
-            writeback_ready = 1'b0;
+            if (hmma_wait) begin
+                // block tensor core writeback
+                writeback_ready = 1'b0;
 
-            commit_if.valid       = metadata_valid;
-            commit_if.data.uuid   = execute_if_data_uuid[0];
-            commit_if.data.wid    = execute_if_data_wid[0];
-            commit_if.data.tmask  = execute_if_data_tmask[0];
-            commit_if.data.PC     = execute_if_data_PC[0];
-            commit_if.data.wb     = execute_if_data_wb[0];
-            commit_if.data.rd     = execute_if_data_rd[0];
-            commit_if.data.data   = wb_data; // FIXME ?
-            commit_if.data.tensor = 1'b0;
-            commit_if.data.pid    = 1'b0;
-            commit_if.data.sop    = 1'b1;
-            commit_if.data.eop    = 1'b1;
-
-            // block meta queue until tensor core is ready.  This will
-            // effectively stall further issue of async HGMMA when tensor core
-            // is busy with too many outstanding requests (depth of meta queue).
-            // be careful to not miss the commit backpressure.
-            metadata_deq = metadata_valid && commit_if.ready && initiate_ready;
+                // commit HGMMA_WAIT regardless of tensor core busy
+                commit_select_tensor = 1'b0;
+                metadata_deq = metadata_valid && commit_if.ready;
+            end else begin
+                // hold commit and meta dequeue until tensor core is ready.
+                // This will stall newer HGMMAs when tensor core is already
+                // busy with an older one.
+                commit_select_tensor = !initiate_ready;
+                metadata_deq = metadata_valid && commit_if.ready && initiate_ready;
+            end
         end else begin
-            // allow tensor core writeback, provided there's no commit
-            // backpressure
-            writeback_ready = commit_if.ready;
+            commit_select_tensor = 1'b1;
+        end
 
+        if (commit_select_tensor) begin
             commit_if.valid       = writeback_valid;
             commit_if.data.uuid   = '0;
             commit_if.data.wid    = '0; // FIXME
@@ -204,6 +205,19 @@ module VX_tensor_hopper_core_block import VX_gpu_pkg::*; #(
             // only the last ghost commit has eop set, which will trigger
             // scoreboard to clear out the busy bit.
             commit_if.data.eop    = writeback_last;
+        end else begin
+            commit_if.valid       = metadata_valid;
+            commit_if.data.uuid   = execute_if_data_uuid[0];
+            commit_if.data.wid    = execute_if_data_wid[0];
+            commit_if.data.tmask  = execute_if_data_tmask[0];
+            commit_if.data.PC     = execute_if_data_PC[0];
+            commit_if.data.wb     = execute_if_data_wb[0];
+            commit_if.data.rd     = execute_if_data_rd[0];
+            commit_if.data.data   = wb_data; // FIXME ?
+            commit_if.data.tensor = 1'b0;
+            commit_if.data.pid    = 1'b0;
+            commit_if.data.sop    = 1'b1;
+            commit_if.data.eop    = 1'b1;
         end
     end
 
