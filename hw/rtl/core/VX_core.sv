@@ -39,8 +39,8 @@ module VX_core import VX_gpu_pkg::*; #(
 
     VX_mem_bus_if.master    icache_bus_if,
 
-    VX_tc_bus_if.master     tc_p0_bus_if,
-    VX_tc_bus_if.master     tc_p1_bus_if,
+    VX_tc_bus_if.master     tensor_smem_A_if,
+    VX_tc_bus_if.master     tensor_smem_B_if,
 
 `ifdef GBAR_ENABLE
     VX_gbar_bus_if.master   gbar_bus_if,
@@ -220,6 +220,10 @@ module VX_core import VX_gpu_pkg::*; #(
     `ifdef EXT_T_ENABLE
         .tensor_dispatch_if (tensor_dispatch_if),
         .tensor_commit_if (tensor_commit_if),
+    `ifdef EXT_T_HOPPER
+        .tensor_smem_A_if (tensor_smem_A_if),
+        .tensor_smem_B_if (tensor_smem_B_if),
+    `endif
     `endif
 
         .commit_csr_if  (commit_csr_if),

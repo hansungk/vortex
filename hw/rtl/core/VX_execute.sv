@@ -58,6 +58,8 @@ module VX_execute import VX_gpu_pkg::*; #(
 `ifdef EXT_T_ENABLE
     VX_dispatch_if.slave    tensor_dispatch_if [`ISSUE_WIDTH],
     VX_commit_if.master     tensor_commit_if [`ISSUE_WIDTH],
+    VX_tc_bus_if.master     tensor_smem_A_if,
+    VX_tc_bus_if.master     tensor_smem_B_if,
 `endif
 
     // simulation helper signals
@@ -151,6 +153,10 @@ module VX_execute import VX_gpu_pkg::*; #(
         .reset(reset),
 
         .dispatch_if(tensor_dispatch_if),
+`ifdef EXT_T_HOPPER
+        .smem_A_if(tensor_smem_A_if),
+        .smem_B_if(tensor_smem_B_if),
+`endif
         .commit_if(tensor_commit_if)
     );
 `endif

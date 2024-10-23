@@ -9,6 +9,8 @@ module VX_tensor_hopper_core_block import VX_gpu_pkg::*; #(
     input reset,
 
     VX_execute_if.slave execute_if,
+    VX_tc_bus_if.master smem_A_if,
+    VX_tc_bus_if.master smem_B_if,
     VX_commit_if.master commit_if
 );
     localparam NUM_LANES = `NUM_THREADS;
@@ -107,7 +109,7 @@ module VX_tensor_hopper_core_block import VX_gpu_pkg::*; #(
 
         .io_writeback_ready(writeback_ready),
         .io_writeback_valid(writeback_valid),
-        .io_writeback_bits_last(/*unused*/),
+        .io_writeback_bits_last(writeback_last),
         .io_writeback_bits_wid(/*unused*/),
         .io_writeback_bits_rd(/*unused*/),
         .io_writeback_bits_data_0(/*unused*/),
@@ -119,23 +121,23 @@ module VX_tensor_hopper_core_block import VX_gpu_pkg::*; #(
         .io_writeback_bits_data_6(/*unused*/),
         .io_writeback_bits_data_7(/*unused*/),
 
-        .io_respA_ready(/*unused*/),
-        .io_respA_valid(1'b0/*FIXME*/),
-        .io_respA_bits_source(2'b0/*FIXME*/),
-        .io_respA_bits_data(256'b0/*FIXME*/),
-        .io_respB_ready(/*unused*/),
-        .io_respB_valid(1'b0/*FIXME*/),
-        .io_respB_bits_source(2'b0/*FIXME*/),
-        .io_respB_bits_data(256'b0/*FIXME*/),
+        .io_respA_ready(smem_A_if.rsp_ready),
+        .io_respA_valid(smem_A_if.rsp_valid),
+        .io_respA_bits_source(smem_A_if.rsp_data.tag),
+        .io_respA_bits_data(smem_A_if.rsp_data.data),
+        .io_respB_ready(smem_B_if.rsp_ready),
+        .io_respB_valid(smem_B_if.rsp_valid),
+        .io_respB_bits_source(smem_B_if.rsp_data.tag),
+        .io_respB_bits_data(smem_B_if.rsp_data.data),
 
-        .io_reqA_ready(1'b0/*FIXME*/),
-        .io_reqA_valid(/*unused*/),
-        .io_reqA_bits_source(/*unused*/),
-        .io_reqA_bits_address(/*unused*/),
-        .io_reqB_ready(1'b0/*FIXME*/),
-        .io_reqB_valid(/*unused*/),
-        .io_reqB_bits_source(/*unused*/),
-        .io_reqB_bits_address(/*unused*/)
+        .io_reqA_ready(smem_A_if.req_ready),
+        .io_reqA_valid(smem_A_if.req_valid),
+        .io_reqA_bits_source(smem_A_if.req_data.tag),
+        .io_reqA_bits_address(smem_A_if.req_data.addr),
+        .io_reqB_ready(smem_B_if.req_ready),
+        .io_reqB_valid(smem_B_if.req_valid),
+        .io_reqB_bits_source(smem_B_if.req_data.tag),
+        .io_reqB_bits_address(smem_B_if.req_data.addr)
     );
 
     // VX_tensor_hopper_core #(

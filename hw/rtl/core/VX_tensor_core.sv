@@ -8,7 +8,11 @@ module VX_tensor_core import VX_gpu_pkg::*; #(
     input reset,
 
     VX_dispatch_if.slave dispatch_if [`ISSUE_WIDTH],
-    VX_commit_if.master commit_if [`ISSUE_WIDTH]
+`ifdef EXT_T_HOPPER
+    VX_tc_bus_if.master  smem_A_if,
+    VX_tc_bus_if.master  smem_B_if,
+`endif
+    VX_commit_if.master  commit_if [`ISSUE_WIDTH]
 );
     localparam BLOCK_SIZE = 1;
     localparam NUM_LANES  = `NUM_THREADS;
@@ -56,11 +60,21 @@ module VX_tensor_core import VX_gpu_pkg::*; #(
             .ISW(1), // FIXME: not block_idx
             .FP16(FP16)
         ) tensor_hopper_core_block (
-            .clk(clk),
-            .reset(reset),
-            .execute_if(execute_if[block_idx]),
-            .commit_if(commit_block_if[block_idx])
+            .clk        (clk),
+            .reset      (reset),
+            .execute_if (execute_if[block_idx]),
+            .smem_A_if  (smem_A_if),
+            .smem_B_if  (smem_B_if),
+            .commit_if  (commit_block_if[block_idx])
         );
+        // ) tensor_hopper_core_block (
+        //     .clk        (clk),
+        //     .reset      (reset),
+        //     .execute_if (execute_if[block_idx]),
+        //     .smem_A_if  (smem_A_if),
+        //     .smem_B_if  (smem_B_if),
+        //     .commit_if_haha  (commit_block_if[block_idx])
+        // );
 `else
         VX_tensor_core_block #(
             .ISW(1), // FIXME: use block_idx
