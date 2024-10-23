@@ -142,9 +142,12 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
 
     for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin
         reg [`UP(ISSUE_RATIO)-1:0][`NUM_REGS-1:0] inuse_regs;
-        // busy bit for the asynchronous Tensor unit.  Since the ISA does not
-        // have an explicit destination register, use a separate status bit.
-        reg [`UP(ISSUE_RATIO)-1:0] inuse_tensor;
+        // Number of inflight operations in execution in the asynchronous
+        // Tensor unit.  Since the ISA does not specify an explicit destination
+        // register, use a separate status bit.
+        localparam INFLT_WIDTH = 4;
+        reg [`UP(ISSUE_RATIO)-1:0][INFLT_WIDTH-1:0] inflight_tensor;
+        localparam INFLT_MAX = {INFLT_WIDTH{1'b1}};
 
         wire hgmma_start = (ibuffer_if[i].data.ex_type == `EX_BITS'(`EX_TENSOR)) &&
             (ibuffer_if[i].data.op_type == `INST_TENSOR_HGMMA);
@@ -214,10 +217,15 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
         wire hgmma_wait = ibuffer_if[i].valid &&
             (ibuffer_if[i].data.ex_type == `EX_BITS'(`EX_TENSOR)) &&
             (ibuffer_if[i].data.op_type == `INST_TENSOR_HGMMA_WAIT);
-        // block both HGMMA and HGMMA_WAIT until inuse goes down.  If we pass
-        // HGMMA through, we can't accurately keep track of the busy state of
-        // the tensor core and block WAITs accordingly.
-        wire hgmma_ready = !inuse_tensor[ibuffer_if[i].data.wis];
+        // HGMMA is unblocked as long as there is available counter left for
+        // the inflight operations.  This is to ensure back-to-back fire of
+        // the dot product units with minimal downtime.
+        wire hgmma_ready_for_fire = (inflight_tensor[ibuffer_if[i].data.wis] != INFLT_MAX);
+        // HGMMA_WAIT only gets unblocked when all previous HGMMAs have
+        // finished execution and writeback.
+        wire hgmma_ready_for_wait = (inflight_tensor[ibuffer_if[i].data.wis] == INFLT_WIDTH'(0));
+        wire hgmma_ready = (hgmma_wait ? hgmma_ready_for_wait
+                                       : hgmma_ready_for_fire);
         wire operands_ready = (~(| operands_busy)) && hgmma_ready;
     `else
         wire operands_ready = ~(| operands_busy);
@@ -243,7 +251,7 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
         always @(posedge clk) begin
             if (reset) begin
                 inuse_regs <= '0;
-                inuse_tensor <= '0;
+                inflight_tensor <= '0;
             end else begin
                 if (writeback_fire) begin
                     inuse_regs[writeback_if[i].data.wis][writeback_if[i].data.rd] <= 0;            
@@ -253,10 +261,12 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
                 end
             `ifdef EXT_T_HOPPER
                 if (writeback_fire && writeback_if[i].data.tensor) begin
-                    inuse_tensor[ibuffer_if[i].data.wis] <= 1'b0;
+                    inflight_tensor[ibuffer_if[i].data.wis] <=
+                        inflight_tensor[ibuffer_if[i].data.wis] - INFLT_WIDTH'(1);
                 end
                 if (ibuffer_if[i].valid && ibuffer_if[i].ready && hgmma_start) begin
-                    inuse_tensor[ibuffer_if[i].data.wis] <= 1'b1;
+                    inflight_tensor[ibuffer_if[i].data.wis] <=
+                        inflight_tensor[ibuffer_if[i].data.wis] + INFLT_WIDTH'(1);
                 end
             `endif
             end
