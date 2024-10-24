@@ -275,7 +275,7 @@ module VX_reduce_unit #(
         .reset(reset),
         .valid_in(commit_if_valid),
         .ready_in(commit_if_ready),
-        .data_in({execute_if.data.uuid, execute_if.data.wid, stored_tmask, execute_if.data.PC, execute_if.data.wb, execute_if.data.rd, broadcasted_accumulator, stored_pid, stored_sop, stored_eop}),
+        .data_in({execute_if.data.uuid, execute_if.data.wid, stored_tmask, execute_if.data.PC, execute_if.data.wb, execute_if.data.rd, broadcasted_accumulator, 1'b0/*tensor*/, stored_pid, stored_sop, stored_eop}),
 
         .data_out({commit_if.data.uuid, commit_if.data.wid, commit_if.data.tmask, commit_if.data.PC, commit_if.data.wb, commit_if.data.rd, commit_if.data.data, commit_if.data.tensor, commit_if.data.pid, commit_if.data.sop, commit_if.data.eop}),
         .ready_out(commit_if.ready),
