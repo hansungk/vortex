@@ -75,6 +75,22 @@ module VX_issue #(
         .scoreboard_if  (scoreboard_if)
     );
 
+
+    // /*
+    // fake fsm driving tc output
+    reg [11:0] counter;
+    wire tc_rf_valid;
+    wire [4:0] tc_rf_addr;
+    always @(posedge clk) begin
+        if (reset) begin
+            counter <= 12'd1;
+        end else begin
+            counter <= counter + 12'd1;
+        end
+    end
+    assign tc_rf_valid = (counter[6:0] == 7'd0);
+    assign tc_rf_addr = counter[11:7];
+    // */
 `ifdef GPR_DUPLICATED
     VX_operands_dup #(
 `else
@@ -87,7 +103,12 @@ module VX_issue #(
         .reset          (operands_reset), 
         .writeback_if   (writeback_if),
         .scoreboard_if  (scoreboard_if),
-        .operands_if    (operands_if)
+        .operands_if    (operands_if),
+`ifdef GPR_DUPLICATED
+        .tc_rf_valid    ('{`ISSUE_WIDTH{tc_rf_valid}}),
+        .tc_rf_addr     ('{`ISSUE_WIDTH{tc_rf_addr}}),
+        .tc_rf_data     ()
+`endif
     );
 
     VX_dispatch #(

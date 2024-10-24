@@ -24,7 +24,11 @@ module VX_operands_dup import VX_gpu_pkg::*; #(
 
     VX_writeback_if.slave   writeback_if [`ISSUE_WIDTH],
     VX_ibuffer_if.slave     scoreboard_if [`ISSUE_WIDTH],
-    VX_operands_if.master   operands_if [`ISSUE_WIDTH]
+    VX_operands_if.master   operands_if [`ISSUE_WIDTH],
+
+    input wire                                        tc_rf_valid [`ISSUE_WIDTH],
+    input wire [`LOG2UP(`NUM_REGS * ISSUE_RATIO)-1:0] tc_rf_addr  [`ISSUE_WIDTH],
+    output wire         [`NUM_THREADS-1:0][`XLEN-1:0] tc_rf_data  [`ISSUE_WIDTH]
 );
     `UNUSED_PARAM (CORE_ID)
     localparam DATAW = `UUID_WIDTH + ISSUE_WIS_W + `NUM_THREADS + `XLEN + 1 + `EX_BITS + `INST_OP_BITS + `INST_MOD_BITS + 1 + 1 + `XLEN + `NR_BITS;
@@ -100,7 +104,7 @@ module VX_operands_dup import VX_gpu_pkg::*; #(
             .size     (size1[i])
         );
         assign operands_if[i].valid = ~empty1[i];
-        assign scoreboard_if[i].ready = (size1[i] < 2'd2);
+        assign scoreboard_if[i].ready = (size1[i] < 2'd2) && ~tc_rf_valid[i];
 
         // assert (full1[i] == full2[i]);
         // assert (empty1[i] == empty2[i]);
@@ -140,6 +144,7 @@ module VX_operands_dup import VX_gpu_pkg::*; #(
                 `UNUSED_PIN (alm_full),
                 `UNUSED_PIN (size)
             );
+            assign tc_rf_data[i][j] = rs3_data[j];
         end
 
         // GPR banks
@@ -165,7 +170,7 @@ module VX_operands_dup import VX_gpu_pkg::*; #(
             assign gpr_wr_addr = {writeback_if[i].data.wis, writeback_if[i].data.rd};
             assign gpr_rd_addr_rs1 = {scoreboard_if[i].data.wis, scoreboard_if[i].data.rs1};
             assign gpr_rd_addr_rs2 = {scoreboard_if[i].data.wis, scoreboard_if[i].data.rs2};
-            assign gpr_rd_addr_rs3 = {scoreboard_if[i].data.wis, scoreboard_if[i].data.rs3};
+            assign gpr_rd_addr_rs3 = tc_rf_valid[i] ? tc_rf_addr[i] : {scoreboard_if[i].data.wis, scoreboard_if[i].data.rs3};
             // always @(posedge clk) begin
             //     if (reset) begin
             //         gpr_rd_addr_rs1 <= '0;
@@ -184,7 +189,7 @@ module VX_operands_dup import VX_gpu_pkg::*; #(
             assign gpr_wr_addr = writeback_if[i].data.rd;
             assign gpr_rd_addr_rs1 = scoreboard_if[i].data.rs1;
             assign gpr_rd_addr_rs2 = scoreboard_if[i].data.rs2;
-            assign gpr_rd_addr_rs3 = scoreboard_if[i].data.rs3;
+            assign gpr_rd_addr_rs3 = tc_rf_valid[i] ? tc_rf_addr[i] : scoreboard_if[i].data.rs3;
             // always @(posedge clk) begin
             //     if (reset) begin
             //         gpr_rd_addr_rs1 <= '0;
@@ -228,7 +233,7 @@ module VX_operands_dup import VX_gpu_pkg::*; #(
                 .NO_RWCHECK (1)
             ) gpr_ram_rs1 (
                 .clk   (clk),
-                .read  (1'b1),
+                .read  (~tc_rf_valid[i]),
                 `UNUSED_PIN (wren),
             `ifdef GPR_RESET
                 .write (wr_enabled && writeback_if[i].valid && writeback_if[i].data.tmask[j]),
@@ -252,7 +257,7 @@ module VX_operands_dup import VX_gpu_pkg::*; #(
                 .NO_RWCHECK (1)
             ) gpr_ram_rs2(
                 .clk   (clk),
-                .read  (1'b1),
+                .read  (~tc_rf_valid[i]),
                 `UNUSED_PIN (wren),
             `ifdef GPR_RESET
                 .write (wr_enabled && writeback_if[i].valid && writeback_if[i].data.tmask[j]),
