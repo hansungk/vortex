@@ -248,6 +248,20 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
             .ready_out (scoreboard_if[i].ready)
         );
 
+        // inflight_tensor overflow/underflow check
+        `RUNTIME_ASSERT(
+            !(writeback_fire && writeback_if[i].data.tensor) ||
+            inflight_tensor[writeback_if[i].data.wis] != INFLT_WIDTH'(0),
+            ("%t: *** core%0d: wid=%0d, underflow at inflight_tensor!",
+             $time, CORE_ID, wis_to_wid(writeback_if[i].data.wis, i))
+        )
+        `RUNTIME_ASSERT(
+            !(ibuffer_if[i].valid && ibuffer_if[i].ready && hgmma_start) ||
+            inflight_tensor[ibuffer_if[i].data.wis] != INFLT_MAX,
+            ("%t: *** core%0d: wid=%0d, overflow at inflight_tensor!",
+             $time, CORE_ID, wis_to_wid(ibuffer_if[i].data.wis, i))
+        )
+
         always @(posedge clk) begin
             if (reset) begin
                 inuse_regs <= '0;
@@ -261,8 +275,8 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
                 end
             `ifdef EXT_T_HOPPER
                 if (writeback_fire && writeback_if[i].data.tensor) begin
-                    inflight_tensor[ibuffer_if[i].data.wis] <=
-                        inflight_tensor[ibuffer_if[i].data.wis] - INFLT_WIDTH'(1);
+                    inflight_tensor[writeback_if[i].data.wis] <=
+                        inflight_tensor[writeback_if[i].data.wis] - INFLT_WIDTH'(1);
                 end
                 if (ibuffer_if[i].valid && ibuffer_if[i].ready && hgmma_start) begin
                     inflight_tensor[ibuffer_if[i].data.wis] <=
@@ -305,7 +319,9 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
                             $time, CORE_ID, wis_to_wid(ibuffer_if[i].data.wis, i), ibuffer_if[i].data.PC, ibuffer_if[i].data.tmask, timeout_ctr,
                             operands_busy, ibuffer_if[i].data.uuid));
 
-        `RUNTIME_ASSERT(~writeback_fire || inuse_regs[writeback_if[i].data.wis][writeback_if[i].data.rd] != 0,
+        `RUNTIME_ASSERT((~writeback_fire ||
+                         writeback_if[i].data.tensor /* dont check rd for tensor ghost writes */ ||
+                         inuse_regs[writeback_if[i].data.wis][writeback_if[i].data.rd] != 0),
             ("%t: *** core%0d: invalid writeback register: wid=%0d, PC=0x%0h, tmask=%b, rd=%0d (#%0d)",
                 $time, CORE_ID, wis_to_wid(writeback_if[i].data.wis, i), writeback_if[i].data.PC, writeback_if[i].data.tmask, writeback_if[i].data.rd, writeback_if[i].data.uuid));
     `endif

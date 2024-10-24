@@ -89,7 +89,9 @@ module VX_tensor_hopper_core_block import VX_gpu_pkg::*; #(
     wire hmma_wait = metadata_valid &&
                      (execute_if_data_op_type == `INST_TENSOR_HGMMA_WAIT);
     // skip HGMMA_WAIT for kickoff
-    wire initiate_valid = metadata_valid && !hmma_wait;
+    // should be metadata_deq not metadata_valid, since initiate should be
+    // synced with metadata->commit path
+    wire initiate_valid = metadata_deq && !hmma_wait;
     wire [`NW_WIDTH-1:0] initiate_wid = execute_if_data_wid;
 
     // we're recycling execute_if.op_type as operands_if.op_type which might
