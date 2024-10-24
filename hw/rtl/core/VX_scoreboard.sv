@@ -305,7 +305,9 @@ module VX_scoreboard import VX_gpu_pkg::*; #(
                             $time, CORE_ID, wis_to_wid(ibuffer_if[i].data.wis, i), ibuffer_if[i].data.PC, ibuffer_if[i].data.tmask, timeout_ctr,
                             operands_busy, ibuffer_if[i].data.uuid));
 
-        `RUNTIME_ASSERT(~writeback_fire || inuse_regs[writeback_if[i].data.wis][writeback_if[i].data.rd] != 0,
+        `RUNTIME_ASSERT((~writeback_fire ||
+                         writeback_if[i].data.tensor /* dont check rd for tensor ghost writes */ ||
+                         inuse_regs[writeback_if[i].data.wis][writeback_if[i].data.rd] != 0),
             ("%t: *** core%0d: invalid writeback register: wid=%0d, PC=0x%0h, tmask=%b, rd=%0d (#%0d)",
                 $time, CORE_ID, wis_to_wid(writeback_if[i].data.wis, i), writeback_if[i].data.PC, writeback_if[i].data.tmask, writeback_if[i].data.rd, writeback_if[i].data.uuid));
     `endif
