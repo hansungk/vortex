@@ -141,8 +141,10 @@ void thread_block_matmul_gemmini(kernel_arg_t *__UNIFORM__ arg,
           }
 
           if (tile_k == 0) {
+          asm volatile("cisc_start_%=:" ::);
             gemmini_fence();
             GEMMINI_CISC_CMD_I(0);
+          asm volatile("cisc_end_%=:" ::);
           } else if (tile_k & 1) {
             gemmini_fence();
             GEMMINI_CISC_CMD_I(2);

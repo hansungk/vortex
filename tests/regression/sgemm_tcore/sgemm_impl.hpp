@@ -29,7 +29,7 @@ using float_type = float16_t;
 //   (BM*BN) / (TM*TN) == threadblock size >= NT * CORES_PER_CLUSTER
 // * Combining BM * BK >= (BM*BN) / (TM*TN) == threadblock yields
 //   BM <= BK*TM*TN
-#define BM 128
+#define BM ((NUM_CORES == 8) ? 128 : 64)
 #define BN 64
 #if (FP_SIZE == 32)
 #define BK 64
@@ -62,8 +62,8 @@ static_assert(WMITER * WNITER * TCM * TCN * NUM_WARPS * CORES_PER_CLUSTER ==
 #define BK_LOOP 1
 // Whether to transpose smem A tile at GMEM->SMEM (produce), or SMEM->RF
 // (consume).  This is because the tensor core expects the A tile to be stored
-// in column-major order in SMEM, whereas it will be ultimately stored in
-// row-major in the RF.
+// in column-major order in SMEM, so a transpose is necessary if A was stored
+// row-major in GMEM.
 //
 // For correctness, only one of either should be 1.  E.g., PRODUCE 1 CONSUME 0
 // generates the NN kernel where both A and B are stored row-major in GMEM.
@@ -72,8 +72,8 @@ static_assert(WMITER * WNITER * TCM * TCN * NUM_WARPS * CORES_PER_CLUSTER ==
 #define TRANSPOSE_AT_PRODUCE 0
 #define TRANSPOSE_AT_CONSUME 0
 
-#define GEMMINI_DMA 0
-#define GEMMINI_DMA_MN_MAJOR 1
+#define GEMMINI_DMA 1
+#define GEMMINI_DMA_FAST 1
 #if SMEM_SIZE == 0x4000
 #define SMEM_ADDR_Q0 ((float * const) 0xff000000)
 #define SMEM_ADDR_Q1 ((float * const) 0xff001000)
@@ -101,6 +101,7 @@ static_assert(WMITER * WNITER * TCM * TCN * NUM_WARPS * CORES_PER_CLUSTER ==
 enum class MemLayout {
   MN_major,
   K_major,
+  block_row_major, // Gemmini DMA
 };
 
 inline constexpr void map_operand_32lanes(const int tid, int &row, int &col) {
@@ -206,7 +207,7 @@ template <bool use_dma, uint32_t dim_col>
 inline constexpr std::pair<uint32_t, uint32_t>
 remap_to_gemmini_dma_layout(const uint32_t logical_row,
                             const uint32_t logical_col) {
-  static_assert(DIM == 8,
+  static_assert(!use_dma || DIM == 8,
                 "GEMMINI_DMA layout remapping code only written for DIM == 8");
 
   if constexpr (use_dma) {
@@ -253,13 +254,11 @@ inline void wmma_load_a(volatile const T *smem_A, const int local_k,
   constexpr int packed_factor = (std::is_same_v<T, float16_t> ? 2 : 1);
   const int local_k_adjusted = local_k / packed_factor;
 
-  static_assert(!GEMMINI_DMA || (layout == MemLayout::K_major) ||
-                    GEMMINI_DMA_MN_MAJOR,
-                "GEMMINI_DMA only supported for K-major A tile");
   static_assert((layout != MemLayout::K_major) || (FP_SIZE == 32),
                 "fp16 is not really tested for K-major A layout");
 
-  if constexpr (layout == MemLayout::K_major) {
+  if constexpr (layout == MemLayout::K_major ||
+                layout == MemLayout::block_row_major) {
     constexpr int smem_A_cols = leading_dim;
 
     // f8-f15 stores a single row of A
@@ -269,8 +268,9 @@ inline void wmma_load_a(volatile const T *smem_A, const int local_k,
     // if using Gemmini DMA, remap logical row/col to Gemmini's 2-level
     // block-row-major layout
     const auto [smem_row, smem_col] =
-        remap_to_gemmini_dma_layout<GEMMINI_DMA, smem_A_cols>(smem_logical_row,
-                                                              smem_logical_col);
+        remap_to_gemmini_dma_layout<layout == MemLayout::block_row_major,
+                                    smem_A_cols>(smem_logical_row,
+                                                 smem_logical_col);
 
     const volatile uint8_t *smem_addr;
     smem_addr = reinterpret_cast<const volatile uint8_t *>(
@@ -356,8 +356,9 @@ inline void wmma_load_b(const volatile T *smem_B, const int local_k,
                         const int thread_in_warp) {
   asm volatile ("wmma_load_b_start_%=:" :: );
 
-  static_assert(layout == MemLayout::MN_major,
-                "only N-major layout for the B tile is supported");
+  static_assert(
+      layout == MemLayout::MN_major || layout == MemLayout::block_row_major,
+      "only N-major or block-row-major layout are supported for the B tile");
 
   const int tid = thread_in_warp;
   const int tg = tid / 4;
@@ -379,8 +380,9 @@ inline void wmma_load_b(const volatile T *smem_B, const int local_k,
   // if using Gemmini DMA, remap logical row/col to Gemmini's 2-level
   // block-row-major layout
   const auto [smem_row, smem_col] =
-      remap_to_gemmini_dma_layout<GEMMINI_DMA, smem_B_cols>(smem_logical_row,
-                                                            smem_logical_col);
+      remap_to_gemmini_dma_layout<layout == MemLayout::block_row_major,
+                                  smem_B_cols>(smem_logical_row,
+                                               smem_logical_col);
 
   const volatile uint8_t *smem_addr;
   smem_addr = reinterpret_cast<const volatile uint8_t *>(
@@ -388,10 +390,10 @@ inline void wmma_load_b(const volatile T *smem_B, const int local_k,
           smem_B)[smem_B_cols * smem_row + smem_col]);
   // f8-f15 stores a single column of B
   // threads read from different columns; no bank conflicts
-  if constexpr (GEMMINI_DMA) {
-    // for GEMMINI_DMA, moving rows for the next 7 elements in the same column
-    // is the same as moving DIM elements forward in the memory because of the
-    // block-row-major layout
+  if constexpr (layout == MemLayout::block_row_major) {
+    // for the block-row-major layout, moving rows for the next 7 elements in
+    // the same column is the same as moving DIM elements forward in the memory
+    // because of the block-row-major layout
     asm volatile("flw  f8, %0(%1)" :: "i"(DIM * 0 * sizeof(float)), "r"(smem_addr));
     asm volatile("flw  f9, %0(%1)" :: "i"(DIM * 1 * sizeof(float)), "r"(smem_addr));
     asm volatile("flw f10, %0(%1)" :: "i"(DIM * 2 * sizeof(float)), "r"(smem_addr));
@@ -533,7 +535,9 @@ wmma_store(const int thread_in_warp, const int warp_col, const int warp_row,
   asm volatile ("wmma_store_finish_%=:" :: );
 }
 
-inline void threadblock_barrier(const uint32_t barrier_id, const uint32_t count) {
+__attribute__((convergent)) inline void
+threadblock_barrier(const uint32_t barrier_id, const uint32_t count) {
+  asm volatile("" ::: "memory");
   vx_fence();
   vx_barrier(barrier_id, count);
 }
@@ -818,6 +822,10 @@ __attribute__((always_inline)) inline void thread_block_gemm_single_tile(
     if (tid_in_threadblock == 0) {
       gemmini_fence();
     }
+
+    // reconverge after mmio
+    threadblock_barrier(threadblock_id_in_cluster,
+                        warps_per_threadblock_per_core);
   }
 
   if constexpr (write_to_mem) {
@@ -845,9 +853,9 @@ template <
     uint32_t smem_a_dbuf_offset = 0, // byte offset of A
                                      // double-buffer tile in shared
                                      // memory
-    uint32_t smem_b_offset = sizeof(float) * BM * BK, // byte offset of B tile
+    uint32_t smem_b_offset = sizeof(T) * BM * BK, // byte offset of B tile
                                                       // in shared memory
-    uint32_t smem_b_dbuf_offset = sizeof(float) * BM *
+    uint32_t smem_b_dbuf_offset = sizeof(T) * BM *
                                   BK // byte offset of B double-buffer
                                      // tile in shared memory
     >
@@ -903,6 +911,8 @@ inline void thread_block_gemm(const T *A, const T *B, float *C,
   for (uint32_t block_m = block_m_start; block_m < block_m_end; block_m++) {
 #pragma GCC unroll 1
     for (uint32_t block_n = 0; (block_n * BN) < dim_n; block_n++) {
+      asm volatile ("loop_mn_start_%=:" :: );
+
       // clear out accumulators
       initialize_accum_regs<0>();
       initialize_accum_regs<1>();
@@ -911,14 +921,13 @@ inline void thread_block_gemm(const T *A, const T *B, float *C,
         // pipeline initiation
         if (tid_in_threadblock == 0) {
           // configure dma gmem address to load from
-          // FIXME: block_k is wrong
           ROCC_INSTRUCTION_RS1_RS2(
               XCUSTOM_ACC,
               (uint64_t)(A + block_m * BM * dim_k + /*block_k:*/0 * BK),
               (uint64_t)(B + /*block_k:*/0 * BK * dim_n + block_n * BN),
               k_LOOP_WS_CONFIG_ADDRS_AB)
           // GEMMINI_CISC(8) does k_LOOP_WS_CONFIG_STRIDES_AB
-          GEMMINI_CISC_CMD_R((dim_n << 16) | (dim_k << 8) | 8);
+          GEMMINI_CISC_CMD_R((dim_n << 20) | (dim_k << 8) | 8);
           gemmini_fence();
 
           GEMMINI_CISC_CMD_I(10);
@@ -949,6 +958,7 @@ inline void thread_block_gemm(const T *A, const T *B, float *C,
 
 #pragma GCC unroll 1
       for (uint32_t block_k = 0; (block_k * BK) < dim_k; block_k++) {
+        asm volatile("loop_k_start_%=:" ::);
 
         // producer code: GMEM->SMEM memory movement
         // ---------------------------------------------------------------------
@@ -958,20 +968,19 @@ inline void thread_block_gemm(const T *A, const T *B, float *C,
 #if (GEMMINI_DMA == 1)
         if ((tid_in_threadblock == 0) && ((block_k * BK) != (dim_k - BK))) {
           // configure dma gmem address to load from
-          // FIXME: block_k is wrong
           ROCC_INSTRUCTION_RS1_RS2(
               XCUSTOM_ACC,
               (uint64_t)(A + block_m * BM * dim_k + (block_k + 1/*runahead*/) * BK),
               (uint64_t)(B + (block_k + 1/*runahead*/) * BK * dim_n + block_n * BN),
               k_LOOP_WS_CONFIG_ADDRS_AB)
           // GEMMINI_CISC(8) does k_LOOP_WS_CONFIG_STRIDES_AB
-          GEMMINI_CISC_CMD_R((dim_n << 16) | (dim_k << 8) | 8);
-          // gemmini_fence();
+          GEMMINI_CISC_CMD_R((dim_n << 20) | (dim_k << 8) | 8);
+          gemmini_fence();
 
           // block_k is even: opcode 11 (write to local_a_buf)
           // block_k is odd:  opcode 10 (write to local_a)
           const uint32_t opcode = 11 - (block_k & 1);
-          GEMMINI_CISC_CMD_R(opcode);
+          GEMMINI_CISC_CMD_I(opcode);
           // // TODO: branch is probably slow
           // if (block_k & 1) {
           //   GEMMINI_CISC_CMD_I(12);
@@ -1017,6 +1026,10 @@ inline void thread_block_gemm(const T *A, const T *B, float *C,
               /*acc=*/0, /*act=*/NO_ACTIVATION, /*skips=*/skips)
 #endif
         }
+
+        // reconverge after mmio divergence
+        threadblock_barrier(threadblock_id_in_cluster,
+                            warps_per_threadblock_per_core);
 #else
         // move A
         if constexpr (!TRANSPOSE_AT_PRODUCE) {
@@ -1038,10 +1051,10 @@ inline void thread_block_gemm(const T *A, const T *B, float *C,
                             warps_per_threadblock_per_core);
 #endif
 
-#if 0
         // consumer code: SMEM->RF and compute
         // ----------------------------------------------------------------------
         // @perf: this loop spills to stack a lot because of all the flws in
+        asm volatile("dbuf_sel_start_%=:" ::);
         const T *local_a_consume;
         const T *local_b_consume;
         if constexpr (GEMMINI_DMA) {
@@ -1056,17 +1069,29 @@ inline void thread_block_gemm(const T *A, const T *B, float *C,
           // local_b_consume = reinterpret_cast<T *>(
           //     (mask_odd & reinterpret_cast<uintmax_t>(local_b_buf)) |
           //     (mask_even & reinterpret_cast<uintmax_t>(local_b)));
-          local_a_consume = local_a + (block_k & 1) * (BM * BK);
-          local_b_consume = local_b + (block_k & 1) * (BK * BN);
+          local_a_consume = local_a + (block_k & 1) *
+                                          (smem_a_dbuf_offset - smem_a_offset) /
+                                          sizeof(T);
+          local_b_consume = local_b + (block_k & 1) *
+                                          (smem_b_dbuf_offset - smem_b_offset) /
+                                          sizeof(T);
         } else {
           // no double-buffering without DMA
           local_a_consume = local_a;
           local_b_consume = local_b;
         }
+        asm volatile("dbuf_sel_end_%=:" ::);
 
         constexpr MemLayout layout_a =
-            TRANSPOSE_AT_CONSUME ? MemLayout::K_major : MemLayout::MN_major;
-        thread_block_gemm_single_tile<T, layout_a, MemLayout::MN_major,
+            GEMMINI_DMA ? (GEMMINI_DMA_FAST ? MemLayout::MN_major
+                                            : MemLayout::block_row_major)
+                        : (TRANSPOSE_AT_CONSUME ? MemLayout::K_major
+                                                : MemLayout::MN_major);
+        constexpr MemLayout layout_b =
+            GEMMINI_DMA ? (GEMMINI_DMA_FAST ? MemLayout::MN_major
+                                            : MemLayout::block_row_major)
+                        : MemLayout::MN_major;
+        thread_block_gemm_single_tile<T, layout_a, layout_b,
                                       BM, BN, BK, 0, 0,
                                       /*load_accum=*/false,
                                       /*write_to_mem=*/false>(
@@ -1087,7 +1112,8 @@ inline void thread_block_gemm(const T *A, const T *B, float *C,
 
         threadblock_barrier(threadblock_id_in_cluster,
                             warps_per_threadblock_per_core);
-#endif
+
+        asm volatile("loop_k_end_%=:" ::);
       }
 
       if constexpr (write_to_gmem) {
@@ -1102,6 +1128,7 @@ inline void thread_block_gemm(const T *A, const T *B, float *C,
         }
       }
     }
+    asm volatile("loop_mn_end_%=:" ::);
   }
 }
 

@@ -7,7 +7,7 @@
 #include "include/gemmini.h"
 #include "gemmini_mmio.h"
 
-constexpr bool DEBUG = true;
+constexpr bool DEBUG = false;
 
 template <uint32_t tile_dim_row, uint32_t tile_dim_col>
 inline void thread_block_copy_tile(const float *src, float *dest,
@@ -90,19 +90,29 @@ void kernel_body(int task_id, kernel_arg_t *__UNIFORM__ arg) {
   thread_block_gemm<float_type, threads_per_threadblock,
                     /*write_to_gmem=*/true,
                     /*smem_a_offset=*/0,
-                    /*smem_a_dbuf_offset=*/0,
-                    /*smem_b_offset=*/2 * BM * BK * sizeof(float),
-                    /*smem_b_dbuf_offset=*/2 * BM * BK * sizeof(float)>(
-      (const float_type *)arg->addr_a, (const float_type *)arg->addr_b,
-      (float *)arg->addr_c, arg->dim_m, arg->dim_n, arg->dim_k,
-      tid_in_threadblock, threadblocks_per_cluster, threadblock_id_in_cluster,
-      sharedmem_per_threadblock);
+#ifdef GEMMINI_DMA
+                    /*smem_a_dbuf_offset=*/1 * 128 * 128 * sizeof(float_type),
+                    /*smem_b_offset=*/2 * 128 * 128 * sizeof(float_type),
+                    /*smem_b_dbuf_offset=*/3 * 128 * 128 * sizeof(float_type)
+                    // FIXME: above offsets are hardcoded to agree with CISC
+                    // spadQuartile
+#else
+                    /*smem_a_dbuf_offset=*/1 * BM * BK * sizeof(float_type),
+                    /*smem_b_offset=*/2 * BM * BK * sizeof(float_type),
+                    /*smem_b_dbuf_offset=*/(2 * BM * BK + BK * BN) * sizeof(float_type)
+#endif
+                    >((const float_type *)arg->addr_a,
+                      (const float_type *)arg->addr_b, (float *)arg->addr_c,
+                      arg->dim_m, arg->dim_n, arg->dim_k, tid_in_threadblock,
+                      threadblocks_per_cluster, threadblock_id_in_cluster,
+                      sharedmem_per_threadblock);
 
   float *gmem_tmp_d0 = reinterpret_cast<float *>(0xd0000000UL);
   float *gmem_tmp_d1 = reinterpret_cast<float *>(0xd1000000UL);
 
   const float *smem_A = reinterpret_cast<float *>(sharedmem_per_threadblock);
-  const float *smem_B = smem_A + 2 * BM * BK;
+  const float *smem_B = reinterpret_cast<float *>(
+      sharedmem_per_threadblock + 2 * BM * BK * sizeof(float_type));
 
   if constexpr (DEBUG) {
     threadblock_barrier(threadblock_id_in_cluster,

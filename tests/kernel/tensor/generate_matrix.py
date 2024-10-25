@@ -80,9 +80,13 @@ if __name__ == "__main__":
     fp16 = True
     if fp16:
         A_packed = pack_fp16_by_row(A_array)
+        A_swizzled = A_packed.reshape([-1, M * 2])
+        A_swizzled.astype('float16').tofile("input.a.row.bin")
         AT_packed = A_packed.transpose([1, 0, 2])
         AT_swizzled = AT_packed.reshape([-1, M * 2])
         AT_swizzled.astype('float16').tofile("input.a.col.bin")
+        print('A:')
+        print(A_swizzled)
         print('AT:')
         print(AT_swizzled)
         B_packed = pack_fp16_by_column(B_array)

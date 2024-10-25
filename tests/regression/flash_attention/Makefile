@@ -2,8 +2,8 @@ PROJECT = flash_attention
 
 SRCS = main.cpp common.h
 
-VX_SRCS = kernel.cpp
-VX_INCLUDES = ../sgemm_tcore/sgemm_impl.hpp
+VX_SRCS = kernel.gemmini.cpp
+VX_INCLUDES = flash_impl.hpp ../sgemm_tcore/sgemm_impl.hpp
 
 OPTS ?= -n16
 
