@@ -8,9 +8,9 @@
 
 // fp16 16x16
 #define TILE_M 128
-#define TILE_N 128
+#define TILE_N 64
 #define TILE_K 128
-#define BOUND_INST 0x800080008ULL
+#define BOUND_INST 0x800040008ULL
 #define NUM_THREADS_IN_CLUSTER 512
 
 // fp32 8x8
@@ -52,12 +52,12 @@
 #define PRINTF(...) sprintf(PRINT_BUF, __VA_ARGS__)
 // #define PRINTF(...) vx_printf(__VA_ARGS__)
 #define SWISH(beta, x) ((x) / (1 + exp(-(beta) * (x))))
-#define POWER
+//#define POWER
 
 typedef uint16_t smem_elem_t;
 // typedef float smem_elem_t;
 
-inline void threadblock_barrier(unsigned int barrier_id, unsigned int count) {
+inline void threadblock_barrier(unsigned int barrier_id, unsigned int count) __attribute__((convergent)) {
   vx_fence();
   vx_barrier(barrier_id, count);
 }
@@ -79,6 +79,22 @@ void thread_block_matmul_gemmini(kernel_arg_t *__UNIFORM__ arg,
   }
 
   vx_fence();
+  // if (HW_TID() < 128) {
+  //   *((volatile uint32_t *) 0xff000000 + HW_TID()) = HW_TID();
+  //   for (int i = 0; i < 128; i++) {
+  //     if (HW_TID() == i) {
+  //       volatile uint32_t x = *((volatile uint32_t *) 0xff000000 + HW_TID());
+  //       if (x != i) {
+  //         PRINTF("%d ", x);
+  //       }
+  //     }
+  //   }
+  // }
+  // threadblock_barrier(/*barrier_id=*/0, /*count=*/NUM_WARPS);
+  // if (HW_TID() == 0) {
+  //   PRINTF("\n finished\n");
+  // }
+  // threadblock_barrier(/*barrier_id=*/0, /*count=*/NUM_WARPS);
 
   uint32_t marker0, marker1;
   rd_cycles_force(marker0);
@@ -93,24 +109,31 @@ void thread_block_matmul_gemmini(kernel_arg_t *__UNIFORM__ arg,
 
   const uint32_t num_tile_rows_per_tb = num_tiles_m / NUM_CLUSTERS;
 
+  if (HW_TID() == 0) gemmini_fence();
+  threadblock_barrier(3, NUM_WARPS);
+  if (HW_TID() == 0) gemmini_fence();
+  threadblock_barrier(3, NUM_WARPS);
+  if (HW_TID() == 0) gemmini_fence();
+  threadblock_barrier(3, NUM_WARPS);
+  if (HW_TID() == 0) gemmini_fence();
+  threadblock_barrier(3, NUM_WARPS);
+
   if (HW_TID() == 0) {
     gemmini_extended3_config_ld(dim_k * sizeof(elem_t), MVIN_SCALE_IDENTITY, false, 0);
     gemmini_extended3_config_ld(dim_n * sizeof(elem_t), MVIN_SCALE_IDENTITY, false, 1);
     // gemmini_extended3_config_ld(repeating_bias ? 0 : (stride_D * sizeof_D), D_scale_factor, low_D, 2);
     gemmini_extended_config_st(dim_n * sizeof(elem_t), 0, MVIN_SCALE_IDENTITY);
     // gemmini_extended_config_st(stride_C * sizeof_C, act & 3, scale);
-  }
 
-  for (uint32_t tile_i = num_tile_rows_per_tb * threadblock_id;
-                tile_i < num_tile_rows_per_tb * (threadblock_id + 1);
-                tile_i += 1) {
-    for (int tile_j = 0; tile_j < num_tiles_n; tile_j += 1) {
-      if (HW_TID() == 0) {
+    for (uint32_t tile_i = num_tile_rows_per_tb * threadblock_id;
+                  tile_i < num_tile_rows_per_tb * (threadblock_id + 1);
+                  tile_i += 1) {
+      for (int tile_j = 0; tile_j < num_tiles_n; tile_j += 1) {
         for (int tile_k = 0; tile_k < num_tiles_k; tile_k += 1) {
           ROCC_INSTRUCTION_RS1_RS2(XCUSTOM_ACC,
                                    (uint64_t) (A + tile_i * TILE_M * dim_k + tile_k * TILE_K),
                                    (uint64_t) (B + tile_k * TILE_K * dim_n + tile_j * TILE_N), k_LOOP_WS_CONFIG_ADDRS_AB)
-          GEMMINI_CISC_CMD_R((dim_n) << 16 | (dim_k << 8) | 8);
+          GEMMINI_CISC_CMD_R((dim_n << 20) | (dim_k << 8) | 8);
           if (tile_k & 1) {
             GEMMINI_CISC_CMD_I(11);
           } else {
@@ -157,7 +180,7 @@ void thread_block_matmul_gemmini(kernel_arg_t *__UNIFORM__ arg,
     rd_cycles_force(marker1);
     if (HW_TID() == 0) {
       #ifdef POWER
-        PRINTF("%d\n", marker1 - marker0);
+        // PRINTF("%d\n", marker1 - marker0);
       #else
         PRINTF("\ncomplete\n");
         PRINTF("total cycles:         %d\n", marker1 - marker0);
