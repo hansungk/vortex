@@ -63,6 +63,7 @@ module VX_core import VX_gpu_pkg::*; #(
     VX_decode_if        decode_if();
     VX_sched_csr_if     sched_csr_if();
     VX_decode_sched_if  decode_sched_if();
+    VX_tc_rf_if         tensor_regfile_if();
     VX_commit_sched_if  commit_sched_if();
     VX_commit_csr_if    commit_csr_if();
     VX_branch_ctl_if    branch_ctl_if[`NUM_ALU_BLOCKS]();
@@ -190,6 +191,9 @@ module VX_core import VX_gpu_pkg::*; #(
     `endif
     `ifdef EXT_T_ENABLE
         .tensor_dispatch_if(tensor_dispatch_if),
+    `ifdef EXT_T_HOPPER
+        .tensor_regfile_if (tensor_regfile_if),
+    `endif
     `endif
         .sfu_dispatch_if(sfu_dispatch_if)
     );
@@ -221,8 +225,9 @@ module VX_core import VX_gpu_pkg::*; #(
         .tensor_dispatch_if (tensor_dispatch_if),
         .tensor_commit_if (tensor_commit_if),
     `ifdef EXT_T_HOPPER
-        .tensor_smem_A_if (tensor_smem_A_if),
-        .tensor_smem_B_if (tensor_smem_B_if),
+        .tensor_regfile_if (tensor_regfile_if),
+        .tensor_smem_A_if  (tensor_smem_A_if),
+        .tensor_smem_B_if  (tensor_smem_B_if),
     `endif
     `endif
 

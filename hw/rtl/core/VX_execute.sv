@@ -59,6 +59,7 @@ module VX_execute import VX_gpu_pkg::*; #(
     VX_dispatch_if.slave    tensor_dispatch_if [`ISSUE_WIDTH],
     VX_commit_if.master     tensor_commit_if [`ISSUE_WIDTH],
 `ifdef EXT_T_HOPPER
+    VX_tc_rf_if.master      tensor_regfile_if,
     VX_tc_bus_if.master     tensor_smem_A_if,
     VX_tc_bus_if.master     tensor_smem_B_if,
 `endif
@@ -156,6 +157,7 @@ module VX_execute import VX_gpu_pkg::*; #(
 
         .dispatch_if(tensor_dispatch_if),
 `ifdef EXT_T_HOPPER
+        .regfile_if(tensor_regfile_if),
         .smem_A_if(tensor_smem_A_if),
         .smem_B_if(tensor_smem_B_if),
 `endif

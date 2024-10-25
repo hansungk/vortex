@@ -9,6 +9,7 @@ module VX_tensor_core import VX_gpu_pkg::*; #(
 
     VX_dispatch_if.slave dispatch_if [`ISSUE_WIDTH],
 `ifdef EXT_T_HOPPER
+    VX_tc_rf_if.master   regfile_if,
     VX_tc_bus_if.master  smem_A_if,
     VX_tc_bus_if.master  smem_B_if,
 `endif
@@ -63,6 +64,7 @@ module VX_tensor_core import VX_gpu_pkg::*; #(
             .clk        (clk),
             .reset      (reset),
             .execute_if (execute_if[block_idx]),
+            .regfile_if (regfile_if),
             .smem_A_if  (smem_A_if),
             .smem_B_if  (smem_B_if),
             .commit_if  (commit_block_if[block_idx])

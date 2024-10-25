@@ -14,7 +14,7 @@
 `include "VX_define.vh"
 `include "VX_trace.vh"
 
-module VX_issue #(
+module VX_issue import VX_gpu_pkg::*; #(
     parameter CORE_ID = 0
 ) (
     `SCOPE_IO_DECL
@@ -36,6 +36,9 @@ module VX_issue #(
 `endif
 `ifdef EXT_T_ENABLE
     VX_dispatch_if.master   tensor_dispatch_if [`ISSUE_WIDTH],
+`ifdef EXT_T_HOPPER
+    VX_tc_rf_if.slave       tensor_regfile_if,
+`endif
 `endif
     VX_dispatch_if.master   sfu_dispatch_if [`ISSUE_WIDTH]
 );
@@ -75,22 +78,6 @@ module VX_issue #(
         .scoreboard_if  (scoreboard_if)
     );
 
-
-    // /*
-    // fake fsm driving tc output
-    reg [11:0] counter;
-    wire tc_rf_valid;
-    wire [4:0] tc_rf_addr;
-    always @(posedge clk) begin
-        if (reset) begin
-            counter <= 12'd1;
-        end else begin
-            counter <= counter + 12'd1;
-        end
-    end
-    assign tc_rf_valid = (counter[6:0] == 7'd0);
-    assign tc_rf_addr = counter[11:7];
-    // */
 `ifdef GPR_DUPLICATED
     VX_operands_dup #(
 `else
@@ -104,11 +91,7 @@ module VX_issue #(
         .writeback_if   (writeback_if),
         .scoreboard_if  (scoreboard_if),
         .operands_if    (operands_if),
-`ifdef GPR_DUPLICATED
-        .tc_rf_valid    ('{`ISSUE_WIDTH{tc_rf_valid}}),
-        .tc_rf_addr     ('{`ISSUE_WIDTH{tc_rf_addr}}),
-        .tc_rf_data     ()
-`endif
+        .tensor_regfile_if (tensor_regfile_if)
     );
 
     VX_dispatch #(

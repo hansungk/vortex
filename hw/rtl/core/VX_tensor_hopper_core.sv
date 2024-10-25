@@ -9,6 +9,7 @@ module VX_tensor_hopper_core_block import VX_gpu_pkg::*; #(
     input reset,
 
     VX_execute_if.slave execute_if,
+    VX_tc_rf_if.master  regfile_if,
     VX_tc_bus_if.master smem_A_if,
     VX_tc_bus_if.master smem_B_if,
     VX_commit_if.master commit_if
@@ -103,6 +104,21 @@ module VX_tensor_hopper_core_block import VX_gpu_pkg::*; #(
         ("static assertion failed: tensor_hopper_core only supports NUM_THREADS == 8"))
     `STATIC_ASSERT((`XLEN == 32),
         ("static assertion failed: tensor_hopper_core only supports XLEN == 32"))
+
+    // /*
+    // fake fsm driving tc rf port
+    reg [11:0] counter;
+    always @(posedge clk) begin
+        if (reset) begin
+            counter <= 12'd1;
+        end else begin
+            counter <= counter + 12'd1;
+        end
+    end
+    assign regfile_if.req_valid = (counter[3:0] != 4'd0);
+    assign regfile_if.req_data.wis = '0;
+    assign regfile_if.req_data.rs = counter[11:7];
+    // */
 
     TensorCoreDecoupled tensor_hopper_core (
         .clock(clk),

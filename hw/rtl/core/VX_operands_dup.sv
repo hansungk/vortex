@@ -24,11 +24,8 @@ module VX_operands_dup import VX_gpu_pkg::*; #(
 
     VX_writeback_if.slave   writeback_if [`ISSUE_WIDTH],
     VX_ibuffer_if.slave     scoreboard_if [`ISSUE_WIDTH],
-    VX_operands_if.master   operands_if [`ISSUE_WIDTH],
-
-    input wire                                        tc_rf_valid [`ISSUE_WIDTH],
-    input wire [`LOG2UP(`NUM_REGS * ISSUE_RATIO)-1:0] tc_rf_addr  [`ISSUE_WIDTH],
-    output wire         [`NUM_THREADS-1:0][`XLEN-1:0] tc_rf_data  [`ISSUE_WIDTH]
+    VX_tc_rf_if.slave       tensor_regfile_if,
+    VX_operands_if.master   operands_if [`ISSUE_WIDTH]
 );
     `UNUSED_PARAM (CORE_ID)
     localparam DATAW = `UUID_WIDTH + ISSUE_WIS_W + `NUM_THREADS + `XLEN + 1 + `EX_BITS + `INST_OP_BITS + `INST_MOD_BITS + 1 + 1 + `XLEN + `NR_BITS;
@@ -46,6 +43,18 @@ module VX_operands_dup import VX_gpu_pkg::*; #(
     logic [`ISSUE_WIDTH-1:0] empty1;
     logic [`ISSUE_WIDTH-1:0][`NUM_THREADS-1:0] empty2;
     logic [`ISSUE_WIDTH-1:0][2:0] size1;
+
+    wire                                        tc_rf_valid [`ISSUE_WIDTH];
+    wire [`LOG2UP(`NUM_REGS * ISSUE_RATIO)-1:0] tc_rf_addr  [`ISSUE_WIDTH];
+    // FIXME: don't need full ISSUE_WIDTH; only one warp is read at a time
+    // because NUM_BLOCKS == 1
+    wire         [`NUM_THREADS-1:0][`XLEN-1:0]  tc_rf_data  [`ISSUE_WIDTH];
+
+    `STATIC_ASSERT((ISSUE_RATIO == 1),
+        ("static assertion failed: tensor core only supports ISSUE_RATIO == 1"))
+    assign tc_rf_valid = '{`ISSUE_WIDTH{tensor_regfile_if.req_valid}};
+    assign tc_rf_addr  = '{`ISSUE_WIDTH{tensor_regfile_if.req_data.rs}};
+    assign tensor_regfile_if.rsp_data.data = tc_rf_data[0];
 
     for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin
 
@@ -104,7 +113,7 @@ module VX_operands_dup import VX_gpu_pkg::*; #(
             .size     (size1[i])
         );
         assign operands_if[i].valid = ~empty1[i];
-        assign scoreboard_if[i].ready = (size1[i] < 2'd2) && ~tc_rf_valid[i];
+        assign scoreboard_if[i].ready = (size1[i] < 3'd2) && ~tc_rf_valid[i];
 
         // assert (full1[i] == full2[i]);
         // assert (empty1[i] == empty2[i]);
@@ -207,10 +216,10 @@ module VX_operands_dup import VX_gpu_pkg::*; #(
         end
         
     `ifdef GPR_RESET
-        reg wr_enabled = 0;
+        reg wr_enabled = 1'b0;
         always @(posedge clk) begin
             if (reset) begin
-                wr_enabled <= 1;
+                wr_enabled <= 1'b1;
             end
         end
     `endif
