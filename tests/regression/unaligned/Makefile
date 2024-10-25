@@ -1,4 +1,4 @@
-PROJECT = idle
+PROJECT = unaligned
 
 SRCS = main.cpp common.h
 
