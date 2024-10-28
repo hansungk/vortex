@@ -21,15 +21,15 @@ matrix_a = generate_fp16_matrix(size)
 matrix_b = generate_fp16_matrix(size)
 
 # Save the operand matrices to binary files
-# save_matrix_to_bin("input.a.bin", matrix_a)
-# save_matrix_to_bin("input.b.bin", matrix_b)
+save_matrix_to_bin("input.a.bin", matrix_a)
+save_matrix_to_bin("input.b.bin", matrix_b)
 
 # Generate and save the reference matrices for 128x128, 256x256, and 512x512 sizes
 sizes = [128, 256, 512]
 for s in sizes:
     ref_matrix = truncated_matrix_multiplication(matrix_a, matrix_b, s)
     print(ref_matrix)
-    # save_matrix_to_bin(f"ref{s}.bin", ref_matrix)
+    save_matrix_to_bin(f"ref{s}.bin", ref_matrix)
 
 print("All files generated successfully.")
 
