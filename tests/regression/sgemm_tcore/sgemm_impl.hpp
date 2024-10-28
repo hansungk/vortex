@@ -870,18 +870,18 @@ __attribute__((always_inline)) inline void thread_block_gemm_single_tile(
     }
   }
 
-  if constexpr (GEMMINI_DMA) {
-    // Call gemmini fence at the end of the loop to overlap dma & wmma.
-    // Usually, by this time, dma has finished the copy so that this
-    // becomes a no-op.
-    if (tid_in_threadblock == 0) {
-      gemmini_fence();
-    }
+  // if constexpr (GEMMINI_DMA) {
+  //   // Call gemmini fence at the end of the loop to overlap dma & wmma.
+  //   // Usually, by this time, dma has finished the copy so that this
+  //   // becomes a no-op.
+  //   if (tid_in_threadblock == 0) {
+  //     gemmini_fence();
+  //   }
 
-    // reconverge after mmio
-    threadblock_barrier(threadblock_id_in_cluster,
-                        warps_per_threadblock_per_core);
-  }
+  //   // reconverge after mmio
+  //   threadblock_barrier(threadblock_id_in_cluster,
+  //                       warps_per_threadblock_per_core);
+  // }
 
   if constexpr (write_to_mem) {
     // need to protect smem reads in the earlier step from writes in below,
@@ -1135,6 +1135,7 @@ inline void thread_block_gemm(const T *A, const T *B, float *C,
           local_a_consume = local_a;
           local_b_consume = local_b;
         }
+
         asm volatile("dbuf_sel_end_%=:" ::);
 
         constexpr MemLayout layout_a =
