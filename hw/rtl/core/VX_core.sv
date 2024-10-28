@@ -63,7 +63,9 @@ module VX_core import VX_gpu_pkg::*; #(
     VX_decode_if        decode_if();
     VX_sched_csr_if     sched_csr_if();
     VX_decode_sched_if  decode_sched_if();
+`ifdef EXT_T_HOPPER
     VX_tc_rf_if         tensor_regfile_if();
+`endif
     VX_commit_sched_if  commit_sched_if();
     VX_commit_csr_if    commit_csr_if();
     VX_branch_ctl_if    branch_ctl_if[`NUM_ALU_BLOCKS]();

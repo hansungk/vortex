@@ -90,8 +90,12 @@ module VX_issue import VX_gpu_pkg::*; #(
         .reset          (operands_reset), 
         .writeback_if   (writeback_if),
         .scoreboard_if  (scoreboard_if),
+`ifdef EXT_T_HOPPER
         .operands_if    (operands_if),
         .tensor_regfile_if (tensor_regfile_if)
+`else
+        .operands_if    (operands_if)
+`endif
     );
 
     VX_dispatch #(

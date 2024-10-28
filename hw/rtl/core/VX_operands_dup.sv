@@ -24,7 +24,9 @@ module VX_operands_dup import VX_gpu_pkg::*; #(
 
     VX_writeback_if.slave   writeback_if [`ISSUE_WIDTH],
     VX_ibuffer_if.slave     scoreboard_if [`ISSUE_WIDTH],
+`ifdef EXT_T_HOPPER
     VX_tc_rf_if.slave       tensor_regfile_if,
+`endif
     VX_operands_if.master   operands_if [`ISSUE_WIDTH]
 );
     `UNUSED_PARAM (CORE_ID)
@@ -50,11 +52,13 @@ module VX_operands_dup import VX_gpu_pkg::*; #(
     // because NUM_BLOCKS == 1
     wire         [`NUM_THREADS-1:0][`XLEN-1:0]  tc_rf_data  [`ISSUE_WIDTH];
 
+`ifdef EXT_T_HOPPER
     `STATIC_ASSERT((ISSUE_RATIO == 1),
         ("static assertion failed: tensor core only supports ISSUE_RATIO == 1"))
     assign tc_rf_valid = '{`ISSUE_WIDTH{tensor_regfile_if.req_valid}};
     assign tc_rf_addr  = '{`ISSUE_WIDTH{tensor_regfile_if.req_data.rs}};
     assign tensor_regfile_if.rsp_data.data = tc_rf_data[0];
+`endif
 
     for (genvar i = 0; i < `ISSUE_WIDTH; ++i) begin
 
@@ -113,7 +117,11 @@ module VX_operands_dup import VX_gpu_pkg::*; #(
             .size     (size1[i])
         );
         assign operands_if[i].valid = ~empty1[i];
+`ifdef EXT_T_HOPPER
         assign scoreboard_if[i].ready = (size1[i] < 3'd2) && ~tc_rf_valid[i];
+`else
+        assign scoreboard_if[i].ready = (size1[i] < 3'd2);
+`endif
 
         // assert (full1[i] == full2[i]);
         // assert (empty1[i] == empty2[i]);
@@ -153,7 +161,9 @@ module VX_operands_dup import VX_gpu_pkg::*; #(
                 `UNUSED_PIN (alm_full),
                 `UNUSED_PIN (size)
             );
+`ifdef EXT_T_HOPPER
             assign tc_rf_data[i][j] = rs3_data[j];
+`endif
         end
 
         // GPR banks
@@ -179,7 +189,11 @@ module VX_operands_dup import VX_gpu_pkg::*; #(
             assign gpr_wr_addr = {writeback_if[i].data.wis, writeback_if[i].data.rd};
             assign gpr_rd_addr_rs1 = {scoreboard_if[i].data.wis, scoreboard_if[i].data.rs1};
             assign gpr_rd_addr_rs2 = {scoreboard_if[i].data.wis, scoreboard_if[i].data.rs2};
+`ifdef EXT_T_HOPPER
             assign gpr_rd_addr_rs3 = tc_rf_valid[i] ? tc_rf_addr[i] : {scoreboard_if[i].data.wis, scoreboard_if[i].data.rs3};
+`else
+            assign gpr_rd_addr_rs3 = {scoreboard_if[i].data.wis, scoreboard_if[i].data.rs3};
+`endif
             // always @(posedge clk) begin
             //     if (reset) begin
             //         gpr_rd_addr_rs1 <= '0;
@@ -198,7 +212,11 @@ module VX_operands_dup import VX_gpu_pkg::*; #(
             assign gpr_wr_addr = writeback_if[i].data.rd;
             assign gpr_rd_addr_rs1 = scoreboard_if[i].data.rs1;
             assign gpr_rd_addr_rs2 = scoreboard_if[i].data.rs2;
+`ifdef EXT_T_HOPPER
             assign gpr_rd_addr_rs3 = tc_rf_valid[i] ? tc_rf_addr[i] : scoreboard_if[i].data.rs3;
+`else
+            assign gpr_rd_addr_rs3 = {scoreboard_if[i].data.wis, scoreboard_if[i].data.rs3};
+`endif
             // always @(posedge clk) begin
             //     if (reset) begin
             //         gpr_rd_addr_rs1 <= '0;
@@ -242,7 +260,11 @@ module VX_operands_dup import VX_gpu_pkg::*; #(
                 .NO_RWCHECK (1)
             ) gpr_ram_rs1 (
                 .clk   (clk),
+`ifdef EXT_T_HOPPER
                 .read  (~tc_rf_valid[i]),
+`else
+                .read  (1'b1),
+`endif
                 `UNUSED_PIN (wren),
             `ifdef GPR_RESET
                 .write (wr_enabled && writeback_if[i].valid && writeback_if[i].data.tmask[j]),
@@ -266,7 +288,11 @@ module VX_operands_dup import VX_gpu_pkg::*; #(
                 .NO_RWCHECK (1)
             ) gpr_ram_rs2(
                 .clk   (clk),
+`ifdef EXT_T_HOPPER
                 .read  (~tc_rf_valid[i]),
+`else
+                .read  (1'b1),
+`endif
                 `UNUSED_PIN (wren),
             `ifdef GPR_RESET
                 .write (wr_enabled && writeback_if[i].valid && writeback_if[i].data.tmask[j]),
