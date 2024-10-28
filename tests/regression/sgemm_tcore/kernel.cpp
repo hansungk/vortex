@@ -91,9 +91,9 @@ void kernel_body(int task_id, kernel_arg_t *__UNIFORM__ arg) {
                     /*write_to_gmem=*/true,
                     /*smem_a_offset=*/0,
 #ifdef GEMMINI_DMA
-                    /*smem_a_dbuf_offset=*/1 * 128 * 128 * sizeof(float_type),
-                    /*smem_b_offset=*/2 * 128 * 128 * sizeof(float_type),
-                    /*smem_b_dbuf_offset=*/3 * 128 * 128 * sizeof(float_type)
+                    /*smem_a_dbuf_offset=*/1 * 128 * 128 * 2/*fp16*/,
+                    /*smem_b_offset=*/2 * 128 * 128 * 2/*fp16*/,
+                    /*smem_b_dbuf_offset=*/3 * 128 * 128 * 2/*fp16*/
                     // FIXME: above offsets are hardcoded to agree with CISC
                     // spadQuartile
 #else
