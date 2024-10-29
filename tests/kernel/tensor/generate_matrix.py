@@ -54,9 +54,9 @@ if __name__ == "__main__":
         C_array = np.zeros([M, N])
     else:
         np.random.seed(0)
-        A_array = np.random.rand(M, K) - 0.5
-        B_array = np.random.rand(K, N) - 0.5
-        C_array = np.random.rand(N, K) - 0.5
+        A_array = np.random.rand(M, K)
+        B_array = np.random.rand(K, N)
+        C_array = np.random.rand(N, K)
         # C_array = np.zeros([M, N])
 
     with open('a_matrix.h', 'w') as f:
@@ -89,9 +89,13 @@ if __name__ == "__main__":
         print(A_swizzled)
         print('AT:')
         print(AT_swizzled)
+        B_array.astype('float16').tofile("input.b.row.bin")
+        # B_packed_row = pack_fp16_by_row(B_array)
+        # B_packed_row = B_packed_row.reshape([-1, N * 2])
+        # B_packed_row.astype('float16').tofile("input.b.row.bin")
         B_packed = pack_fp16_by_column(B_array)
         B_swizzled = B_packed.reshape([-1, N * 2])
-        B_swizzled.astype('float16').tofile("input.b.row.bin")
+        B_swizzled.astype('float16').tofile("input.b.row.swizzled.bin")
         print('B:')
         print(B_swizzled)
     else:
