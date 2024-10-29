@@ -234,7 +234,7 @@ module VX_tensor_hopper_core_block import VX_gpu_pkg::*; #(
             commit_if.data.wid    = writeback_wid;
             commit_if.data.tmask  = {NUM_LANES{1'b1}};
             commit_if.data.PC     = '0;
-            commit_if.data.wb     = writeback_last;
+            commit_if.data.wb     = 1'b1;
             // writeback_rd is 0-based
             commit_if.data.rd     = (`NR_BITS'(`NUM_IREGS) + {1'b0, writeback_rd});
             commit_if.data.data   = writeback_data;
