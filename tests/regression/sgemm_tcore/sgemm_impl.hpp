@@ -1237,7 +1237,8 @@ inline void thread_block_gemm(const T *A, const T *B, float *C,
                   : block_n;
           const uint32_t next_block_m =
               (next_block_n == 0)
-                  ? ((block_m == block_m_end) ? 0 : block_n + 1)
+                  ? (((block_m + 1) == block_m_end) ? block_m_start /*unused*/
+                                                    : block_m + 1)
                   : block_m;
 
           asm volatile("next_index_end_%=:" ::);
