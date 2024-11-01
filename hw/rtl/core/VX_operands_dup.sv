@@ -260,11 +260,7 @@ module VX_operands_dup import VX_gpu_pkg::*; #(
                 .NO_RWCHECK (1)
             ) gpr_ram_rs1 (
                 .clk   (clk),
-`ifdef EXT_T_HOPPER
-                .read  (~tc_rf_valid[i]),
-`else
-                .read  (1'b1),
-`endif
+                .read  (scoreboard_if[i].valid && scoreboard_if[i].ready), // tc read valid check incl. in ready
                 `UNUSED_PIN (wren),
             `ifdef GPR_RESET
                 .write (wr_enabled && writeback_if[i].valid && writeback_if[i].data.tmask[j]),
@@ -288,11 +284,7 @@ module VX_operands_dup import VX_gpu_pkg::*; #(
                 .NO_RWCHECK (1)
             ) gpr_ram_rs2(
                 .clk   (clk),
-`ifdef EXT_T_HOPPER
-                .read  (~tc_rf_valid[i]),
-`else
-                .read  (1'b1),
-`endif
+                .read  (scoreboard_if[i].valid && scoreboard_if[i].ready), // tc read valid check incl. in ready
                 `UNUSED_PIN (wren),
             `ifdef GPR_RESET
                 .write (wr_enabled && writeback_if[i].valid && writeback_if[i].data.tmask[j]),
@@ -317,6 +309,11 @@ module VX_operands_dup import VX_gpu_pkg::*; #(
             ) gpr_ram_rs3 (
                 .clk   (clk),
                 .read  (1'b1),
+`ifdef EXT_T_HOPPER
+                .read  ((scoreboard_if[i].valid && scoreboard_if[i].ready) || tc_read_valid),
+`else
+                .read  (scoreboard_if[i].valid && scoreboard_if[i].ready),
+`endif
                 `UNUSED_PIN (wren),
             `ifdef GPR_RESET
                 .write (wr_enabled && writeback_if[i].valid && writeback_if[i].data.tmask[j]),
