@@ -309,7 +309,7 @@ module VX_operands_dup import VX_gpu_pkg::*; #(
             ) gpr_ram_rs3 (
                 .clk   (clk),
 `ifdef EXT_T_HOPPER
-                .read  ((scoreboard_if[i].valid && scoreboard_if[i].ready) || tc_rf_valid),
+                .read  ((scoreboard_if[i].valid && scoreboard_if[i].ready) || tc_rf_valid[i]),
 `else
                 .read  (scoreboard_if[i].valid && scoreboard_if[i].ready),
 `endif
