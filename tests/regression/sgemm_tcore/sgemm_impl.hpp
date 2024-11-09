@@ -6,7 +6,7 @@
 #include "include/gemmini.h"
 #include "gemmini_mmio.h"
 
-#define FP_SIZE 16
+#define FP_SIZE 32
 
 // "fake" fp16 type that only has the correct data width.
 using float16_t = uint16_t;
@@ -19,7 +19,7 @@ using float_type = float16_t;
 
 // Generate kernel for the Hopper-style SMEM-decoupled tensor core.  This uses
 // asynchronous HGMMA and HGMMA_WAIT instructions.
-#define TENSOR_HOPPER 1
+#define TENSOR_HOPPER 0
 
 // Constraints on parameters:
 // * Memory:
@@ -110,7 +110,7 @@ static_assert(WMITER * WNITER * TCM * TCN * NUM_WARPS * CORES_PER_CLUSTER ==
 // result matrix will be stored in a swizzled form in the global memory.
 #define WMMA_STORE_FAST 1
 
-#define GEMMINI_DMA 0
+#define GEMMINI_DMA 1
 #define GEMMINI_DMA_FAST 1
 #if SMEM_SIZE == 0x4000
 #define SMEM_ADDR_Q0 ((float * const) 0xff000000)
