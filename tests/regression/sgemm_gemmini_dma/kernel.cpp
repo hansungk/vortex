@@ -10,8 +10,11 @@
 #define TILE_M 128
 #define TILE_N 64
 #define TILE_K 128
-#define BOUND_INST 0x800040008ULL
-#define NUM_THREADS_IN_CLUSTER 512
+
+// ampere
+// #define NUM_THREADS_IN_CLUSTER 512
+// hopper
+#define NUM_THREADS_IN_CLUSTER 256
 
 // fp32 8x8
 // #define TILE_M 64
@@ -25,7 +28,6 @@
 // #define SPAD_ADDR_Q1 0x200
 // #define SPAD_ADDR_Q2 0x400
 // #define SPAD_ADDR_Q3 0x600
-// #define BOUND_INST 0x800080008ULL
 // #define NUM_THREADS_IN_CLUSTER 256
 
 // fp32 4x4
@@ -40,7 +42,6 @@
 // #define SPAD_ADDR_Q1 0x80
 // #define SPAD_ADDR_Q2 0x100
 // #define SPAD_ADDR_Q3 0x180
-// #define BOUND_INST 0x400040004ULL
 // #define NUM_THREADS_IN_CLUSTER 256
 
 #define NUM_CLUSTERS 1
@@ -49,12 +50,10 @@
 #define rd_cycles_force(x) asm volatile ("csrr %0, mcycle" : "=r" (x))
 #define rd_cycles(x) rd_cycles_force(x)
 #define HW_TID() ({uint32_t gtid; asm volatile ("csrr %0, mhartid" : "=r" (gtid)); gtid;})
-#define MARK_BEG() asm volatile ("slti x0, x1, -1047")
-#define MARK_END() asm volatile ("slti x0, x1, -499")
 #define PRINTF(...) sprintf(PRINT_BUF, __VA_ARGS__)
 // #define PRINTF(...) vx_printf(__VA_ARGS__)
 #define SWISH(beta, x) ((x) / (1 + exp(-(beta) * (x))))
-//#define POWER
+// #define POWER
 
 typedef uint16_t smem_elem_t;
 // typedef float smem_elem_t;
@@ -81,22 +80,6 @@ void thread_block_matmul_gemmini(kernel_arg_t *__UNIFORM__ arg,
   }
 
   vx_fence();
-  // if (HW_TID() < 128) {
-  //   *((volatile uint32_t *) 0xff000000 + HW_TID()) = HW_TID();
-  //   for (int i = 0; i < 128; i++) {
-  //     if (HW_TID() == i) {
-  //       volatile uint32_t x = *((volatile uint32_t *) 0xff000000 + HW_TID());
-  //       if (x != i) {
-  //         PRINTF("%d ", x);
-  //       }
-  //     }
-  //   }
-  // }
-  // threadblock_barrier(/*barrier_id=*/0, /*count=*/NUM_WARPS);
-  // if (HW_TID() == 0) {
-  //   PRINTF("\n finished\n");
-  // }
-  // threadblock_barrier(/*barrier_id=*/0, /*count=*/NUM_WARPS);
 
   uint32_t marker0, marker1;
   rd_cycles_force(marker0);
@@ -115,83 +98,86 @@ void thread_block_matmul_gemmini(kernel_arg_t *__UNIFORM__ arg,
   if (HW_TID() == 0) {
     gemmini_extended3_config_ld(dim_k * sizeof(elem_t), MVIN_SCALE_IDENTITY, false, 0);
     gemmini_extended3_config_ld(dim_n * sizeof(elem_t), MVIN_SCALE_IDENTITY, false, 1);
-    // gemmini_extended3_config_ld(repeating_bias ? 0 : (stride_D * sizeof_D), D_scale_factor, low_D, 2);
     gemmini_extended_config_st(dim_n * sizeof(elem_t), 0, MVIN_SCALE_IDENTITY);
     // gemmini_extended_config_st(stride_C * sizeof_C, act & 3, scale);
 
     for (uint32_t tile_i = num_tile_rows_per_tb * threadblock_id;
                   tile_i < num_tile_rows_per_tb * (threadblock_id + 1);
                   tile_i += 1) {
-      for (int tile_j = 0; tile_j < num_tiles_n; tile_j += 1) {
-        for (int tile_k = 0; tile_k < num_tiles_k; tile_k += 1) {
-          ROCC_INSTRUCTION_RS1_RS2(XCUSTOM_ACC,
-                                   (uint64_t) (A + tile_i * TILE_M * dim_k + tile_k * TILE_K),
-                                   (uint64_t) (B + tile_k * TILE_K * dim_n + tile_j * TILE_N), k_LOOP_WS_CONFIG_ADDRS_AB)
-          GEMMINI_CISC_CMD_R((dim_n << 20) | (dim_k << 8) | 8);
-          if (tile_k & 1) {
-            GEMMINI_CISC_CMD_I(11);
-          } else {
-            GEMMINI_CISC_CMD_I(10);
-          }
-
-          if (tile_k == 0) {
-          asm volatile("cisc_start_%=:" ::);
-            gemmini_fence();
-            GEMMINI_CISC_CMD_I(0);
-          asm volatile("cisc_end_%=:" ::);
-          } else if (tile_k & 1) {
-            gemmini_fence();
-            GEMMINI_CISC_CMD_I(2);
-          } else {
-            gemmini_fence();
-            GEMMINI_CISC_CMD_I(1);
-          }
+      for (uint32_t tile_j = 0; tile_j < num_tiles_n; tile_j += 1) {
+        for (uint32_t tile_k = 0; tile_k < num_tiles_k; tile_k += 1) {
+          uint32_t a_hexadecile = (tile_k & 1) << 2;
+          uint32_t b_hexadecile = a_hexadecile + 8;
+          gemmini_tile_load_ab(A, B,
+              a_hexadecile, b_hexadecile, tile_i, tile_j, tile_k,
+              dim_m, dim_n, dim_k, TILE_M, TILE_N, TILE_K);
+          /* DO STUFF */
+          gemmini_fence();
+          gemmini_tile_compute(a_hexadecile, b_hexadecile, tile_k > 0);
         }
 
+        /*
         gemmini_fence();
+        gemmini_tile_store_c_spad(a_hexadecile); // then activate in spad
+        */
         gemmini_fence();
-        gemmini_fence();
-        gemmini_fence();
-        // mvout to scratchpad for activation
-      //   GEMMINI_CISC_CMD_I(9);
-      //   gemmini_fence();
-      // }
-
-      // threadblock_barrier(/*barrier_id=*/0, /*count=*/NUM_WARPS);
-      // // activate
-
-      // // move out to dram
-      // if (HW_TID() == 0) {
-        smem_elem_t * const dram_c_tile_start = C + tile_i * TILE_M * dim_n + tile_j * TILE_N;
-        ROCC_INSTRUCTION_RS1_RS2(XCUSTOM_ACC, 0, BOUND_INST, k_LOOP_WS_CONFIG_BOUNDS)
-        ROCC_INSTRUCTION_RS1_RS2(XCUSTOM_ACC, 0, (uint64_t) dram_c_tile_start, k_LOOP_WS_CONFIG_ADDRS_DC)
-        ROCC_INSTRUCTION_RS1_RS2(XCUSTOM_ACC, 0, dim_n, k_LOOP_WS_CONFIG_STRIDES_DC)
-        ROCC_INSTRUCTION_RS1_RS2(XCUSTOM_ACC, 0, loop_matmul_skips(1, 1, 1, 1, 0), k_LOOP_WS)
+        gemmini_tile_store_c_gmem(C, tile_i, tile_j, dim_m, dim_n, TILE_M, TILE_N);
       }
     }
-  }
-  // last thread block complete
-  if (threadblock_id == NUM_CLUSTERS - 1) {
-    threadblock_barrier(/*barrier_id=*/0, /*count=*/NUM_WARPS);
+
     MARK_END();
     rd_cycles_force(marker1);
-    if (HW_TID() == 0) {
-      #ifdef POWER
-        // PRINTF("%d\n", marker1 - marker0);
-      #else
+
+    #ifndef POWER
+      if (HW_TID() == 0) {
         PRINTF("\ncomplete\n");
         PRINTF("total cycles:         %d\n", marker1 - marker0);
         for (int i = 0; i < dim_m; i += 8) {
           for (int j = 0; j < dim_n; j += 8) {
-            // PRINTF("%d %d ", (int) (C[i * dim_n + j]), (int) (C[i * dim_n + j + 4]));
             PRINTF("%04x %04x ", (int) (C[i * dim_n + j]), (int) (C[i * dim_n + j + 4]));
           }
           PRINTF("\n");
         }
-      #endif
+      }
+    #endif
+  } else {
+    if (HW_TID() > 8) {
+      asm volatile("li x1, 0xa0a0a0a0");
+      asm volatile("li x2, 0xa0a0a0a0");
+      asm volatile("li x3, 0xa0a0a0a0");
+      asm volatile("li x4, 0xa0a0a0a0");
+      asm volatile("li x5, 0xa0a0a0a0");
+      asm volatile("li x6, 0xa0a0a0a0");
+      asm volatile("li x7, 0xa0a0a0a0");
+      asm volatile("li x8, 0xa0a0a0a0");
+      asm volatile("li x9, 0xa0a0a0a0");
+      asm volatile("li x10, 0xa0a0a0a0");
+      asm volatile("li x11, 0xa0a0a0a0");
+      asm volatile("li x12, 0xa0a0a0a0");
+      asm volatile("li x13, 0xa0a0a0a0");
+      asm volatile("li x14, 0xa0a0a0a0");
+      asm volatile("li x15, 0xa0a0a0a0");
+      asm volatile("li x16, 0xa0a0a0a0");
+      asm volatile("li x17, 0xa0a0a0a0");
+      asm volatile("li x18, 0xa0a0a0a0");
+      asm volatile("li x19, 0xa0a0a0a0");
+      asm volatile("li x20, 0xa0a0a0a0");
+      asm volatile("li x21, 0xa0a0a0a0");
+      asm volatile("li x22, 0xa0a0a0a0");
+      asm volatile("li x23, 0xa0a0a0a0");
+      asm volatile("li x24, 0xa0a0a0a0");
+      asm volatile("li x25, 0xa0a0a0a0");
+      asm volatile("li x26, 0xa0a0a0a0");
+      asm volatile("li x27, 0xa0a0a0a0");
+      asm volatile("li x28, 0xa0a0a0a0");
+      asm volatile("li x29, 0xa0a0a0a0");
+      asm volatile("li x30, 0xa0a0a0a0");
+      asm volatile("li x31, 0xa0a0a0a0");
+      asm volatile("vx_tmc zero");
     }
   }
-  threadblock_barrier(/*barrier_id=*/0, /*count=*/NUM_WARPS);
+  vx_fence();
+  // threadblock_barrier(/*barrier_id=*/0, /*count=*/NUM_WARPS);
   vx_tmc(0);
 }
 
