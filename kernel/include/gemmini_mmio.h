@@ -9,10 +9,10 @@
 // #define SMEM_SIZE 0x4000
 // 64KB
 // #define SMEM_SIZE 0x10000
-// 128KB
+// 128KB (FP16 GEMM)
 // #define SMEM_SIZE 0x20000
-// 256KB
-#define SMEM_SIZE 0x20000
+// 256KB (FlashAttention)
+#define SMEM_SIZE 0x40000
 
 #define SMEM_MASK (SMEM_SIZE - 1)
 #define SMEM_ADDR_END (SMEM_BASE + SMEM_SIZE)

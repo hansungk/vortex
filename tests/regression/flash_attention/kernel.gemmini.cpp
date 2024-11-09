@@ -212,6 +212,8 @@ void kernel_body(int task_id, kernel_arg_t *__UNIFORM__ arg) {
       loop_matmul_skips(/*skip_lda=*/1, /*skip_ldb=*/1, /*skip_ldd=*/0,
                         /*skip_ex=*/0, /*skip_stc=*/1);
 
+  MARK_BEG();
+
   if (tid_in_warpgroup == 0) {
     gemmini_extended_config_ex(WEIGHT_STATIONARY, 0, 0, 1, 0, 0);
 
@@ -336,7 +338,11 @@ void kernel_body(int task_id, kernel_arg_t *__UNIFORM__ arg) {
   // "inner loop" along the columns of K^T
   const uint32_t k_tiles = (dim_seqlen / B_COL);
   for (uint32_t tile_k = 0;
-       tile_k < (4 /*for perf measurement*/ * k_tiles) + 2 /*pipeline latency*/;
+       tile_k < (4 /*for perf measurement*/ *
+                 // virgo kernel is fully pipelined around (2 GEMMs | softmax);
+                 // requires two loop iterations to finish one tile compute
+                 (2 * k_tiles)) +
+                    2 /*pipeline latency*/;
        tile_k++) {
     if constexpr (DEBUG || true) {
       threadblock_barrier(global_barrier_id, warps_per_threadblock_per_core);
@@ -677,6 +683,8 @@ void kernel_body(int task_id, kernel_arg_t *__UNIFORM__ arg) {
   }
 
   asm volatile ("tile_loop_finish_%=:" :: );
+
+  MARK_END();
 }
 
 int main() {

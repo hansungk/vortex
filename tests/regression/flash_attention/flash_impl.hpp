@@ -4,6 +4,9 @@
 #include <vx_spawn.h>
 #include <float.h>
 
+#define MARK_BEG() asm volatile ("slti x0, x1, -1047")
+#define MARK_END() asm volatile ("slti x0, x1, -499")
+
 #define B_ROW 64
 #define B_COL 64
 #define HEADDIM 64
@@ -11,8 +14,10 @@
 #define ROW_REMAINDER_LOGIC
 
 constexpr uint32_t ROWMAX_SETS = 3;
-constexpr bool WARP_SPECIALIZED = true;
-constexpr bool TENSOR_CORE = true;
+// constexpr bool WARP_SPECIALIZED = true;
+// constexpr bool TENSOR_CORE = true;
+constexpr bool WARP_SPECIALIZED = false;
+constexpr bool TENSOR_CORE = false;
 
 // temporary safety stop for wrong configs
 static_assert(NUM_CORES == 4);

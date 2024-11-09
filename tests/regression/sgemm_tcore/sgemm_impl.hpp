@@ -6,7 +6,7 @@
 #include "include/gemmini.h"
 #include "gemmini_mmio.h"
 
-#define FP_SIZE 16
+#define FP_SIZE 32
 
 // "fake" fp16 type that only has the correct data width.
 using float16_t = uint16_t;
@@ -19,7 +19,7 @@ using float_type = float16_t;
 
 // Generate kernel for the Hopper-style SMEM-decoupled tensor core.  This uses
 // asynchronous HGMMA and HGMMA_WAIT instructions.
-#define TENSOR_HOPPER 1
+#define TENSOR_HOPPER 0
 
 // Constraints on parameters:
 // * Memory:
@@ -103,6 +103,12 @@ static_assert(WMITER * WNITER * TCM * TCN * NUM_WARPS * CORES_PER_CLUSTER ==
 // set both to 0.
 #define TRANSPOSE_AT_PRODUCE 0
 #define TRANSPOSE_AT_CONSUME 0
+
+// if 1, wmma_store() will not respect the register <-> matrix fragment mapping
+// scheme and instead do a fast coalesced GMEM writes for move out.  This
+// doesn't necessarily mean breaking correctness; it means that the final
+// result matrix will be stored in a swizzled form in the global memory.
+#define WMMA_STORE_FAST 1
 
 #define GEMMINI_DMA 1
 #define GEMMINI_DMA_FAST 1
@@ -213,10 +219,9 @@ inline constexpr void map_c_8lanes(const int tid, int &row, int &col) {
   col += ((tid % 4) / 2) * 2;
 }
 
-inline constexpr void map_c_8lanes_hopper(const int tid, int &row, int &col) {
+inline constexpr void map_c_8lanes_coalesced(const int tid, int &row, int &col) {
   const int tg = tid / 2;
 
-  // FIXME wrong!!!
   row = 0;
   col = tid;
 }
@@ -225,8 +230,8 @@ inline constexpr void map_c(const int tid, int &row, int &col) {
   if constexpr (NUM_THREADS == 32) {
     map_c_32lanes(tid, row, col);
   } else if constexpr (NUM_THREADS == 8) {
-    if constexpr (TENSOR_HOPPER) {
-      map_c_8lanes_hopper(tid, row, col);
+    if constexpr (TENSOR_HOPPER || WMMA_STORE_FAST) {
+      map_c_8lanes_coalesced(tid, row, col);
     } else {
       map_c_8lanes(tid, row, col);
     }
@@ -664,26 +669,48 @@ wmma_store(const int thread_in_warp, const int warp_col, const int warp_row,
     volatile uint8_t *addr = reinterpret_cast<volatile uint8_t *>(
         &write_addr[dim_n * (local_row + 0) + (local_col + 0)]);
     volatile uint8_t *addr_tworow = addr + (2 * dim_n) * sizeof(float);
-    asm volatile("fsw f16, %0(%1)" ::"i"(0 * sizeof(float)), "r"(addr));
-    asm volatile("fsw f17, %0(%1)" ::"i"(1 * sizeof(float)), "r"(addr));
-    asm volatile("fsw f18, %0(%1)" ::"i"(0 * sizeof(float)), "r"(addr_tworow));
-    asm volatile("fsw f19, %0(%1)" ::"i"(1 * sizeof(float)), "r"(addr_tworow));
-    asm volatile("fsw f20, %0(%1)" ::"i"(4 * sizeof(float)), "r"(addr));
-    asm volatile("fsw f21, %0(%1)" ::"i"(5 * sizeof(float)), "r"(addr));
-    asm volatile("fsw f22, %0(%1)" ::"i"(4 * sizeof(float)), "r"(addr_tworow));
-    asm volatile("fsw f23, %0(%1)" ::"i"(5 * sizeof(float)), "r"(addr_tworow));
+    if constexpr (!WMMA_STORE_FAST) {
+      asm volatile("fsw f16, %0(%1)" ::"i"(0 * sizeof(float)), "r"(addr));
+      asm volatile("fsw f17, %0(%1)" ::"i"(1 * sizeof(float)), "r"(addr));
+      asm volatile("fsw f18, %0(%1)" ::"i"(0 * sizeof(float)), "r"(addr_tworow));
+      asm volatile("fsw f19, %0(%1)" ::"i"(1 * sizeof(float)), "r"(addr_tworow));
+      asm volatile("fsw f20, %0(%1)" ::"i"(4 * sizeof(float)), "r"(addr));
+      asm volatile("fsw f21, %0(%1)" ::"i"(5 * sizeof(float)), "r"(addr));
+      asm volatile("fsw f22, %0(%1)" ::"i"(4 * sizeof(float)), "r"(addr_tworow));
+      asm volatile("fsw f23, %0(%1)" ::"i"(5 * sizeof(float)), "r"(addr_tworow));
+    } else {
+      asm volatile("fsw f16, %0(%1)" ::"i"(0 * WN * sizeof(float)), "r"(addr));
+      asm volatile("fsw f17, %0(%1)" ::"i"(1 * WN * sizeof(float)), "r"(addr));
+      asm volatile("fsw f18, %0(%1)" ::"i"(2 * WN * sizeof(float)), "r"(addr));
+      asm volatile("fsw f19, %0(%1)" ::"i"(3 * WN * sizeof(float)), "r"(addr));
+      asm volatile("fsw f20, %0(%1)" ::"i"(4 * WN * sizeof(float)), "r"(addr));
+      asm volatile("fsw f21, %0(%1)" ::"i"(5 * WN * sizeof(float)), "r"(addr));
+      asm volatile("fsw f22, %0(%1)" ::"i"(6 * WN * sizeof(float)), "r"(addr));
+      asm volatile("fsw f23, %0(%1)" ::"i"(7 * WN * sizeof(float)), "r"(addr));
+    }
   } else {
     volatile uint8_t *addr = reinterpret_cast<volatile uint8_t *>(
         &write_addr[dim_n * (local_row + 0) + (local_col + 0)]);
     volatile uint8_t *addr_tworow = addr + (2 * dim_n) * sizeof(float);
-    asm volatile("fsw f24, %0(%1)" ::"i"(0 * sizeof(float)), "r"(addr));
-    asm volatile("fsw f25, %0(%1)" ::"i"(1 * sizeof(float)), "r"(addr));
-    asm volatile("fsw f26, %0(%1)" ::"i"(0 * sizeof(float)), "r"(addr_tworow));
-    asm volatile("fsw f27, %0(%1)" ::"i"(1 * sizeof(float)), "r"(addr_tworow));
-    asm volatile("fsw f28, %0(%1)" ::"i"(4 * sizeof(float)), "r"(addr));
-    asm volatile("fsw f29, %0(%1)" ::"i"(5 * sizeof(float)), "r"(addr));
-    asm volatile("fsw f30, %0(%1)" ::"i"(4 * sizeof(float)), "r"(addr_tworow));
-    asm volatile("fsw f31, %0(%1)" ::"i"(5 * sizeof(float)), "r"(addr_tworow));
+    if constexpr (!WMMA_STORE_FAST) {
+      asm volatile("fsw f24, %0(%1)" ::"i"(0 * sizeof(float)), "r"(addr));
+      asm volatile("fsw f25, %0(%1)" ::"i"(1 * sizeof(float)), "r"(addr));
+      asm volatile("fsw f26, %0(%1)" ::"i"(2 * sizeof(float)), "r"(addr_tworow));
+      asm volatile("fsw f27, %0(%1)" ::"i"(3 * sizeof(float)), "r"(addr_tworow));
+      asm volatile("fsw f28, %0(%1)" ::"i"(4 * sizeof(float)), "r"(addr));
+      asm volatile("fsw f29, %0(%1)" ::"i"(5 * sizeof(float)), "r"(addr));
+      asm volatile("fsw f30, %0(%1)" ::"i"(6 * sizeof(float)), "r"(addr_tworow));
+      asm volatile("fsw f31, %0(%1)" ::"i"(7 * sizeof(float)), "r"(addr_tworow));
+    } else {
+      asm volatile("fsw f24, %0(%1)" ::"i"(0 * WN * sizeof(float)), "r"(addr));
+      asm volatile("fsw f25, %0(%1)" ::"i"(1 * WN * sizeof(float)), "r"(addr));
+      asm volatile("fsw f26, %0(%1)" ::"i"(2 * WN * sizeof(float)), "r"(addr));
+      asm volatile("fsw f27, %0(%1)" ::"i"(3 * WN * sizeof(float)), "r"(addr));
+      asm volatile("fsw f28, %0(%1)" ::"i"(4 * WN * sizeof(float)), "r"(addr));
+      asm volatile("fsw f29, %0(%1)" ::"i"(5 * WN * sizeof(float)), "r"(addr));
+      asm volatile("fsw f30, %0(%1)" ::"i"(6 * WN * sizeof(float)), "r"(addr));
+      asm volatile("fsw f31, %0(%1)" ::"i"(7 * WN * sizeof(float)), "r"(addr));
+    }
   }
 
   asm volatile ("wmma_store_finish_%=:" :: );
@@ -1150,19 +1177,20 @@ inline void thread_block_gemm(const T *A, const T *B, float *C,
 
       if constexpr (GEMMINI_DMA) {
         // pipeline initiation
-        if (tid_in_threadblock == 0) {
-          // configure dma gmem address to load from
-          ROCC_INSTRUCTION_RS1_RS2(
-              XCUSTOM_ACC,
-              (uint64_t)(A + block_m * BM * dim_k + /*block_k:*/0 * BK),
-              (uint64_t)(B + /*block_k:*/0 * BK * dim_n + block_n * BN),
-              k_LOOP_WS_CONFIG_ADDRS_AB)
-          // GEMMINI_CISC(8) does k_LOOP_WS_CONFIG_STRIDES_AB
-          GEMMINI_CISC_CMD_R((dim_n << 20) | (dim_k << 8) | 8);
-          gemmini_fence();
+        if (block_m == 0 && block_n == 0) {
+          if (tid_in_threadblock == 0) {
+            // configure dma gmem address to load from
+            ROCC_INSTRUCTION_RS1_RS2(
+                XCUSTOM_ACC,
+                (uint64_t)(A + block_m * BM * dim_k + /*block_k:*/ 0 * BK),
+                (uint64_t)(B + /*block_k:*/ 0 * BK * dim_n + block_n * BN),
+                k_LOOP_WS_CONFIG_ADDRS_AB)
+            // GEMMINI_CISC(8) does k_LOOP_WS_CONFIG_STRIDES_AB
+            GEMMINI_CISC_CMD_R((dim_n << 20) | (dim_k << 8) | 8);
+            gemmini_fence();
 
-          GEMMINI_CISC_CMD_I(10);
-          gemmini_fence();
+            GEMMINI_CISC_CMD_I(10);
+            gemmini_fence();
 
 #if 0
           // sp_tiled_matmul_full_spad_ws includes CONFIG_BOUNDS
@@ -1181,10 +1209,11 @@ inline void thread_block_gemm(const T *A, const T *B, float *C,
               /*acc=*/0, /*act=*/NO_ACTIVATION, /*skips=*/skips)
           gemmini_fence();
 #endif
-        }
+          }
 
-        threadblock_barrier(threadblock_id_in_cluster,
-                            warps_per_threadblock_per_core);
+          threadblock_barrier(threadblock_id_in_cluster,
+                              warps_per_threadblock_per_core);
+        }
       }
 
 #pragma GCC unroll 1
@@ -1197,12 +1226,28 @@ inline void thread_block_gemm(const T *A, const T *B, float *C,
         // this is either done using DMA or SIMT cores depending on GEMMINI_DMA
 
 #if (GEMMINI_DMA == 1)
-        if ((tid_in_threadblock == 0) && ((block_k * BK) != (dim_k - BK))) {
+        if (tid_in_threadblock == 0) {
+          asm volatile("next_index_start_%=:" ::);
+
+          const uint32_t next_block_k =
+              ((block_k + 1) * BK == dim_k) ? 0 : block_k + 1;
+          const uint32_t next_block_n =
+              (next_block_k == 0)
+                  ? (((block_n + 1) * BN == dim_n) ? 0 : block_n + 1)
+                  : block_n;
+          const uint32_t next_block_m =
+              (next_block_n == 0)
+                  ? (((block_m + 1) == block_m_end) ? block_m_start /*unused*/
+                                                    : block_m + 1)
+                  : block_m;
+
+          asm volatile("next_index_end_%=:" ::);
+
           // configure dma gmem address to load from
           ROCC_INSTRUCTION_RS1_RS2(
               XCUSTOM_ACC,
-              (uint64_t)(A + block_m * BM * dim_k + (block_k + 1/*runahead*/) * BK),
-              (uint64_t)(B + (block_k + 1/*runahead*/) * BK * dim_n + block_n * BN),
+              (uint64_t)(A + next_block_m * BM * dim_k + next_block_k * BK),
+              (uint64_t)(B + next_block_k * BK * dim_n + next_block_n * BN),
               k_LOOP_WS_CONFIG_ADDRS_AB)
           // GEMMINI_CISC(8) does k_LOOP_WS_CONFIG_STRIDES_AB
           GEMMINI_CISC_CMD_R((dim_n << 20) | (dim_k << 8) | 8);
@@ -1210,6 +1255,11 @@ inline void thread_block_gemm(const T *A, const T *B, float *C,
 
           // block_k is even: opcode 11 (write to local_a_buf)
           // block_k is odd:  opcode 10 (write to local_a)
+          //
+          // FIXME: This depends on (dim_k / BK) being an even number, since
+          // the last iteration of the k-loop is prefetching for the first
+          // iteration of the n-loop.  The ping-poing indexing has to match for
+          // the two loop end to connect.
           const uint32_t opcode = 11 - (block_k & 1);
           GEMMINI_CISC_CMD_I(opcode);
           // // TODO: branch is probably slow
@@ -1349,6 +1399,8 @@ inline void thread_block_gemm(const T *A, const T *B, float *C,
       }
 
       if constexpr (write_to_gmem) {
+        asm volatile("move_out_start_%=:" ::);
+
         if constexpr (TENSOR_HOPPER) {
           // wait until all results are accumulated into the RF
           vx_wgmma_wait();
@@ -1367,6 +1419,8 @@ inline void thread_block_gemm(const T *A, const T *B, float *C,
             }
           }
         }
+
+        asm volatile("move_out_end_%=:" ::);
       }
     }
     asm volatile("loop_mn_end_%=:" ::);
