@@ -259,7 +259,7 @@ void kernel_body(int task_id, kernel_arg_t *__UNIFORM__ arg) {
                                (uint64_t)(gmem_K_tile),
                                k_LOOP_WS_CONFIG_ADDRS_AB)
       // configure address strides for the DMA
-      GEMMINI_CISC_CMD_R((dim_seqlen << 16) | (HEADDIM << 8) |
+      GEMMINI_CISC_CMD_R((dim_seqlen << 20) | (HEADDIM << 8) |
                          8 /*k_LOOP_WS_CONFIG_STRIDES_AB*/);
       gemmini_fence();
 
@@ -549,7 +549,7 @@ void kernel_body(int task_id, kernel_arg_t *__UNIFORM__ arg) {
                                  k_LOOP_WS_CONFIG_ADDRS_AB)
         // configure address strides for the DMA
         // FIXME: unnecessary?
-        GEMMINI_CISC_CMD_R((HEADDIM /*V*/ << 16) | (dim_seqlen /*KT*/ << 8) |
+        GEMMINI_CISC_CMD_R((HEADDIM /*V*/ << 20) | (dim_seqlen /*KT*/ << 8) |
                            8 /*k_LOOP_WS_CONFIG_STRIDES_AB*/);
         gemmini_fence();
 
@@ -813,8 +813,6 @@ void kernel_body(int task_id, kernel_arg_t *__UNIFORM__ arg) {
                             warps_per_warpgroup_per_core);
       }
     }
-#if 0
-#endif
   }
 
   asm volatile ("tile_loop_finish_%=:" :: );
