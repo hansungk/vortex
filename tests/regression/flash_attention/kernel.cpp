@@ -219,6 +219,8 @@ void kernel_body(int task_id, kernel_arg_t *__UNIFORM__ arg) {
       loop_matmul_skips(/*skip_lda=*/0, /*skip_ldb=*/0, /*skip_ldd=*/1,
                         /*skip_ex=*/1, /*skip_stc=*/1);
 
+  MARK_BEG();
+
   if constexpr (GEMMINI_DMA) {
     if (tid_in_warpgroup == 0) {
       gemmini_extended_config_ex(WEIGHT_STATIONARY, 0, 0, 1, 0, 0);
@@ -822,6 +824,8 @@ void kernel_body(int task_id, kernel_arg_t *__UNIFORM__ arg) {
   if (warpgroup_id == 0) {
     threadblock_barrier(global_barrier_id, warps_per_threadblock_per_core);
   }
+
+  MARK_END();
 }
 
 int main() {

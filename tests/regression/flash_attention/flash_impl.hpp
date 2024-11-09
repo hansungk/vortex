@@ -4,6 +4,9 @@
 #include <vx_spawn.h>
 #include <float.h>
 
+#define MARK_BEG() asm volatile ("slti x0, x1, -1047")
+#define MARK_END() asm volatile ("slti x0, x1, -499")
+
 #define B_ROW 64
 #define B_COL 64
 #define HEADDIM 64

@@ -212,6 +212,8 @@ void kernel_body(int task_id, kernel_arg_t *__UNIFORM__ arg) {
       loop_matmul_skips(/*skip_lda=*/1, /*skip_ldb=*/1, /*skip_ldd=*/0,
                         /*skip_ex=*/0, /*skip_stc=*/1);
 
+  MARK_BEG();
+
   if (tid_in_warpgroup == 0) {
     gemmini_extended_config_ex(WEIGHT_STATIONARY, 0, 0, 1, 0, 0);
 
@@ -681,6 +683,8 @@ void kernel_body(int task_id, kernel_arg_t *__UNIFORM__ arg) {
   }
 
   asm volatile ("tile_loop_finish_%=:" :: );
+
+  MARK_END();
 }
 
 int main() {
