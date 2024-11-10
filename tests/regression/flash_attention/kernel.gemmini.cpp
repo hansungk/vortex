@@ -402,13 +402,18 @@ void kernel_body(int task_id, kernel_arg_t *__UNIFORM__ arg) {
     asm volatile ("dbuf_sel_end_%=:" :: );
 
     {
+      // fence completion of the GEMMs in the previous loop iterations. Note
+      // this is done at the start of the loop to maximize window of
+      // overlapping.
+      //
+      // NOTE: this ideally needs to be put inside tid_in_warpgroup == 0
+      // branch, but that triggers a TL source ID re-used assertion we haven't
+      // looked at yet.
+      gemmini_fence();
+
       // do all of GEMM kickoffs before the SIMT compute
       //
       if (tid_in_warpgroup == 0) {
-        // fence completion of the GEMMs in the previous loop iterations. Note
-        // this is done at the start of the loop to maximize window of
-        // overlapping.
-        gemmini_fence();
 
         if (tile_k >= 2) // delay GEMM II by 2 iters for pipelining
         {
@@ -689,10 +694,13 @@ void kernel_body(int task_id, kernel_arg_t *__UNIFORM__ arg) {
       threadblock_barrier(warpgroup_id_in_cluster,
                           warps_per_warpgroup_per_core);
 
-
-      // instead of fencing here, we fence at the start of the loop to maximize
-      // overlapping
+      // @perf: instead of fencing here, fence at the start of the loop to
+      // maximize overlapping
       // gemmini_fence();
+
+      // // reconverge after mmio
+      // threadblock_barrier(warpgroup_id_in_cluster,
+      //                     warps_per_warpgroup_per_core);
     }
   }
 
