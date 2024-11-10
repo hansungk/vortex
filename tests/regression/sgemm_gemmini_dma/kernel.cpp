@@ -113,7 +113,8 @@ void thread_block_matmul_gemmini(kernel_arg_t *__UNIFORM__ arg,
               dim_m, dim_n, dim_k, TILE_M, TILE_N, TILE_K);
           /* DO STUFF */
           gemmini_fence();
-          gemmini_tile_compute(a_hexadecile, b_hexadecile, tile_k > 0);
+          gemmini_tile_compute</*store_to_spad=*/false>(
+              a_hexadecile, b_hexadecile, 0 /*d_hexadecile*/, tile_k > 0);
         }
 
         /*
