@@ -470,9 +470,6 @@ void kernel_body(int task_id, kernel_arg_t *__UNIFORM__ arg) {
 
         // Kick off GEMM I
         //
-        // 0,2,.: opcode 0 (quartile 0/2, no accum)
-        // 1,3,.: opcode 3 (quartile 1/3, no accum)
-        // const uint32_t opcode = 3 * (tile_k & 1);
 #ifdef GEMMINI_NEW_CISC
         gemmini_tile_compute</*store_to_spad=*/true>(
             spad_hex_Q, spad_hex_K_consume, spad_hex_S_produce,
@@ -566,7 +563,7 @@ void kernel_body(int task_id, kernel_arg_t *__UNIFORM__ arg) {
 
     } else /* warp_id != 0 */ {
 
-      if (tile_k >= 1) // delay by 1 iters for pipelining
+      if (tile_k >= 1) // delay online softmax by 1 iters
       {
         const uint32_t tile_k_ = tile_k - 1;
 
