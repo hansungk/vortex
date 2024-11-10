@@ -114,8 +114,9 @@ inline void gemmini_tile_compute(const uint32_t a_hexadecile,
                                  const uint32_t d_hexadecile,
                                  const bool accumulate) {
   if constexpr (!store_to_spad) {
-    GEMMINI_CISC_CMD_R((accumulate << 24) | (b_hexadecile << 16) |
-                       (a_hexadecile << 8) | GEMMINI_CISC_COMPUTE_HEXADECILES);
+    GEMMINI_CISC_CMD_R((static_cast<uint32_t>(accumulate) << 24) |
+                       (b_hexadecile << 16) | (a_hexadecile << 8) |
+                       GEMMINI_CISC_COMPUTE_HEXADECILES);
   } else {
     GEMMINI_CISC_CMD_R((d_hexadecile << 24) | (b_hexadecile << 16) |
                        (a_hexadecile << 8) | GEMMINI_CISC_COMPUTE_AND_STORE_TO_SPAD);
