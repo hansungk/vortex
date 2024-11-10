@@ -15,6 +15,7 @@
 
 constexpr uint32_t ROWMAX_SETS = 3;
 // constexpr bool WARP_SPECIALIZED = true;
+// constexpr bool GEMMINI_WARP_SPECIALIZED = false;
 // constexpr bool TENSOR_CORE = true;
 constexpr bool WARP_SPECIALIZED = false;
 constexpr bool GEMMINI_WARP_SPECIALIZED = false;
