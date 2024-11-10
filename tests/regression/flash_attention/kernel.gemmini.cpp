@@ -602,17 +602,17 @@ void kernel_body(int task_id, kernel_arg_t *__UNIFORM__ arg) {
         }
 
 #ifdef FENCE_GEMM_II
-        asm volatile("rescale_fence_read_start_%=:" ::);
-        // check flag to make sure GEMM II finished and read-after-write
-        // dependency on O tile is settled for rescale
-        if (tid_in_warpgroup == 0) {
-          while ((*smem_O_flag) != 1)
-            ;
-          // set it back to 0 for the next tile iteration
-          *smem_O_flag = 0;
-          vx_fence();
-        }
-        asm volatile("rescale_fence_read_end_%=:" ::);
+        // asm volatile("rescale_fence_read_start_%=:" ::);
+        // // check flag to make sure GEMM II finished and read-after-write
+        // // dependency on O tile is settled for rescale
+        // if (tid_in_warpgroup == 0) {
+        //   while ((*smem_O_flag) != 1)
+        //     ;
+        //   // set it back to 0 for the next tile iteration
+        //   *smem_O_flag = 0;
+        //   vx_fence();
+        // }
+        // asm volatile("rescale_fence_read_end_%=:" ::);
 #endif
 
 #if 0
