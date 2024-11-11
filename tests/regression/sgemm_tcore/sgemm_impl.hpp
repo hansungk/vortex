@@ -108,7 +108,7 @@ static_assert(WMITER * WNITER * TCM * TCN * NUM_WARPS * CORES_PER_CLUSTER ==
 // scheme and instead do a fast coalesced GMEM writes for move out.  This
 // doesn't necessarily mean breaking correctness; it means that the final
 // result matrix will be stored in a swizzled form in the global memory.
-#define WMMA_STORE_FAST 1
+#define WMMA_STORE_FAST 0
 
 #define GEMMINI_DMA 1
 #define GEMMINI_DMA_FAST 1
