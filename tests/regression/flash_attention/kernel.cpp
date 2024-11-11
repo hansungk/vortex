@@ -355,7 +355,7 @@ void kernel_body(int task_id, kernel_arg_t *__UNIFORM__ arg) {
 
   // "inner loop" along the columns of K^T
   const uint32_t k_tiles = (dim_seqlen / B_COL);
-  for (uint32_t tile_k = 0; tile_k < (4 /* for perf measurement */ * k_tiles);
+  for (uint32_t tile_k = 0; tile_k < (1 /* for perf measurement */ * k_tiles);
        tile_k++) {
     // float *smem_P_produce = (tile_k % 2) ? smem_P0 : smem_P1;
     // float *smem_P_consume = (tile_k % 2) ? smem_P1 : smem_P0;

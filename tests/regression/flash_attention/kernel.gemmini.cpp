@@ -347,7 +347,7 @@ void kernel_body(int task_id, kernel_arg_t *__UNIFORM__ arg) {
   // "inner loop" along the columns of K^T
   const uint32_t k_tiles = (dim_seqlen / B_COL);
   for (uint32_t tile_k = 0;
-       tile_k < (4 /*for perf measurement*/ *
+       tile_k < (1 /*for perf measurement*/ *
                  // virgo kernel is fully pipelined around (2 GEMMs | softmax);
                  // requires two loop iterations to finish one tile compute
                  (2 * k_tiles)) +
