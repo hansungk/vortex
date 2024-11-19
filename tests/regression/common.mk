@@ -22,7 +22,6 @@ RISCV_SYSROOT ?= $(RISCV_TOOLCHAIN_PATH)/$(RISCV_PREFIX)
 
 VORTEX_RT_PATH ?= $(realpath ../../../runtime)
 VORTEX_KN_PATH ?= $(realpath ../../../kernel)
-GEMMINI_SW_PATH ?= $(realpath ../../../third_party/gemmini-rocc-tests)
 
 FPGA_BIN_DIR ?= $(VORTEX_RT_PATH)/opae
 
@@ -50,14 +49,10 @@ VX_CP  = $(LLVM_VORTEX)/bin/llvm-objcopy
 
 VX_CFLAGS += -v -Os -std=c++17
 VX_CFLAGS += -mcmodel=medany -fno-rtti -fno-exceptions -nostartfiles -fdata-sections -ffunction-sections
-# comment out below for regression/basic, which uses GCC that doesn't
-# understand these flags
-VX_CFLAGS += -mllvm -inline-threshold=262144
-VX_CFLAGS += -I$(VORTEX_KN_PATH)/include -I$(VORTEX_KN_PATH)/../hw -I$(GEMMINI_SW_PATH)
+VX_CFLAGS += -I$(VORTEX_KN_PATH)/include -I$(VORTEX_KN_PATH)/../hw
 VX_CFLAGS += -DNDEBUG -DLLVM_VORTEX
 
-# VX_LDFLAGS += -Wl,-Bstatic,--gc-sections,-T,$(VORTEX_KN_PATH)/linker/vx_link$(XLEN).ld,--defsym=STARTUP_ADDR=$(STARTUP_ADDR) $(VORTEX_KN_PATH)/libvortexrt.a
-VX_LDFLAGS += -Wl,-Bstatic,-T,$(VORTEX_KN_PATH)/linker/vx_link$(XLEN).ld,--defsym=STARTUP_ADDR=$(STARTUP_ADDR) $(VORTEX_KN_PATH)/libvortexrt.a $(VORTEX_KN_PATH)/tohost.S
+VX_LDFLAGS += -Wl,-Bstatic,--gc-sections,-T,$(VORTEX_KN_PATH)/linker/vx_link$(XLEN).ld,--defsym=STARTUP_ADDR=$(STARTUP_ADDR) $(VORTEX_KN_PATH)/libvortexrt.a
 
 CXXFLAGS += -std=c++17 -Wall -Wextra -pedantic -Wfatal-errors
 CXXFLAGS += -I$(VORTEX_RT_PATH)/include -I$(VORTEX_KN_PATH)/../hw
@@ -83,26 +78,12 @@ endif
 endif
 endif
 
-# CONFIG is supplied from the command line to differentiate ELF files with custom suffixes
-CONFIGEXT = $(if $(CONFIG),.$(CONFIG),)
-
-all: $(PROJECT) kernel.bin kernel.dump kernel.radiance.dump kernel$(CONFIGEXT).dump kernel.radiance$(CONFIGEXT).dump
+all: $(PROJECT) kernel.bin kernel.dump
 
 kernel.dump: kernel.elf
 	$(VX_DP) -D kernel.elf > kernel.dump
 
-kernel.radiance.dump: kernel.radiance.elf
-	$(VX_DP) -D kernel.radiance.elf > kernel.radiance.dump
-
-ifneq ($(CONFIG),)
-kernel$(CONFIGEXT).dump: kernel$(CONFIGEXT).elf
-	$(VX_DP) -D kernel$(CONFIGEXT).elf > kernel$(CONFIGEXT).dump
-
-kernel.radiance$(CONFIGEXT).dump: kernel.radiance$(CONFIGEXT).elf
-	$(VX_DP) -D kernel.radiance$(CONFIGEXT).elf > kernel.radiance$(CONFIGEXT).dump
-endif
-
-kernel.bin: kernel.elf kernel.radiance.elf
+kernel.bin: kernel.elf
 	$(VX_CP) -O binary kernel.elf kernel.bin
 
 OBJCOPY ?= $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-objcopy
@@ -118,25 +99,6 @@ kernel.elf: $(VX_SRCS) $(VX_INCLUDES) $(BINFILES)
 	$(OBJCOPY) --update-section .operand.b=input.b.bin $@ || true
 	$(OBJCOPY) --update-section .operand.c=input.c.bin $@ || true
 	$(OBJCOPY) --update-section .args=args.bin $@ || true
-
-kernel.radiance.elf: $(VX_SRCS) $(VX_INCLUDES) $(BINFILES)
-	$(VX_CXX) $(VX_CFLAGS) $(VX_SRCS) $(VX_LDFLAGS) -DRADIANCE -o $@
-	$(OBJCOPY) --set-section-flags .operand.a=$(OBJCOPY_FLAGS) $@
-	$(OBJCOPY) --set-section-flags .operand.b=$(OBJCOPY_FLAGS) $@
-	$(OBJCOPY) --set-section-flags .operand.c=$(OBJCOPY_FLAGS) $@
-	$(OBJCOPY) --set-section-flags .args=$(OBJCOPY_FLAGS) $@
-	$(OBJCOPY) --update-section .operand.a=input.a.bin $@ || true
-	$(OBJCOPY) --update-section .operand.b=input.b.bin $@ || true
-	$(OBJCOPY) --update-section .operand.c=input.c.bin $@ || true
-	$(OBJCOPY) --update-section .args=args.bin $@ || true
-
-ifneq ($(CONFIG),)
-kernel$(CONFIGEXT).elf: kernel.elf
-	cp $< $@
-
-kernel.radiance$(CONFIGEXT).elf: kernel.radiance.elf
-	cp $< $@
-endif
 
 $(PROJECT): $(SRCS)
 	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
