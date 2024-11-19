@@ -200,6 +200,16 @@ int main(int argc, char *argv[]) {
   uint32_t alloc_size = std::max<uint32_t>(buf_size, sizeof(kernel_arg_t));
   staging_buf.resize(alloc_size);
   
+  // generate source data
+  source_data.resize(2 * num_points);
+  for (uint32_t i = 0; i < source_data.size(); ++i) {
+    // source_data[i] = Comparator<TYPE>::generate();
+    source_data[i] = static_cast<float>(i);
+  }
+
+  // NOTE(hansung): Uncomment below to generate args.bin, input.a.bin and
+  // input.b.bin automatically from the host code.
+#if 0
   // upload kernel argument
   std::cout << "upload kernel argument" << std::endl;
   memcpy(staging_buf.data(), &kernel_arg, sizeof(kernel_arg_t));
@@ -212,13 +222,6 @@ int main(int argc, char *argv[]) {
   }
   file.write(reinterpret_cast<char *>(staging_buf.data()), sizeof(kernel_arg_t));
   file.close();
-
-  // generate source data
-  source_data.resize(2 * num_points);
-  for (uint32_t i = 0; i < source_data.size(); ++i) {
-    // source_data[i] = Comparator<TYPE>::generate();
-    source_data[i] = static_cast<float>(i);
-  }
 
   // upload source buffer0
   {
@@ -255,6 +258,7 @@ int main(int argc, char *argv[]) {
     file.write(reinterpret_cast<char *>(buf_ptr), buf_size);
     file.close();
   }
+#endif
 
   // clear destination buffer
   std::cout << "clear destination buffer" << std::endl;
