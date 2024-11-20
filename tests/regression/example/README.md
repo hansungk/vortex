@@ -68,7 +68,7 @@ MEMORY {
 Then, when compiling the kernel, we use the `objcopy` tool to copy the bits
 from separate binary files into the corresponding sections using the
 `--update-section` flag.  The makefile rule for `kernel.elf` in
-[`common.mk`](/tests/regression/common.mk) can be modified to automate this:
+[`common.mk`](https://github.com/hansungk/vortex/blob/95710c22806c728a38fb653182f25da2f05e79d4/tests/regression/common.mk#L89-L101) can be modified to automate this:
 
 ```
 ...
@@ -104,7 +104,7 @@ these two files, which should be straightforward to modify manually:
 The new makefile target requires binary files `args.bin`, `input.a.bin`,
 `input.b.bin`, `input.c.bin` to be present in the current working directory.
 We added these files into the tree for convenience, but if you want to generate
-your custom binaries, comment out this code block to automatically generate
+your custom binaries, comment out [this code block](https://github.com/hansungk/vortex/blob/95710c22806c728a38fb653182f25da2f05e79d4/tests/regression/example/main.cpp#L210-L261) to automatically generate
 these binaries from the host side.  Note that the host program should be run at
 least once via `make run-simx` to generate the files.
 
@@ -175,11 +175,8 @@ $ make run-simx
 When you update any of the `args.bin`, `input.a.bin`, `input.b.bin` and
 `input.c.bin` binary files, the kernel binary needs to be re-built by way of
 re-running the `kernel.bin` make target.  The makefile rule is written in a way
-to keep track of changes in these files, but you can force recompile by:
-```
-$ touch kernel.cpp
-$ make
-```
+to keep track of changes in these files, but you can force recompile by
+doing `touch kernel.cpp && make`.
 
 ### Program binary size
 
@@ -189,3 +186,8 @@ distinct device memory addresses (`80000000` and `a0000000`, `a1000000`, ...),
 a problem, the input binary addresses can be moved to somewhere closer to
 `80000000`.  The linker script and the relevent fields in `args.bin` should be
 updated for this.
+
+## Contact
+
+Please contact Hansung Kim <hansung_kim@berkeley.edu> for any questions about
+this README.
