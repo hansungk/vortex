@@ -342,12 +342,22 @@ void kernel_body(int task_id, kernel_arg_t *__UNIFORM__ arg) {
   //   threadblock_barrier(warpgroup_id_in_cluster, warps_per_warpgroup_per_core);
   // }
 
+  constexpr uint32_t threads_per_warpgroup_simt =
+      threads_per_warpgroup -
+      CORES_PER_CLUSTER * NUM_THREADS /*warp 0, 4, 8, 12*/;
+  constexpr uint32_t warpgroup_id_simt = 1;
+  constexpr uint32_t barrier_id_simt = 1;
+  constexpr uint32_t barrier_count_simt = NUM_WARPS - 1;
+  const uint32_t tid_in_warpgroup_simt =
+      tid_in_warpgroup - (CORES_PER_CLUSTER * NUM_THREADS);
+  static_assert(barrier_id_simt == 1 && barrier_count_simt == 7);
+
   asm volatile ("tile_loop_start_%=:" :: );
 
   // "inner loop" along the columns of K^T
   const uint32_t k_tiles = (dim_seqlen / B_COL);
   for (uint32_t tile_k = 0;
-       tile_k < (1 /*for perf measurement*/ *
+       tile_k < (4 /*for perf measurement*/ *
                  // virgo kernel is fully pipelined around (2 GEMMs | softmax);
                  // requires two loop iterations to finish one tile compute
                  (2 * k_tiles)) +
@@ -401,34 +411,23 @@ void kernel_body(int task_id, kernel_arg_t *__UNIFORM__ arg) {
     const auto spad_hex_O = smem_O0_hexadecile; // NOTE: there's only single O tile
     asm volatile ("dbuf_sel_end_%=:" :: );
 
-    {
-      // fence completion of the GEMMs in the previous loop iterations. Note
-      // this is done at the start of the loop to maximize window of
-      // overlapping.
-      //
-      // NOTE: this ideally needs to be put inside tid_in_warpgroup == 0
-      // branch, but that triggers a TL source ID re-used assertion we haven't
-      // looked at yet.
-      gemmini_fence();
+    if (vx_warp_id() == 0 /* warp 0 in every core */) {
+      if (tile_k >= 2) // delay by 2 iters for pipelining
+      {
+        const uint32_t tile_k_ = tile_k - 2;
 
-      // do all of GEMM kickoffs before the SIMT compute
-      //
-      if (tid_in_warpgroup == 0) {
+        // GEMM II: O = O + P*V
+        // --------------------
+        // This is done *before* GEMM I in the software pipeline, working on the
+        // online softmax result tile from the previous iteration
 
-        if (tile_k >= 2) // delay GEMM II by 2 iters for pipelining
-        {
-          const uint32_t tile_k_ = tile_k - 2;
+        asm volatile("gemm_pv_start_%=:" ::);
 
-          // GEMM II: O = O + P*V
-          // --------------------
-          // This is done *before* GEMM I in the software pipeline, working on
-          // the online softmax result tile from the previous iteration
+        if (tid_in_warpgroup == 0) {
+          // kickoff matmul
 
-          asm volatile("gemm_pv_start_%=:" ::);
-
-          // kick off GEMM II
-          //
           // FIXME: perf: prevent GMEM->SMEM load for O tile
+          gemmini_fence();
 #ifdef GEMMINI_NEW_CISC
           gemmini_tile_compute</*store_to_spad=*/true>(
               spad_hex_P_consume, spad_hex_V_consume, spad_hex_O,
@@ -443,26 +442,31 @@ void kernel_body(int task_id, kernel_arg_t *__UNIFORM__ arg) {
               /*a_transpose=*/0, /*b_transpose=*/0, /*full_C=*/0, /*low_D=*/0,
               /*acc=*/0, /*act=*/NO_ACTIVATION, /*skips=*/skips_matmul);
 #endif
-
-          asm volatile("gemm_pv_finish_%=:" ::);
         }
 
-        // GEMM I: S = Q*K
-        //
-        // kick off asynchronously; fence later
-        asm volatile("gemm_qk_start_%=:" ::);
+        // // reconverge from mmio divergence
+        // threadblock_barrier(warpgroup_id_in_cluster,
+        //                     warps_per_warpgroup_per_core);
 
-        // FIXME: remove
-        // // fence to GEMM II completion
-        // gemmini_fence();
+        asm volatile("gemm_pv_finish_%=:" ::);
+      }
 
-        // #ifdef FENCE_GEMM_II
-        //         asm volatile("rescale_fence_write_start_%=:" ::);
-        //         // signal that GEMM II is finished to O rescale step
-        //         *smem_O_flag = 1;
-        //         vx_fence();
-        //         asm volatile("rescale_fence_write_end_%=:" ::);
-        // #endif
+      // GEMM I: S = Q*K
+      //
+      // kick off asynchronously; fence later
+      asm volatile("gemm_qk_start_%=:" ::);
+
+      if (tid_in_warpgroup == 0) {
+        // fence to GEMM II completion
+        gemmini_fence();
+
+#ifdef FENCE_GEMM_II
+        asm volatile("rescale_fence_write_start_%=:" ::);
+        // signal that GEMM II is finished to O rescale step
+        *smem_O_flag = 1;
+        vx_fence();
+        asm volatile("rescale_fence_write_end_%=:" ::);
+#endif
 
         // Kick off GEMM I
         //
@@ -495,14 +499,19 @@ void kernel_body(int task_id, kernel_arg_t *__UNIFORM__ arg) {
         const float *gmem_V_tile =
             gmem_V + (HEADDIM * B_COL * (tile_k - 1 /*dragbehind*/));
 
+#if 0
+        // fence mvout S to SMEM
+        gemmini_fence();
+        ROCC_INSTRUCTION_RS1_RS2(XCUSTOM_ACC, (uint64_t)(gmem_K_tile),
+                                 (uint64_t)(gmem_V_tile),
+                                 k_LOOP_WS_CONFIG_ADDRS_AB)
+#endif
+
         // do DMA
         if (tile_k == 0) {
-          // commented out as we do two move-ins before the loop starts
-          //
           // // configure address strides for the DMA
           // // FIXME: unnecessary?
-          // GEMMINI_CISC_CMD_R((HEADDIM /*V*/ << 20) | (dim_seqlen /*KT*/ <<
-          // 8) |
+          // GEMMINI_CISC_CMD_R((HEADDIM /*V*/ << 20) | (dim_seqlen /*KT*/ << 8) |
           //                    8 /*k_LOOP_WS_CONFIG_STRIDES_AB*/);
           // gemmini_fence();
           //
@@ -510,11 +519,9 @@ void kernel_body(int task_id, kernel_arg_t *__UNIFORM__ arg) {
           // sp_tiled_matmul_full_spad_ws(
           //     spad_addr_K_produce, spad_addr_V_produce,
           //     /*spad_D=*/0, /*spad_C=*/0,
-          //     /*I=*/(B_ROW / DIM), /*J=*/(HEADDIM / DIM), /*K=*/(B_COL /
-          //     DIM),
+          //     /*I=*/(B_ROW / DIM), /*J=*/(HEADDIM / DIM), /*K=*/(B_COL / DIM),
           //     /*pad_I=*/0, /*pad_J=*/0, /*pad_K=*/0,
-          //     /*a_transpose=*/0, /*b_transpose=*/0, /*full_C=*/0,
-          //     /*low_D=*/0,
+          //     /*a_transpose=*/0, /*b_transpose=*/0, /*full_C=*/0, /*low_D=*/0,
           //     /*acc=*/0, /*act=*/NO_ACTIVATION, /*skips=*/skips_only_a);
         } else {
 #ifdef GEMMINI_NEW_CISC
@@ -539,15 +546,23 @@ void kernel_body(int task_id, kernel_arg_t *__UNIFORM__ arg) {
 #endif
         }
 
-        asm volatile("move_k_v_finish_%=:" ::);
+        // fence everything before going to the next tile
+        gemmini_fence();
       }
 
-      // reconverge from mmio divergence
-      threadblock_barrier(warpgroup_id_in_cluster,
-                          warps_per_warpgroup_per_core);
-    }
+      // threadblock_barrier(warpgroup_id_in_cluster,
+      //                     warps_per_warpgroup_per_core);
 
-    {
+      asm volatile("move_k_v_finish_%=:" ::);
+
+      // NOTE: cannot put barrier here; thread 1-7 in warp 0 will skip the
+      // branch and call this barrier earlier than when thread 0 finishes.
+      // Since tmask is not considered, that will be a barrier resolve done too
+      // early
+      // threadblock_barrier(0, 1);
+
+    } else /* warp_id != 0 */ {
+
       if (tile_k >= 1) // delay online softmax by 1 iters
       {
         const uint32_t tile_k_ = tile_k - 1;
@@ -557,64 +572,61 @@ void kernel_body(int task_id, kernel_arg_t *__UNIFORM__ arg) {
           if (warpgroup_id == 0) {
             if (tile_k_ == 0) {
               thread_block_copy_tile<B_ROW, B_COL, GEMMINI_DMA>(
-                  smem_S_consume, gmem_tmp_d0, tid_in_warpgroup,
-                  threads_per_warpgroup, warpgroup_id);
+                  smem_S_consume, gmem_tmp_d0, tid_in_warpgroup_simt,
+                  threads_per_warpgroup_simt, warpgroup_id_simt);
             } else if (tile_k_ == 1) {
               thread_block_copy_tile<B_ROW, B_COL, GEMMINI_DMA>(
-                  smem_S_consume, gmem_tmp_d1, tid_in_warpgroup,
-                  threads_per_warpgroup, warpgroup_id);
+                  smem_S_consume, gmem_tmp_d1, tid_in_warpgroup_simt,
+                  threads_per_warpgroup_simt, warpgroup_id_simt);
             }
 
-            threadblock_barrier(warpgroup_id_in_cluster,
-                                warps_per_warpgroup_per_core);
+            threadblock_barrier(barrier_id_simt, barrier_count_simt);
           }
         }
 
         // Online softmax
         //
         thread_block_online_softmax</*block_row_major=*/GEMMINI_DMA>(
-            smem_S_consume, smem_P_produce, tid_in_warpgroup,
-            threads_per_warpgroup, warpgroup_id, smem_scratchpad,
+            smem_S_consume, smem_P_produce, tid_in_warpgroup_simt,
+            threads_per_warpgroup_simt, warpgroup_id_simt, smem_scratchpad,
             smem_rowmax, smem_rowsum, smem_O_row_scale);
 
-        threadblock_barrier(warpgroup_id_in_cluster,
-                            warps_per_warpgroup_per_core);
+        threadblock_barrier(barrier_id_simt, barrier_count_simt);
 
         if constexpr (DEBUG) {
           if (warpgroup_id == 0) {
             if (tile_k_ == 0) {
               thread_block_copy_rowmax(
-                  smem_rowmax, gmem_tmp_e0, tid_in_warpgroup,
-                  threads_per_warpgroup, warpgroup_id_in_cluster);
+                  smem_rowmax, gmem_tmp_e0, tid_in_warpgroup_simt,
+                  threads_per_warpgroup_simt, warpgroup_id_simt);
               thread_block_copy_rowmax(
-                  smem_rowsum, gmem_tmp_e2, tid_in_warpgroup,
-                  threads_per_warpgroup, warpgroup_id_in_cluster);
+                  smem_rowsum, gmem_tmp_e2, tid_in_warpgroup_simt,
+                  threads_per_warpgroup_simt, warpgroup_id_simt);
             } else if (tile_k_ == 1) {
               thread_block_copy_rowmax(smem_rowmax, gmem_tmp_e1,
-                                       tid_in_warpgroup, threads_per_warpgroup,
-                                       warpgroup_id_in_cluster);
+                                       tid_in_warpgroup_simt, threads_per_warpgroup_simt,
+                                       warpgroup_id_simt);
               thread_block_copy_rowmax(smem_rowsum, gmem_tmp_e3,
-                                       tid_in_warpgroup, threads_per_warpgroup,
-                                       warpgroup_id_in_cluster);
+                                       tid_in_warpgroup_simt, threads_per_warpgroup_simt,
+                                       warpgroup_id_simt);
             }
 
-            threadblock_barrier(warpgroup_id_in_cluster,
-                                warps_per_warpgroup_per_core);
+            threadblock_barrier(barrier_id_simt, barrier_count_simt);
           }
         }
 
 #ifdef FENCE_GEMM_II
-        // asm volatile("rescale_fence_read_start_%=:" ::);
-        // // check flag to make sure GEMM II finished and read-after-write
-        // // dependency on O tile is settled for rescale
-        // if (tid_in_warpgroup == 0) {
-        //   while ((*smem_O_flag) != 1)
-        //     ;
-        //   // set it back to 0 for the next tile iteration
-        //   *smem_O_flag = 0;
-        //   vx_fence();
-        // }
-        // asm volatile("rescale_fence_read_end_%=:" ::);
+        asm volatile("rescale_fence_read_start_%=:" ::);
+        // check flag to make sure GEMM II finished and read-after-write
+        // dependency on O tile is settled for rescale
+        if (tid_in_warpgroup_simt == 0) {
+          while ((*smem_O_flag) != 1)
+            ;
+          // set it back to 0 for the next tile iteration
+          *smem_O_flag = 0;
+          vx_fence();
+        }
+        asm volatile("rescale_fence_read_end_%=:" ::);
 #endif
 
 #if 0
@@ -631,76 +643,74 @@ void kernel_body(int task_id, kernel_arg_t *__UNIFORM__ arg) {
 #endif
 
         if constexpr (DEBUG) {
-          if (warpgroup_id_in_cluster == 0) {
-            if (tid_in_warpgroup == 0) {
-              gemmini_fence();
-              gemmini_fence();
-            }
-            // reconverge from mmio divergence
-            threadblock_barrier(warpgroup_id_in_cluster,
-                                warps_per_warpgroup_per_core);
+          if (warpgroup_id == 0) {
+            gemmini_fence();
+            gemmini_fence();
 
             // O after PV
             if (tile_k_ == 1 /*wait until GEMM II finshes */) {
               thread_block_copy_tile<B_ROW, HEADDIM, GEMMINI_DMA>(
-                  smem_O, gmem_tmp_d6, tid_in_warpgroup, threads_per_warpgroup,
-                  warpgroup_id_in_cluster);
+                  smem_O, gmem_tmp_d6, tid_in_warpgroup_simt, threads_per_warpgroup_simt,
+                  warpgroup_id_simt);
             } else if (tile_k_ == 2) {
               thread_block_copy_tile<B_ROW, HEADDIM, GEMMINI_DMA>(
-                  smem_O, gmem_tmp_d7, tid_in_warpgroup, threads_per_warpgroup,
-                  warpgroup_id_in_cluster);
+                  smem_O, gmem_tmp_d7, tid_in_warpgroup_simt, threads_per_warpgroup_simt,
+                  warpgroup_id_simt);
             }
 
-            threadblock_barrier(warpgroup_id_in_cluster,
-                                warps_per_warpgroup_per_core);
+            threadblock_barrier(barrier_id_simt, barrier_count_simt);
           }
         }
 
         // Oi rescale
         thread_block_O_rescale</*block_row_major=*/GEMMINI_DMA>(
-            smem_O, smem_O /*in-place*/, smem_O_row_scale, tid_in_warpgroup,
-            threads_per_warpgroup, warpgroup_id_in_cluster);
+            smem_O, smem_O /*in-place*/, smem_O_row_scale,
+            tid_in_warpgroup_simt, threads_per_warpgroup_simt,
+            warpgroup_id_simt);
 
         // rescale-to-PV-GEMM barrier
-        threadblock_barrier(warpgroup_id_in_cluster,
-                            warps_per_warpgroup_per_core);
+        threadblock_barrier(barrier_id_simt, barrier_count_simt);
 
         if constexpr (DEBUG) {
-          if (warpgroup_id_in_cluster == 0) {
+          if (warpgroup_id == 0) {
             // O before PV
             if (tile_k_ == 0) {
               thread_block_copy_tile<B_ROW, B_COL, GEMMINI_DMA>(
-                  smem_P_produce, gmem_tmp_d2, tid_in_warpgroup,
-                  threads_per_warpgroup, warpgroup_id_in_cluster);
+                  smem_P_produce, gmem_tmp_d2, tid_in_warpgroup_simt,
+                  threads_per_warpgroup_simt, warpgroup_id_simt);
               thread_block_copy_tile<B_ROW, HEADDIM, GEMMINI_DMA>(
-                  smem_O, gmem_tmp_d4, tid_in_warpgroup, threads_per_warpgroup,
-                  warpgroup_id_in_cluster);
+                  smem_O, gmem_tmp_d4, tid_in_warpgroup_simt,
+                  threads_per_warpgroup_simt, warpgroup_id_simt);
             } else if (tile_k_ == 1) {
               thread_block_copy_tile<B_ROW, B_COL, GEMMINI_DMA>(
-                  smem_P_produce, gmem_tmp_d3, tid_in_warpgroup,
-                  threads_per_warpgroup, warpgroup_id_in_cluster);
+                  smem_P_produce, gmem_tmp_d3, tid_in_warpgroup_simt,
+                  threads_per_warpgroup_simt, warpgroup_id_simt);
               thread_block_copy_tile<B_ROW, HEADDIM, GEMMINI_DMA>(
-                  smem_O, gmem_tmp_d5, tid_in_warpgroup, threads_per_warpgroup,
-                  warpgroup_id_in_cluster);
+                  smem_O, gmem_tmp_d5, tid_in_warpgroup_simt,
+                  threads_per_warpgroup_simt, warpgroup_id_simt);
             }
 
-            threadblock_barrier(warpgroup_id_in_cluster,
-                                warps_per_warpgroup_per_core);
+            threadblock_barrier(barrier_id_simt, barrier_count_simt);
           }
         }
       }
 
-      // intra-warpgroup barrier
+#if 0
+      // fence GEMM I after Oi rescale
+      if (tid_in_warpgroup == 0) {
+        gemmini_fence();
+        gemmini_fence();
+        gemmini_fence();
+        gemmini_fence();
+      }
+
+      // reconverge from mmio divergence
       threadblock_barrier(warpgroup_id_in_cluster,
                           warps_per_warpgroup_per_core);
+#endif
 
-      // @perf: instead of fencing here, fence at the start of the loop to
-      // maximize overlapping
-      // gemmini_fence();
-
-      // // reconverge after mmio
-      // threadblock_barrier(warpgroup_id_in_cluster,
-      //                     warps_per_warpgroup_per_core);
+      // intra-warpgroup barrier
+      threadblock_barrier(barrier_id_simt, barrier_count_simt);
     }
   }
 
