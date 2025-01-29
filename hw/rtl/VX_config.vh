@@ -88,7 +88,7 @@
 `endif
 
 `ifndef NUM_CORES
-`define NUM_CORES 8
+`define NUM_CORES 4
 `endif
 
 `ifndef NUM_WARPS
