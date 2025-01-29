@@ -107,7 +107,7 @@ void thread_block_matmul_gemmini(kernel_arg_t *__UNIFORM__ arg,
       for (uint32_t tile_j = 0; tile_j < num_tiles_n; tile_j += 1) {
         for (uint32_t tile_k = 0; tile_k < num_tiles_k; tile_k += 1) {
           uint32_t a_hexadecile = (tile_k & 1) << 2;
-          uint32_t b_hexadecile = a_hexadecile + 8;
+          uint32_t b_hexadecile = a_hexadecile + 11;
           gemmini_tile_load_ab(A, B,
               a_hexadecile, b_hexadecile, tile_i, tile_j, tile_k,
               dim_m, dim_n, dim_k, TILE_M, TILE_N, TILE_K);
