@@ -34,7 +34,7 @@ DP  = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-objdump
 CP  = $(RISCV_TOOLCHAIN_PATH)/bin/$(RISCV_PREFIX)-objcopy
 
 CFLAGS += -O3 -mcmodel=medany -fno-exceptions -nostartfiles -fdata-sections -ffunction-sections
-CFLAGS += -I./include -I../hw
+CFLAGS += -I./include
 CFLAGS += -DXLEN_$(XLEN)
 
 PROJECT = libvortexrt

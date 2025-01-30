@@ -1,7 +1,5 @@
 PROJECT = flash_attention
 
-SRCS = main.cpp common.h
-
 # VX_SRCS = kernel.cpp
 # VX_SRCS = kernel.gemmini.warpspec.cpp
 VX_SRCS = kernel.gemmini.cpp
