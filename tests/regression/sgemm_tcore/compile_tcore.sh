@@ -44,7 +44,11 @@ check_exists() {
 for arch in "${archs[@]}"; do
     git checkout kernels-asplos-ae-$arch
 
-    # FIXME: cd here
+    # re-compile libvortexrt.a
+    # FIXME after restructure
+    pushd ../../../kernel
+    make
+    popd
 
     for dim in "${dims[@]}"; do
         echo "compiling GEMM kernel for $arch with dim $dim"
