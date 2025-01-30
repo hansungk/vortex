@@ -53,6 +53,7 @@ void kernel_body(int task_id, kernel_arg_t *__UNIFORM__ arg) {
   asm volatile("li x29, 0xa0a0a0a0");
   asm volatile("li x30, 0xa0a0a0a0");
   asm volatile("li x31, 0xa0a0a0a0");
+  MARK_BEG();
   asm volatile("csrr a0, 0xcc1");
   asm volatile("beqz a0, bar");
   asm volatile("vx_tmc zero");
