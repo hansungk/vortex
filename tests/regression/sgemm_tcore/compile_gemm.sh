@@ -42,14 +42,19 @@ check_exists() {
 }
 
 for arch in "${archs[@]}"; do
-    echo "compiling $arch GEMM kernels"
     git checkout kernels-asplos-ae-$arch
 
     # FIXME: cd here
-    switch_binaries 256 $arch
-    # touch source file to force re-building, as the Makefile does not track
-    # binary changes
-    touch kernel.cpp
 
-    make CONFIG=gemm.tcore.$arch.dim256
+    for dim in "${dims[@]}"; do
+        echo "compiling GEMM kernel for $arch with dim $dim"
+
+        switch_binaries $dim $arch
+
+        # touch source file to force re-building, as the Makefile does not track
+        # binary changes
+        touch kernel.cpp
+
+        make CONFIG=gemm.tcore.$arch.dim$dim
+    done
 done
