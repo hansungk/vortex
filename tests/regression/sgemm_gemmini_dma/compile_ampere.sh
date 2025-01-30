@@ -1,6 +1,7 @@
 rm kernel.radiance.elf
 rm -rf binaries
 mkdir binaries
+touch input.c.bin
 for a in args/*; do
     cp -f $a args.bin
     aa=$(basename "$a")
