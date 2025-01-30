@@ -9,9 +9,11 @@ if [ -z "$TOOLDIR" ]; then
 fi
 
 switch_binaries() {
-    dim="$1"
-    arch="$2"
-    dma=$(( arch == "volta" ? 0 : 1 ))
+    local dim="$1"
+    local arch="$2"
+    dma=1
+    [[ "$arch" == "volta" ]] && dma=0
+    echo "dma is $dma"
     if [ "$dma" == "1" ]; then
         layout_a="row.swizzle_fp16"
         layout_b="row"
