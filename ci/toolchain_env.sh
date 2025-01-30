@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-TOOLDIR=${TOOLDIR:=$HOME/build/vortex-toolchain-prebuilt}
+TOOLDIR=${TOOLDIR:=/scratch/hansung/build/vortex-toolchain-prebuilt}
 export TOOLDIR
 
 export VERILATOR_ROOT=$TOOLDIR/verilator
@@ -27,7 +27,7 @@ export YOSYS_PATH=$TOOLDIR/yosys
 export PATH=$YOSYS_PATH/bin:$PATH
 
 # LLVM_POCL seems to be only used in tests/opencl
-export LLVM_POCL=/home/virgo-ae/build/llvm-vortex2
-export LLVM_VORTEX=/home/virgo-ae/build/llvm-vortex2
-export POCL_CC_PATH=/home/virgo-ae/build/pocl-vortex2/compiler
-export POCL_RT_PATH=/home/virgo-ae/build/pocl-vortex2/runtime
+export LLVM_POCL=/scratch/hansung/build/llvm-vortex2
+export LLVM_VORTEX=/scratch/hansung/build/llvm-vortex2
+export POCL_CC_PATH=/scratch/hansung/build/pocl-vortex2/compiler
+export POCL_RT_PATH=/scratch/hansung/build/pocl-vortex2/runtime
