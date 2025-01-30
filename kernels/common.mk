@@ -15,9 +15,8 @@ endif
 RISCV_PREFIX ?= riscv$(XLEN)-unknown-elf
 RISCV_SYSROOT ?= $(RISCV_TOOLCHAIN_PATH)/$(RISCV_PREFIX)
 
-VORTEX_RT_PATH ?= $(realpath ../../../runtime)
-VORTEX_KN_PATH ?= $(realpath ../../../kernel)
-GEMMINI_SW_PATH ?= $(realpath ../../../gemmini)
+VORTEX_KN_PATH ?= $(realpath ../../lib)
+GEMMINI_SW_PATH ?= $(realpath ../../lib/gemmini)
 
 LLVM_VORTEX ?= $(TOOLDIR)/llvm-vortex
 
@@ -52,18 +51,6 @@ VX_CFLAGS += -DNDEBUG -DLLVM_VORTEX
 
 # VX_LDFLAGS += -Wl,-Bstatic,--gc-sections,-T,$(VORTEX_KN_PATH)/linker/vx_link$(XLEN).ld,--defsym=STARTUP_ADDR=$(STARTUP_ADDR) $(VORTEX_KN_PATH)/libvortexrt.a
 VX_LDFLAGS += -Wl,-Bstatic,-T,$(VORTEX_KN_PATH)/linker/vx_link$(XLEN).ld,--defsym=STARTUP_ADDR=$(STARTUP_ADDR) $(VORTEX_KN_PATH)/libvortexrt.a $(VORTEX_KN_PATH)/tohost.S
-
-CXXFLAGS += -std=c++17 -Wall -Wextra -pedantic -Wfatal-errors
-CXXFLAGS += -I$(VORTEX_RT_PATH)/include
-
-LDFLAGS += -L$(VORTEX_RT_PATH)/stub -lvortex
-
-# Debugigng
-ifdef DEBUG
-	CXXFLAGS += -g -O0
-else    
-	CXXFLAGS += -O2 -DNDEBUG
-endif
 
 # CONFIG is supplied from the command line to differentiate ELF files with custom suffixes
 CONFIGEXT = $(if $(CONFIG),.$(CONFIG),)
