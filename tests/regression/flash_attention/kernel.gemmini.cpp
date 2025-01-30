@@ -615,6 +615,7 @@ void kernel_body(int task_id, kernel_arg_t *__UNIFORM__ arg) {
         //   vx_fence();
         // }
         // asm volatile("rescale_fence_read_end_%=:" ::);
+        virgo_fence(2);
 #endif
 
 #if 0

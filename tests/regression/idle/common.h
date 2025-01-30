@@ -5,6 +5,8 @@
 
 #define KERNEL_ARG_DEV_MEM_ADDR 0x9fff0000
 #define DEV_SMEM_START_ADDR 0xff000000
+#define MARK_BEG() asm volatile ("slti x0, x1, -1047")
+#define MARK_END() asm volatile ("slti x0, x1, -499")
 
 typedef struct {
   uint32_t dim_m;
