@@ -136,6 +136,10 @@ static_assert(WMITER * WNITER * TCM * TCN * NUM_WARPS * CORES_PER_CLUSTER ==
 #error Unsupported smem size
 #endif
 
+// timing markers
+#define MARK_BEG() asm volatile ("slti x0, x1, -1047")
+#define MARK_END() asm volatile ("slti x0, x1, -499")
+
 enum class MemLayout {
   MN_major,
   K_major,
@@ -1220,6 +1224,8 @@ inline void thread_block_gemm(const T *A, const T *B, float *C,
       for (uint32_t block_k = 0; (block_k * BK) < dim_k; block_k++) {
         asm volatile("loop_k_start_%=:" ::);
 
+        MARK_BEG();
+
         // producer code: GMEM->SMEM memory movement
         // ---------------------------------------------------------------------
         //
@@ -1395,6 +1401,8 @@ inline void thread_block_gemm(const T *A, const T *B, float *C,
         threadblock_barrier(threadblock_id_in_cluster,
                             warps_per_threadblock_per_core);
 
+        MARK_END();
+
         asm volatile("loop_k_end_%=:" ::);
       }
 
@@ -1422,8 +1430,9 @@ inline void thread_block_gemm(const T *A, const T *B, float *C,
 
         asm volatile("move_out_end_%=:" ::);
       }
+
+      asm volatile("loop_mn_end_%=:" ::);
     }
-    asm volatile("loop_mn_end_%=:" ::);
   }
 }
 
