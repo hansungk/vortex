@@ -24,9 +24,9 @@ for s in sizes:
     
     # Save the operand matrices to binary files
     save_matrix_to_bin("input.a.bin", matrix_a)
-    save_matrix_to_bin(f"input.a/{s}", matrix_a)
+    save_matrix_to_bin(f"input.a.rand01.fp16.m{s}n{s}k{s}.row.bin", matrix_a)
     save_matrix_to_bin("input.b.bin", matrix_b)
-    save_matrix_to_bin(f"input.b/{s}", matrix_b)
+    save_matrix_to_bin(f"input.b.rand01.fp16.m{s}n{s}k{s}.row.bin", matrix_b)
 
     ref_matrix = truncated_matrix_multiplication(matrix_a, matrix_b, s)
     save_matrix_to_bin(f"ref{s}.bin", ref_matrix)
