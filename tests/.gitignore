@@ -1,7 +1,0 @@
-**/*.log
-.depend
-*.bin
-*.dump
-*.elf
-*.o
-*.ll

@@ -1,8 +1,0 @@
-main.o: main.cc \
- /scratch/hansung/build/pocl-vortex2/runtime/include/CL/opencl.h \
- /scratch/hansung/build/pocl-vortex2/runtime/include/CL/cl.h \
- /scratch/hansung/build/pocl-vortex2/runtime/include/CL/cl_version.h \
- /scratch/hansung/build/pocl-vortex2/runtime/include/CL/cl_platform.h \
- /scratch/hansung/build/pocl-vortex2/runtime/include/CL/cl_gl.h \
- /scratch/hansung/build/pocl-vortex2/runtime/include/CL/cl_ext.h \
- /scratch/hansung/build/pocl-vortex2/runtime/include/CL/cl_ext_pocl.h
