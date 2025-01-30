@@ -22,7 +22,7 @@ RISCV_SYSROOT ?= $(RISCV_TOOLCHAIN_PATH)/$(RISCV_PREFIX)
 
 VORTEX_RT_PATH ?= $(realpath ../../../runtime)
 VORTEX_KN_PATH ?= $(realpath ../../../kernel)
-GEMMINI_SW_PATH ?= $(realpath ../../../third_party/gemmini-rocc-tests)
+GEMMINI_SW_PATH ?= $(realpath ../../../gemmini)
 
 FPGA_BIN_DIR ?= $(VORTEX_RT_PATH)/opae
 
