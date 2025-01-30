@@ -56,9 +56,7 @@ for arch in "${archs[@]}"; do
 
     # re-compile libvortexrt.a
     # FIXME after restructure
-    pushd ../../../kernel
-    make
-    popd
+    make -C ../../../kernel
 
     for dim in "${dims[@]}"; do
         echo "compiling GEMM kernel for $arch with dim $dim"
